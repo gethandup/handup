@@ -43,8 +43,8 @@ paired phone. Every flag is described by `handup help COMMAND`.
   own agent loop, SDK app or framework over MCP, CLI or HTTP.
 - [Email drafts](agents/email.md): ask before sending, let the human edit the
   draft, then send it with your own mail tool.
-- [Agent skill](agents/skill.md): private GitLab npx installation with complete
-  offline docs; supported agents and the future public URL cutover.
+- [Agent skill](agents/skill.md): `npx skills add gethandup/handup` installation
+  with complete offline docs; supported agents and source-repository installs.
 - [Integrations](integrations/index.md): let other tools react to requests.
 - [Remote access](remote.md), the [relay](relay.md), the
   [mobile app](mobile.md) and the [desktop app](desktop.md): approve away from

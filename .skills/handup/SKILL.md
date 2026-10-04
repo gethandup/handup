@@ -24,7 +24,7 @@ reference only when needed; do not load the entire bundle for a routine approval
 | --- | --- |
 | Installation, missing prerequisites, an unlisted topic or the complete guide/schema inventory | [Offline reference index](references/index.md), then the relevant guide |
 | Binary/daemon setup and first request | [Getting started](references/docs/public/index.md) |
-| Private/public npx installation, supported agents or bundle regeneration | [Skill installation](references/docs/public/agents/skill.md) |
+| GitHub/GitLab npx installation, supported agents or bundle regeneration | [Skill installation](references/docs/public/agents/skill.md) |
 | MCP setup, tool arguments, polling or client timeouts | [MCP](references/docs/public/agents/mcp.md) |
 | Adding handup to an agent or harness without a dedicated guide (own agent loop, SDK app, framework, remote HTTP) | [Any agent or custom harness](references/docs/public/agents/custom.md) |
 | Claude Code permission hooks and fail-closed fallback | [Claude Code](references/docs/public/agents/claude-code.md) |

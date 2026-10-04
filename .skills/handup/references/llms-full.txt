@@ -608,24 +608,26 @@ Source: [docs/public/agents/skill.md](docs/public/agents/skill.md)
 
 Install handup's approval workflow and complete offline user documentation into a supported agent's skill directory. This installs **instructions**, not the handup binary, daemon, MCP configuration or native permission hooks.
 
-## Private GitLab installation
+## Install from GitHub
 
-The repository is private. You need Node.js 22.20 or newer, Git, and existing SSH access to `ariel-frischer/handup` on GitLab. The command uses your normal Git/SSH authentication; it does not require publishing handup to npm.
+The skill is published from [gethandup/handup](https://github.com/gethandup/handup), which holds handup's docs, this skill and examples (not the application source). You need Node.js 22.20 or newer and Git. No handup npm package is needed: npx runs the `skills` installer, which fetches the Git repository.
 
 Run from the project where the agent should use handup:
 
 ```sh
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add git@gitlab.com:ariel-frischer/handup.git \
-  --full-depth --skill handup --agent claude-code codex cursor --yes
+DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup \
+  --skill handup --agent claude-code codex cursor --yes
 ```
 
 Replace the agent names with the targets you use. Add `--global` for user-level installation instead of project-local installation. The leading `--yes` belongs to npx; the trailing one belongs to the skills installer.
 
+**The repository is private for now.** The installer clones `https://github.com/gethandup/handup.git` with your normal Git setup, so your Git must be able to clone it over HTTPS, for example after `gh auth setup-git`. With GitHub SSH access instead, use the SCP-style source `git@github.com:gethandup/handup.git` in place of `gethandup/handup`. Do not put a token in an install URL or copy credentials into the skill. Anonymous installation must be verified once the repository is public.
+
 To target every agent registered by this version of the installer, use a project-local install:
 
 ```sh
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add git@gitlab.com:ariel-frischer/handup.git \
-  --full-depth --skill handup --agent '*' --yes
+DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup \
+  --skill handup --agent '*' --yes
 ```
 
 Quote `'*'` so the shell does not expand it. “Every agent” means the installer's
@@ -637,24 +639,28 @@ directory; use explicit targets rather than `--global --agent '*'`.
 To inspect discovery without installing:
 
 ```sh
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add git@gitlab.com:ariel-frischer/handup.git \
-  --full-depth --skill handup --list
+DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup --list
 ```
 
-`--full-depth` ensures `.skills/handup` is discovered even if the repository later contains skills in another conventional directory. In skills 1.7.0, use the exact SCP-style `git@gitlab.com:...` source shown above: the superficially equivalent `ssh://git@gitlab.com/...` form is rewritten to HTTPS and can lose the working SSH authentication path.
+## Install from the source repository
 
-### GitLab credentials and local fallback
+With access to the private GitLab source repository, install the same skill from it over SSH:
 
-A working `glab` API login does **not** necessarily configure Git HTTPS clone credentials for `npx skills`. Existing GitLab SSH access is the verified private-source path. Do not put a token in an install URL or copy credentials into the skill.
+```sh
+DO_NOT_TRACK=1 npx --yes skills@1.7.0 add git@gitlab.com:ariel-frischer/handup.git \
+  --full-depth --skill handup --agent claude-code codex cursor --yes
+```
 
-If you already have an authenticated clone, install from it without any remote credential lookup:
+`--full-depth` ensures `.skills/handup` is discovered alongside the source tree's other conventional skill directories. In skills 1.7.0, use the exact SCP-style `git@gitlab.com:...` source: the superficially equivalent `ssh://git@gitlab.com/...` form is rewritten to HTTPS and can lose the working SSH authentication path. A working `glab` API login does **not** necessarily configure Git HTTPS clone credentials for `npx skills`.
+
+From an existing clone of either repository, install without any remote credential lookup:
 
 ```sh
 DO_NOT_TRACK=1 npx --yes skills@1.7.0 add ./handup \
   --full-depth --skill handup --agent claude-code codex cursor --yes
 ```
 
-Here `./handup` is the checkout directory; from inside that checkout use `.` instead. `glab repo clone ariel-frischer/handup` is another way to obtain a clone using your existing GitLab setup; install from the resulting local directory.
+Here `./handup` is the checkout directory; from inside that checkout use `.` instead.
 
 ## What the installed skill includes
 
@@ -672,28 +678,17 @@ For an agent the skills CLI does not register, copy the **whole** `.skills/handu
 
 Install the binary separately using [getting started](docs/public/index.md). Then configure [MCP](docs/public/agents/mcp.md), or the appropriate native adapter: [Claude Code](docs/public/agents/claude-code.md), [Codex](docs/public/agents/codex.md), [omp](docs/public/agents/omp.md). Installing the skill alone does not configure any of these. If neither CLI nor MCP is available, the agent must stop consequential work and report missing setup, not proceed without approval.
 
-## Future public source URL
-
-**Only after a separately authorized change makes the repository public**, replace the SSH source with the public GitLab HTTPS URL:
-
-```sh
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add https://gitlab.com/ariel-frischer/handup \
-  --full-depth --skill handup --agent claude-code codex cursor --yes
-```
-
-The skill name, package layout and agent flags stay the same. No handup npm package is needed: npx runs the public `skills` installer, which fetches the Git repository. This command is a future cutover example, not a claim that anonymous installation works while handup remains private. Anonymous discovery/install must be verified after the visibility change. If the public repository moves, substitute its actual new URL.
-
 ## Maintainers: regenerate the bundle
 
 ```sh
 make docs-skill
 ```
 
-This documentation-only target uses Python, copies the checked-in public contracts, and does not compile Rust or start a daemon. `references/` is generated; edit canonical `docs/public` guides instead. Commit the refreshed bundle with source-document changes so remote skill installs receive current documentation.
+This documentation-only target uses Python, copies the checked-in public contracts, and does not compile Rust or start a daemon. `references/` is generated; edit canonical `docs/public` guides instead. Commit the refreshed bundle with source-document changes, then publish it to GitHub with `make public-export` so remote skill installs receive current documentation.
 
 After Rust model/API changes, the existing `make docs` workflow regenerates the machine contracts and the portable bundle. Follow the repository's CI build policy; do not use a local release/desktop/mobile build to refresh skill prose.
 
-Installer behavior is pinned to [skills 1.7.0](https://github.com/vercel-labs/skills/tree/7407f3893ad4dceab546ac002c3ef806e4000c73), published 2026-09-17. See its [supported agents and source formats](https://github.com/vercel-labs/skills/blob/7407f3893ad4dceab546ac002c3ef806e4000c73/README.md). Private authenticated discovery was verified on 2026-09-30; that is distinct from anonymous public access or native-hook enforcement.
+Installer behavior is pinned to [skills 1.7.0](https://github.com/vercel-labs/skills/tree/7407f3893ad4dceab546ac002c3ef806e4000c73), published 2026-09-17. See its [supported agents and source formats](https://github.com/vercel-labs/skills/blob/7407f3893ad4dceab546ac002c3ef806e4000c73/README.md). Private authenticated installation was verified from GitLab on 2026-09-30 and from GitHub (`gethandup/handup`) on 2026-10-03; that is distinct from anonymous public access or native-hook enforcement.
 
 ---
 
@@ -1334,8 +1329,8 @@ paired phone. Every flag is described by `handup help COMMAND`.
   own agent loop, SDK app or framework over MCP, CLI or HTTP.
 - [Email drafts](docs/public/agents/email.md): ask before sending, let the human edit the
   draft, then send it with your own mail tool.
-- [Agent skill](docs/public/agents/skill.md): private GitLab npx installation with complete
-  offline docs; supported agents and the future public URL cutover.
+- [Agent skill](docs/public/agents/skill.md): `npx skills add gethandup/handup` installation
+  with complete offline docs; supported agents and source-repository installs.
 - [Integrations](docs/public/integrations/index.md): let other tools react to requests.
 - [Remote access](docs/public/remote.md), the [relay](docs/public/relay.md), the
   [mobile app](docs/public/mobile.md) and the [desktop app](docs/public/desktop.md): approve away from

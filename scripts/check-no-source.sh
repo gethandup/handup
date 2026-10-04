@@ -4,7 +4,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-allowed_top='^(README\.md|SECURITY\.md|llms\.txt|llms-full\.txt|assets|docs|examples|\.skills|\.github|scripts)(/|$)'
+allowed_top='^(README\.md|SECURITY\.md|LICENSE\.md|llms\.txt|llms-full\.txt|assets|docs|examples|\.skills|\.github|scripts)(/|$)'
 allowed_scripts='^scripts/check-no-source\.sh$'
 denied='(\.(rs|ts|tsx|js|mjs|cjs|kt|kts|java|swift|go|py|c|h|cc|cpp|toml|lock|gradle)$|(^|/)(Cargo\.toml|Cargo\.lock|package\.json|Makefile|Dockerfile)$|^(crates|apps|ui|integrations|site|brag)/)'
 

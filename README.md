@@ -70,3 +70,9 @@ and global installs.
 Bug reports and feature requests are welcome in
 [Issues](https://github.com/gethandup/handup/issues). Report security problems
 privately; see [SECURITY.md](SECURITY.md).
+
+## License
+
+Documentation is [CC BY 4.0](LICENSE.md#documentation-cc-by-40); the agent
+skill, examples and code snippets are [MIT](LICENSE.md#skill-examples-and-code-snippets-mit).
+The handup application is licensed separately and is not in this repository.

@@ -1,0 +1,37 @@
+name: Bug report
+description: Something in handup does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: handup version
+      description: Output of `handup version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      multiple: true
+      options: [CLI, Daemon, Desktop app, Android, iOS, Web inbox, MCP server, Agent hook or extension, Relay, Docs]
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and OS
+      description: For example Claude Code 2.x on Arch Linux.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or `handup doctor --json`
+      description: Remove tokens, hostnames and anything private first.
+      render: text

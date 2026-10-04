@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Decision",
+  "type": "object",
+  "properties": {
+    "content_hash": {
+      "type": "string"
+    },
+    "decided_at": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "default": null,
+      "minimum": 0
+    },
+    "decided_by": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "feedback": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "fields": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DecisionFields"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "option": {
+      "type": "string"
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Outcome"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "rule_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_result": {
+      "description": "The desktop app ran the request's command for the human: this is how\nit ended. Present only on approved command requests decided by Run.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunResult"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "scope": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "option",
+    "content_hash"
+  ],
+  "$defs": {
+    "Answer": {
+      "description": "The human's answer to one question.",
+      "type": "object",
+      "properties": {
+        "selected": {
+          "description": "Chosen option labels; at most one unless the question is `multi`.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "text": {
+          "description": "Typed answer; only when the question allows free text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "DecisionFields": {
+      "description": "Decision `fields`. Question requests carry only `answers`, keyed by question\nid; other requests carry answers to `input.fields` or edited tool input.",
+      "type": "object",
+      "properties": {
+        "answers": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Answer"
+          }
+        }
+      }
+    },
+    "Outcome": {
+      "type": "string",
+      "enum": [
+        "approve",
+        "deny"
+      ]
+    },
+    "RunResult": {
+      "description": "Outcome of running a command request in the handup desktop app. The\ncommand already ran: an agent must not run it again. Output is the\nredacted tail of each stream.",
+      "type": "object",
+      "properties": {
+        "duration_ms": {
+          "description": "Wall time from start to exit, in milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "elevated": {
+          "description": "Ran with administrator rights (pkexec on Linux, osascript on macOS).",
+          "type": "boolean",
+          "default": false
+        },
+        "error": {
+          "description": "Why it did not finish normally: timeout, cancellation, signal, or a\nstart failure (for example pkexec missing or authentication refused).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exit_code": {
+          "description": "Process exit status; absent when it never started or a signal ended it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "stderr_tail": {
+          "description": "Last bytes of standard error (at most 64 KiB), credentials redacted.",
+          "type": "string",
+          "default": ""
+        },
+        "stdout_tail": {
+          "description": "Last bytes of standard output (at most 64 KiB), credentials redacted.",
+          "type": "string",
+          "default": ""
+        },
+        "truncated": {
+          "description": "Earlier output was dropped from either tail.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

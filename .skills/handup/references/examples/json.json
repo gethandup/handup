@@ -1,0 +1,10 @@
+{
+  "title": "Review json sample",
+  "kind": "review",
+  "previews": [
+    {
+      "type": "json",
+      "inline": "{\"environment\":\"staging\",\"replicas\":1}"
+    }
+  ]
+}

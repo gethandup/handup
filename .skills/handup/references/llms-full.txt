@@ -1,0 +1,3094 @@
+# Full offline handup user documentation
+
+Generated from canonical docs/public by make docs-skill. Do not edit.
+
+Source: [docs/public/agents/claude-code.md](docs/public/agents/claude-code.md)
+
+# Claude Code
+
+```sh
+handup integrate claude --dry-run
+handup integrate claude
+handup prompt --agent claude
+```
+
+The installer merges a PermissionRequest command hook (`handup hook claude`, timeout 660 seconds) into ~/.claude/settings.json and the handup MCP server into ~/.claude.json (below); `--no-mcp` installs only the hook. Existing keys and other hooks survive; a unique handup.bak backup is created before every changed write, and every file is checked before any is written. Reapply is idempotent. Remove with `handup integrate claude --uninstall`. Hooks apply only when Claude requests permission, not every tool call or actions already allowed by rules. Only PermissionRequest is supported; PreToolUse has a different decision contract and is deliberately not registered.
+
+Input includes hook_event_name, tool_name, tool_input, session_id, cwd. Bash shows command and description. Edit/MultiEdit reads current content and computes a unified diff in sequential edit order; ambiguous/missing matches fail closed to the configured fallback. Write shows a diff or code for a new file. Other tools (including WebFetch) show tool-input JSON. Handup never edits the file itself.
+
+Allow output: `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`. Approved edited fields merge into the original tool_input and return a complete `decision.updatedInput`. Deny output uses `behavior:"deny"` and `message` equal to human feedback (or `Denied in handup`). No persistent updatedPermissions are granted.
+
+When the human uses desktop **Run**, the request is approved with `run_result`,
+but the hook returns `behavior: "deny"` with the run summary and **do not run
+again** instruction. This blocks the original Bash call because execution was
+already attempted, not because the human denied it. Nonzero exits, timeouts,
+Cancel and launch/authentication errors follow the same path. Consume the
+summary; do not retry. [Result fields](docs/public/agents/mcp.md#desktop-run-results).
+
+Unreachable daemon or expiration defaults to exit 0 with no stdout decision, so Claude uses its native prompt (or denies when no permission host exists). Set `handup config set integrations.claude.fallback deny` for explicit denial. Neither fallback ever allows. The hook does not autostart a missing daemon; run handup serve or install its service. Requests have no deadline by default. The installed host hook timeout is still 660 seconds: increase it for longer human waits. If Claude kills the hook, the request remains pending and no approval is returned.
+
+For agent-initiated requests, the same install merges a user-scope stdio entry in ~/.claude.json, equivalent to `claude mcp add --scope user --transport stdio handup -- handup mcp`, and adds the `mcp__handup` rule to `permissions.allow` in settings.json. handup's MCP tools only ask the human, so the rule keeps the hook from asking a second time about the request itself. `handup integrate mcp --client claude-code` installs the MCP server alone, without the hook or the rule. Restart Claude and check /mcp.
+
+Sources: https://code.claude.com/docs/en/hooks#permissionrequest and https://code.claude.com/docs/en/mcp
+
+---
+
+Source: [docs/public/agents/codex.md](docs/public/agents/codex.md)
+
+# Codex
+
+## Quickstart
+
+```sh
+handup serve --foreground                 # or install the handup service
+handup integrate codex --dry-run
+handup integrate codex
+handup prompt --agent codex
+codex --sandbox workspace-write --ask-for-approval on-request
+```
+
+The reversible installer merges `handup hook codex` into `$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`) and the handup MCP server into `$CODEX_HOME/config.toml` (below); `--no-mcp` installs only the hook. It preserves other handlers, shows the config diffs, checks every file before writing any, and backs up changed configuration. Reapply is idempotent. Remove both with `handup integrate codex --uninstall`. Codex requires hook trust review; approve the reviewed hook in Codex before use. Requests have no deadline by default. The installed host hook timeout is still 660 seconds: increase it for longer human waits. If Codex kills the hook, the request remains pending and no approval is returned.
+
+## Behavior and fallback
+
+The `PermissionRequest` hook runs only when Codex requests permission, not on commands already allowed by its sandbox or rules. Bash becomes a command preview; other tools show tool-input JSON. Requests carry `source.agent=codex`, the session ID, and cwd. A human can deny with `handup deny ID -m 'Use staging instead'`, and Codex receives that feedback as `decision.message`. Approval returns only `behavior: allow`; denial, cancellation, and expiration return `behavior: deny` with feedback or a safe default. Codex never receives `updatedInput` or `updatedPermissions`: this hook cannot revise the tool call or grant Codex-native persistent permissions.
+
+Exception: desktop **Run** approves the handup request with `run_result`, but
+the hook returns `behavior: "deny"` and `decision.message` contains the run
+summary and **do not run again** instruction. The original command is blocked
+to avoid duplicate execution, including after a failed run; consume the result
+rather than retrying. See [result fields](docs/public/agents/mcp.md#desktop-run-results).
+
+`handup approve ID --scope session` creates a handup rule for matching repeat requests in that session; the daemon handles these repeats automatically, with rule audit metadata. Agents must not grant themselves a scope. If the daemon is unreachable or presence routes to the keyboard, the hook prints no decision, leaving Codex's native permission handling in place. It never grants fallback approval and does not auto-start a missing daemon.
+
+## MCP and limitations
+
+```sh
+handup integrate mcp --client codex --dry-run
+handup integrate mcp --client codex
+```
+
+`handup integrate codex` already includes this; the commands above install the MCP server alone. It uses `$CODEX_HOME/config.toml`, preserving comments and other servers. Codex defaults to a 60-second MCP tool timeout: prefer `wait=false` then `wait_requests`, or configure `tool_timeout_sec`. Read [MCP](docs/public/agents/mcp.md) for arguments and polling. Preview paths resolve from the MCP server cwd.
+
+This adapter targets the Codex 0.159.2 `PermissionRequest` contract, not an app-server proxy. It gates only permission requests and does not enforce a separate pre-tool policy. In 0.159.2, `codex exec` forces approval policy `never`, even with `-c 'approval_policy="on-request"'`, so use the interactive CLI for native approval round-trips. A command must actually need escalation to invoke this hook. Native headless behavior depends on Codex's approval policy; a no-decision fallback is not permission.
+
+Sources: https://developers.openai.com/codex/hooks#permissionrequest and https://developers.openai.com/codex/mcp
+
+---
+
+Source: [docs/public/agents/cursor.md](docs/public/agents/cursor.md)
+
+# cursor
+
+```sh
+handup integrate mcp --client cursor --dry-run
+handup integrate mcp --client cursor
+handup prompt --agent cursor
+```
+
+The installer safely merges the handup stdio server (command handup, args ["mcp"]) into ~/.cursor/mcp.json, backing up before changes. Other servers and keys remain. Reapplying is idempotent; `handup integrate mcp --client cursor --uninstall` removes only handup. Existing conflicting handup entries are not overwritten.
+
+Restart Cursor and enable handup under Customize. Cursor may ask before MCP calls.
+
+Ask before destructive/irreversible actions, external publication or messages, costly resource use, credential changes/access, or ambiguous intent. Include the exact proposed action and its effects. Do not execute while pending. Only approved/answered permits the approved action; bind execution to content_hash and re-request if the action changes. A deny is a normal human answer, not a transport error. Read feedback, stop, and revise only when requested. Never retry the same request or treat expired, cancelled, or error as permission.
+
+An approved command with `run_result` was already attempted by desktop **Run**.
+Read its exit code/error and output; **do not run again**, even on failure.
+Without `run_result`, approval still permits the reviewed action.
+
+Read [MCP](docs/public/agents/mcp.md) for tool arguments and polling. Paths resolve from the server process cwd; use absolute paths if your client starts servers outside the project.
+
+Source: https://cursor.com/docs/mcp
+
+---
+
+Source: [docs/public/agents/custom.md](docs/public/agents/custom.md)
+
+# Any agent or custom harness
+
+Use this guide to add handup to an agent or harness without a dedicated adapter
+(your own agent loop, an SDK app, a framework, a CI job). Named clients have
+shorter guides: [Claude Code](docs/public/agents/claude-code.md), [Codex](docs/public/agents/codex.md),
+[Cursor](docs/public/agents/cursor.md), [omp](docs/public/agents/omp.md).
+
+Your harness asks and waits for the human. Ordinary approval permits it to run
+the reviewed action; desktop Run returns `run_result` instead, which the
+harness must consume without executing the command again.
+
+## 1. Install the binary and daemon
+
+```sh
+git clone https://gitlab.com/ariel-frischer/handup.git && cd handup
+make install && make install-global   # ~/.local/bin/handup; add it to PATH
+handup service install                 # user service; or: handup serve --foreground
+handup doctor --json                   # daemon reachable, versions match
+```
+
+`handup ask` starts the daemon on demand unless `daemon.autostart` is false;
+`wait`, `status` and MCP do not. A harness running in a container or on another
+host needs the HTTP route in step 2.
+
+## 2. Pick a transport
+
+| Harness can | Use | Wait mechanism |
+| --- | --- | --- |
+| Speak MCP (stdio) | `handup mcp` | `request_approval` / `ask_question` with `wait`, or `wait:false` + `wait_requests` |
+| Run shell commands | `handup` CLI | `ask --wait --json`, `wait ID --json`, exit codes |
+| Only make HTTP calls | Daemon API (local) or remote listener with a [submit token](docs/public/integrations/tokens.md) | `GET /v1/requests/{id}/wait?timeout=60s` loop |
+| Intercept its own tool calls | Any of the above from your permission hook | Map the decision to allow/deny; see the [Claude hook](docs/public/agents/claude-code.md) as a model |
+
+Prefer MCP when the model itself decides what needs approval; prefer a hook in
+the harness when every call to a tool must be gated regardless of the model.
+
+**MCP.** Register a stdio server whose command is `handup mcp`, started in the
+project directory. `handup integrate mcp --client claude-code|codex|cursor|omp`
+writes the entry for known clients; for others add the equivalent of:
+
+```json
+{"mcpServers":{"handup":{"command":"handup","args":["mcp"]}}}
+```
+
+Tools: `request_approval`, `ask_question`, `check_request`, `wait_requests`,
+`cancel_request`, `list_requests`. Arguments and response shapes: [MCP](docs/public/agents/mcp.md).
+
+**CLI.** `handup ask --request - --wait --json < request.json` takes full request
+JSON (`handup schema request`); flags cover common cases (`--title`, `--command`,
+`--git-diff`, `--preview TYPE:PATH`). Queue commands emit JSON only with `--json`,
+whatever `output_format` says. See [Shell and CI](docs/public/agents/shell-ci.md).
+
+**HTTP.** Locally, the API listens on the Unix socket
+(`$XDG_RUNTIME_DIR/handup/handup.sock`, no auth beyond file permissions) and on
+`daemon.listen` (`127.0.0.1:7465`, bearer token from
+`$XDG_STATE_HOME/handup/token`, loopback Host only). Remote harnesses use a named
+submit token, which can create and read only its own requests. Routes:
+[OpenAPI](docs/public/openapi.json).
+
+```sh
+curl --unix-socket "$XDG_RUNTIME_DIR/handup/handup.sock" \
+  -H 'Content-Type: application/json' http://handup/v1/requests \
+  -d '{"title":"Deploy staging","kind":"command","previews":[{"type":"command","content":"./deploy staging"}]}'
+```
+
+## 3. Build the request
+
+Required: `title`. Describe the exact action, its scope, risk and rollback in
+`title`/`summary`, and snapshot the evidence the human needs as previews
+(command, diff, file, JSON, image, email, …). Strip secrets first: previews are
+stored and shown on every paired device.
+
+| Field | Use |
+| --- | --- |
+| `kind`, `risk` | `command`, `edit`, `review`, `question`, `custom`; `low`/`medium`/`high` drives notification urgency and rules |
+| `source.agent`, `source.session`, `source.session_title`, `source.cwd` | Who is asking; self-declared, shown to the human and matched by rules |
+| `input` | Editable object; the human's edits come back in `decision.fields` |
+| `options` | Custom choices `{id,label,outcome}` (1–32); omit for Approve/Deny |
+| `timeout`, `on_timeout` | Default is no deadline; a duration opts into expiry (`deny` by default) |
+| `dedupe_key` | Identical pending requests with the same key collapse into one id |
+| `callback_url` | Daemon POSTs the decision there ([callbacks](docs/public/integrations/callbacks.md)) |
+
+Questions instead of approvals: MCP `ask_question`, or `kind: "question"` with
+`input.questions` (see the [MCP guide](docs/public/agents/mcp.md)).
+
+## 4. Persist the id, then wait
+
+Save the returned `id` before waiting, keyed to the action it gates. Tool and
+shell timeouts kill waiters long before a human decides (omp bash: 300s, MCP
+clients: 30–60s); a killed waiter is not an answer and the request stays
+pending. Reattach with the same id:
+
+- MCP: `wait_requests {"ids":[…]}` in a loop until `pending` is empty;
+  `list_requests {"session":…, "status":"pending"}` recovers ids after context loss.
+- CLI: `handup wait ID --json` (timeout disabled), or `handup status ID --json`.
+- HTTP: `GET /v1/requests/{id}/wait?timeout=60s` until `status` is not `pending`.
+  Local and paired-device clients can instead watch the `GET /v1/events` WebSocket.
+
+Never create a second request because a wait timed out. Keep the agent turn
+alive while answers you need are pending: an idle agent is not woken by them.
+
+## 5. Gate execution on the decision
+
+| Status | Meaning | Harness action |
+| --- | --- | --- |
+| `approved` | Human approved | If `run_result` is present, consume it and do not run again; otherwise run exactly the reviewed action with `decision.fields` edits applied |
+| `answered` | Question submitted | Use `answers` (MCP) or `fields.answers` (CLI/HTTP decision) |
+| `denied` | Human said no | Stop; show `decision.feedback`; revise only if feedback asks |
+| `expired`, `cancelled` | No decision | Stop; not permission |
+| `pending` | Undecided | Keep waiting; not permission |
+| Any error | Transport/validation failure | Stop; fail closed |
+
+Bind execution to `content_hash`: it covers the title, summary, kind, previews,
+options, input and callback URL the human saw. If the action you are about to run
+differs from the reviewed one, submit a new request instead of reusing the approval.
+A denial is a normal answer (MCP `isError=false`, CLI exit 1); never resubmit it
+unchanged.
+
+Response shapes differ by transport:
+
+- MCP: `{id,status,option,feedback,content_hash}` plus `fields` (approvals),
+  `answers` (questions), or `run_result` (desktop execution).
+- CLI `ask --wait --json` / `wait --json`: the decision object (`option`,
+  `feedback`, `fields`, `content_hash`, `decided_by`, …) plus `id` and `status`;
+  question answers are in `fields.answers`.
+- HTTP and other CLI `--json` commands: the full request, decision under `decision`.
+
+CLI `ask --wait`, `wait`, `status` and `show` return 0 approved/answered,
+1 denied, 2 expired, 3 cancelled, 4 error, or **5 ran in the desktop app**.
+Nonblocking `ask`, `status` and `show` also exit 0 while pending, so read
+`status` there.
+
+Exit 5 means `run_result` is present, not that the command succeeded.
+It can contain a nonzero `exit_code` or `error` while status remains approved.
+Read the [result fields](docs/public/agents/mcp.md#desktop-run-results) and stop duplicate execution
+even on failure. Permission hooks should block the intercepted call with the
+run summary (including human feedback) rather than returning allow when a
+result is present.
+
+## 6. Clean up
+
+Retract requests your harness no longer needs (plan changed, task aborted) with
+MCP `cancel_request`, `handup cancel ID`, or `POST /v1/requests/{id}/cancel`.
+Never cancel to dodge a pending decision you dislike.
+
+## 7. Tell the model the policy
+
+Add the approval contract to the agent's instructions so it asks before
+destructive, published, costly, credential-related or ambiguous actions and
+handles denials correctly:
+
+```sh
+handup prompt --agent generic >> AGENTS.md
+```
+
+The [agent skill](docs/public/agents/skill.md) bundles the same contract with offline docs for
+skill-aware agents. A skill alone does not install handup or intercept tools.
+
+## Checklist
+
+- [ ] `handup doctor --json` passes where the harness runs
+- [ ] Transport wired: MCP server entry, CLI on PATH, or HTTP endpoint + credential
+- [ ] Request ids persisted before waiting; reattach path tested by killing a waiter
+- [ ] Only `approved`/`answered` permits action; `run_result` prevents duplicate execution; edits from `decision.fields` applied
+- [ ] Denial feedback reaches the model; no automatic retry
+- [ ] Errors, timeouts and unknown statuses fail closed
+- [ ] Approval policy present in the agent's instructions
+- [ ] End-to-end test: approve once, deny once, and answer a question from `handup inbox`
+
+---
+
+Source: [docs/public/agents/email.md](docs/public/agents/email.md)
+
+# Email drafts
+
+Sending email is external publication: ask before every send. handup shows the
+human a rendered email preview, lets them edit the draft and leave feedback, and
+records the decision. **handup never sends mail** and has no Gmail, IMAP or SMTP
+access. After approval you send the message with your own tool (for example
+`gog gmail send`, himalaya, or an MCP mail tool).
+
+## Flow
+
+1. Draft the email.
+2. Ask with an `email` preview and the editable draft as `input`
+   (`{to, cc, bcc, subject, body}`). Do not send while the request is pending.
+3. **Approved**: send `decision.fields` if present (the human edited the draft;
+   it is the complete edited draft, not a patch), otherwise send your original
+   draft. Send exactly that content once. Read `feedback` either way.
+4. **Denied**: do not send. Read the feedback, revise the draft and ask again
+   with the revision. A denial is not permission to retry the same draft.
+5. Expired, cancelled or error: do not send.
+
+Without `input` the request is review-only: the human can approve or deny and
+leave feedback, but not edit.
+
+**Open in mail app.** Email previews in the inbox and History have an "Open in
+mail app" button that hands the shown draft (the human's edit while editing)
+to their own mail client as a `mailto:` link with To, Cc, Bcc, subject and
+the plain-text body prefilled. The human may send it from there. Opening the
+mail app changes nothing about the request: it stays pending until the human
+approves or denies it here, and handup still never sends mail.
+
+## Preview shape
+
+```json
+{
+  "type": "email",
+  "email": {
+    "from": "Ari <ari@example.com>",
+    "to": ["Dana Lee <dana@example.org>"],
+    "cc": ["ops@example.org"],
+    "bcc": [],
+    "reply_to": "billing@example.com",
+    "subject": "Re: Q3 invoice",
+    "date": "Tue, 30 Sep 2026 16:05:00 +0000",
+    "body": "Hi Dana,\n\nThe signed invoice is attached.\n\nBest,\nAri",
+    "attachments": [{"name": "invoice-q3.pdf", "mime": "application/pdf", "size": 48213, "blob": "sha256:…"}],
+    "in_reply_to": {"from": "Dana Lee <dana@example.org>", "date": "Tue, 30 Sep 2026 09:12:00 +0000", "body": "Could you send the signed invoice?"}
+  }
+}
+```
+
+- `body` is Markdown (plain text renders as written, line breaks kept).
+- `body_html` is optional; it renders only in the sandboxed HTML preview frame
+  (network blocked), never inline. Edits change `body` only: if the human
+  edited the draft, regenerate or drop your HTML alternative.
+- Addresses are `address` or `Name <address>` (the name may be quoted). Each
+  address is `local@domain` with exactly one `@`; the local part is ASCII
+  letters, digits and ``!#$%&'*+-/=?^_`{|}~.`` (at most 64, no leading,
+  trailing or doubled dots); the domain has at least two labels and ends in a
+  letters-only TLD of two or more letters or an `xn--` label (`a@b`,
+  `ops@example.org2` are rejected; Unicode domains are fine). At least one of
+  `to`/`cc`/`bcc` is set, and the subject or body is non-empty.
+- An approval's `decision.fields` on an email request must be a complete draft
+  `{to, cc, bcc, subject, body}` meeting the same rules; the API and CLI
+  reject anything else with HTTP 400, so an approved edit is always sendable.
+- Attachments are shown as chips the human can open or download. `blob` is a
+  hash from `POST /v1/blobs`; the CLI and MCP also accept a local `path` and
+  upload it for you. Without either, the chip shows the name only.
+- `in_reply_to` is the earlier message, shown collapsed under the body.
+
+## MCP
+
+```json
+{"name": "request_approval", "arguments": {
+  "title": "Send reply to Dana",
+  "kind": "review",
+  "risk": "medium",
+  "previews": [{"type": "email", "email": {
+    "from": "ari@example.com", "to": ["dana@example.org"],
+    "subject": "Re: Q3 invoice", "body": "Hi Dana,\n\nInvoice attached.\n\nAri",
+    "attachments": [{"path": "out/invoice-q3.pdf"}]}}],
+  "input": {"to": ["dana@example.org"], "cc": [], "bcc": [],
+            "subject": "Re: Q3 invoice", "body": "Hi Dana,\n\nInvoice attached.\n\nAri"},
+  "wait": false
+}}
+```
+
+Wait with `wait_requests`. An approved reply looks like
+`{"status":"approved","option":"approve","feedback":null,"fields":{"to":[…],"cc":[],"bcc":[],"subject":"…","body":"…"}}`;
+`fields` is absent or null when the human approved without editing.
+
+## CLI
+
+`--preview email:FILE` (or `email:-` for stdin) reads the email JSON object
+above. The CLI also uses the draft as `input`, so the human can always edit it;
+for a review-only request send the full request with `handup ask --request -`
+and omit `input`.
+
+```sh
+handup ask --title "Send reply to Dana" --risk medium \
+  --preview email:draft.json --wait --json > decision.json
+case $? in
+  0) jq -e '.fields' decision.json >/dev/null && jq '.fields' decision.json > send.json \
+       || jq '{to, cc, bcc, subject, body}' draft.json > send.json
+     # send send.json with your own mail tool, e.g. gog gmail send
+     ;;
+  1) jq -r '.feedback // empty' decision.json  # revise, then ask again
+     ;;
+  *) echo "not approved; do not send" ;;
+esac
+```
+
+Without `--json`, `--wait` prints the request, then any feedback, then
+`Edited input:` followed by the edited draft when the human changed it. Exit
+codes are the usual ones: 0 approved, 1 denied, 2 expired, 3 cancelled, 4 error.
+
+`handup demo` seeds an editable email reply with an attachment to try the
+review and Edit & approve flow.
+
+---
+
+Source: [docs/public/agents/mcp.md](docs/public/agents/mcp.md)
+
+# MCP stdio
+
+Run `handup mcp` in the project directory. MCP version 2025-11-25 is negotiated using rmcp. Initialize, send notifications/initialized, then tools/list or tools/call. No logs go to stdout.
+
+MCP is the simplest way to use handup from any client, including [omp](docs/public/agents/omp.md): the model asks explicitly and no extension is needed. It does not intercept a client's built-in approval prompts; omp's native bridge extension that forwards those is optional.
+
+MCP tools: `request_approval`, `ask_question`, `check_request`, `wait_requests`, `cancel_request`, `list_requests`.
+
+- `request_approval`: title (required), summary, kind, risk, previews [{type, path OR content OR email, lang?}], input (editable object, returned edited in decision `fields`), options [{id,label,outcome,style?}], timeout (duration string or `"none"`), on_timeout (`deny`|`expire`|`approve`, timed requests only), dedupe_key (identical pending requests share one id), callback_url ([callbacks](docs/public/integrations/callbacks.md)), session, session_title, and wait (default true). Relative paths use the server cwd; files upload as immutable blobs. With a progressToken, blocking calls emit progress notifications every long-poll cycle.
+- `ask_question`: question and allow_free_text (both required, even with choices), choices, session, session_title, wait. Example: {"question":"Which region?","choices":["eu","us"],"allow_free_text":true}. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Use `request_approval` with `kind: "question"` and `input.questions` for several questions, multi-select or a timeout.
+- `check_request` {"id"}: current decision JSON without waiting.
+- `wait_requests` {"ids":[…], "max_wait_seconds"?}: returns every decided request among ids at once, otherwise long-polls until the first decision or `max_wait_seconds` (default 25, max 300, within omp's 30s and Codex's 60s tool timeouts). Result: `{"decided":[decision JSON], "pending":[ids], "message"}`. Act on each decision and call it again with the pending ids until none remain, before ending the turn: without a shell, answers reach the agent only this way.
+- `cancel_request` {"id"}: retract a pending request you no longer need (plan changed, task abandoned). Never cancel to dodge a decision. Cancelling a request that is no longer pending is an error.
+- `list_requests` {"status"?, "session"?, "agent"?, "limit"? (default 20, max 200)}: compact rows `{id,status,title,kind,risk,created_at,…}` to recover your own ids after context loss; pass your session id.
+
+Decision JSON (MCP shape): `{id, status, option, feedback, content_hash}` plus `fields` (approvals; edited input) or `answers` (questions: `answers.answer` = `{"selected":["eu"],"text":"…"}`, `text` only when typed). It omits `expires_at` and other request fields; use `handup status ID --json` for the full request. Denials and declines return `status: denied` with optional feedback, isError=false. Blocking calls (`wait` true) stop after 300s and return `status: pending` with the id: pending is neither approval nor an answer. With wait=false save the id and call wait_requests until it is decided; the same id recovers the decision after an MCP reconnect, so never create a duplicate request when a client stops waiting.
+Email drafts use `{"type":"email","email":{…}}` previews plus `input` {to,cc,bcc,subject,body}; see [email drafts](docs/public/agents/email.md).
+Example: {"title":"Deploy staging","kind":"command","previews":[{"type":"command","content":"./deploy staging"}],"wait":false}.
+
+## Desktop Run results
+
+For command requests, the human may choose **Run** or **Run as admin** in the
+local desktop app. The resulting decision has `status: "approved"` and a
+top-level `run_result` in MCP responses, including `request_approval`,
+`check_request` and each decided entry from `wait_requests`. CLI wait JSON
+also returns it at the top level; HTTP and CLI status JSON nest it under
+`decision.run_result`.
+
+| `run_result` field | Meaning |
+| --- | --- |
+| `exit_code` | Command exit status, or absent/null when it never started or a signal ended it |
+| `stdout_tail`, `stderr_tail` | Redacted last bytes of each stream, at most 64 KiB each |
+| `duration_ms` | Wall time in milliseconds |
+| `truncated` | Earlier output was dropped from either tail |
+| `elevated` | Execution used pkexec (Linux) or osascript's administrator prompt (macOS) |
+| `error` | Optional launch/authentication failure, timeout, cancellation or signal explanation |
+
+A completed run returns an **approve outcome regardless of exit code or error**:
+approval here means the human chose execution, not that it succeeded.
+If nothing starts (including administrator authentication refusal), the claim
+is released and the request stays pending; agent cancellation instead leaves
+it cancelled. A result that cannot be submitted is reported in the desktop.
+Inspect `exit_code` and `error`, consume the returned output and **do not run
+the command again**, even if it failed. Ordinary approval without `run_result`
+still permits the agent to execute the reviewed action. Native permission
+hooks deny/block the original tool call with a run summary and appended human
+feedback when a result is present, preventing a second execution; that block
+is not a human denial. CLI `ask --wait`, `wait`, `status` and `show` return
+**exit 5** for decisions carrying a result, not the command's own exit code.
+Phones, browsers and the relay never execute commands; paired devices cannot
+submit a result. See [Desktop](docs/public/desktop.md#run-a-command) for Run, Cancel,
+the 10-minute execution timeout and administrator setup.
+
+
+The MCP initialize `clientInfo.name` supplies `source.agent` (fallback `mcp`);
+this is self-declared identity, not a verified `source.integration` marker.
+If the client advertises roots, handup uses the first local `file://` root for
+`source.cwd`, decoding escaped paths. A roots error, no usable root, or a response
+taking more than 500 ms falls back to the server process directory. Preview paths
+remain relative to the server process directory.
+
+Both `request_approval` and `ask_question` accept optional `session` (stable ID)
+and `session_title` (display name). Automatically pass your current ID and title
+when known. The UI displays the title, falling back to the ID; session-scoped
+allow rules still use only the ID. An absent title is omitted from request JSON.
+
+Requests wait for the human by default: `requests.default_timeout` is `none`.
+Omit `timeout` to use that configuration, or pass `"none"` to disable a configured
+deadline. An explicit duration (for example `"10m"`) opts into expiry; `on_timeout`
+defaults to `deny` for timed requests. `wait` controls tool waiting, not request
+expiry. A client tool timeout does not approve or expire the pending request.
+
+Ask before destructive/irreversible actions, external publication or messages, costly resource use, credential changes/access, or ambiguous intent. Include the exact proposed action and its effects. Do not execute while pending. Only approved/answered permits the approved action; bind execution to content_hash and re-request if the action changes. A deny is a normal human answer, not a transport error. Read feedback, stop, and revise only when requested. Never retry the same request or treat expired, cancelled, or error as permission.
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"inspector","version":"1"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"request_approval","arguments":{"title":"Review deploy","wait":false}}}
+```
+
+Tool cancellation stops waiting but preserves the pending request; use wait_requests to resume, or cancel_request to retract it. Daemon/API failures return isError=true, never approval. MCP path previews cannot read stdin. For content use UTF-8 text; use path for binary media.
+
+Sources: https://modelcontextprotocol.io/specification/2025-11-25/server/tools and https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/progress
+
+---
+
+Source: [docs/public/agents/omp.md](docs/public/agents/omp.md)
+
+# omp
+
+## Quickstart (MCP)
+
+```sh
+handup serve --foreground                 # or install the handup service
+handup integrate mcp --client omp --dry-run
+handup integrate mcp --client omp
+```
+
+Then run `/mcp reload` in omp (or restart it). This adds `handup mcp` to the active agent directory's `mcp.json`, so the model can call `request_approval`, `ask_question`, `check_request` and `wait_requests`. No extension and no `--approval-mode yolo` are needed. For named profiles, set `PI_CODING_AGENT_DIR` to the profile's agent directory when installing. Read [MCP](docs/public/agents/mcp.md) for the tool arguments and the rules the model must follow.
+
+MCP approvals are explicit: handup sees only what the model chooses to ask. It does not intercept omp's built-in ask dialog or its own tool approval prompts, which keep working as configured. For automatic forwarding of those, add the optional native bridge below.
+
+Questions from `ask_question` appear in the app as clickable cards: radio buttons for single choice, checkboxes for multi choice, plus free text when allowed. Raw JSON stays hidden until you open its toggle. handup renders only structured `input.questions`; it never infers a question form from arbitrary JSON.
+
+**Long waits.** A human may take minutes to decide, but omp's bash tool stops a command after its default timeout (300s). When an agent waits with the CLI (`handup ask --wait`, `handup wait <id>`), run it in the background with `timeout: 0`. If the waiter is killed anyway, the request is still pending in handup: reattach with `handup wait <id>` or read it with `handup status <id> --json`. MCP clients with short tool timeouts can call `request_approval` with `wait=false` and then call `wait_requests` with the pending ids, repeating until none are pending; each call returns at the first decision or after `max_wait_seconds` (default 25s, inside omp's 30s MCP tool timeout).
+
+**Background waiters wake the session.** Start one CLI waiter per request as an async bash job with `timeout: 0`. Its completion wakes an idle omp session, so the agent may end its turn and act on each decision when it arrives; no extension or new user message is needed. Never use one loop over several IDs, which reports nothing until the last answer. MCP alone does not wake an idle session; without a CLI waiter or the optional extension's decision push, keep the turn open and poll.
+
+To keep a waiter attached across daemon restarts, run this in its async job:
+
+```sh
+while :; do handup wait <id> --json; rc=$?; [ $rc -eq 4 ] || exit $rc; sleep 5; done
+```
+
+Exit 4 includes daemon-unreachable errors (and other CLI errors); pending requests survive restarts. The loop exits on a decision, preserving its exit code. Investigate persistent errors rather than treating them as a decision.
+
+## Optional native bridge (extension)
+
+```sh
+handup integrate omp --dry-run
+handup integrate omp
+omp --approval-mode yolo                  # or a policy allowing the gated tools
+```
+
+The installer embeds the reviewed repository source `integrations/omp/handup.ts` and installs it into `$PI_CODING_AGENT_DIR/extensions/handup.ts` (default `~/.omp/agent/extensions/handup.ts`). It also adds `handup mcp` to the same agent directory's `mcp.json`, exactly as the MCP quickstart does; pass `--no-mcp` to install the bridge alone, and `--uninstall` removes both (or only the bridge with `--no-mcp`). Every file is checked before any is written, so a refused step changes nothing. `--dry-run` prints the diffs and changes nothing. Reapply is idempotent. Restart omp after any install, upgrade or uninstall to load the changed bridge. For isolated or explicit loading, use `--no-extensions --extension /path/to/handup.ts --no-session`. Installing MCP alone does not install this gate.
+
+**Upgrades and custom files.** Never edit the installed file: configure it through handup instead (see the tool list below), so every upgrade applies cleanly. An existing file that exactly matches a previously shipped handup version (by SHA-256 of its full bytes) and is otherwise unmodified is upgraded automatically: the old bytes are kept in a unique backup beside it (`handup.handup.bak`, then `.bak.1`, …) and the new file is replaced atomically. Any other existing file, including a shipped version with local edits, is treated as yours: the installer shows the diff to the current source and leaves the file unchanged. There is no force flag. Move your copy aside, move its customizations into handup config, and run the installer again. `handup integrate omp --uninstall` removes only a recognized handup file, never a custom one.
+
+**Use `--approval-mode yolo`, or a policy allowing the gated tools.** The extension is a `tool_call` preflight, not a callback capable of approving omp's built-in gate. Otherwise omp may ask a second time after handup approves; in print mode that second prompt fails closed. Yolo does not bypass this extension's gate, explicit deny policies, or provider safety checks.
+
+### Behavior and fallback
+
+The default filter gates `bash,python,edit,write,notebook,apply_patch,notebook_edit`. Choose the gated tool names (exact omp names) with `handup config set integrations.omp.tools '[bash, edit, write]'`; `[]` gates nothing, leaving only the question bridge, and removing the key (`handup config edit`) restores the default. The extension reads the setting through `handup config get` when omp loads it, so restart omp after changing it. A `HANDUP_OMP_TOOLS` environment variable (comma-separated) overrides the setting for one omp process. If handup is not on `PATH` or its config is unreadable, the default list applies. Read tools remain ungated by default. Include every write/exec tool you use, including custom tools. Bash shows an exact command preview; old/new text edits show a diff, and other edits show JSON. Requests carry agent `omp`, session ID, cwd and tool name. The extension never executes the proposed action itself.
+The bridge also sends the session manager's current display name
+(`getSessionName()`) as optional `source.session_title`. Titles are display-only;
+session-scoped allow rules continue to match the stable session ID.
+
+With a UI, handup races the native Approve/Deny select: the first answer wins, the losing native dialog is aborted or the pending handup request is cancelled. Approve returns no block. Deny, expiry, cancellation, or a handup error blocks with human feedback or a safe reason, visible to the model. With the daemon unreachable, or presence routing to the keyboard, only the native select is used; with no UI (including `-p`) the action blocks. No fallback ever automatically approves, and the extension does not auto-start the daemon.
+
+Desktop **Run** is an exception to ordinary approval: `run_result` means the
+command was already attempted, so the extension blocks the original tool call
+with its run summary and **do not run again** instruction, even for a failed
+run. The request itself remains approved. MCP-only agents must inspect
+`run_result` themselves; see [result fields](docs/public/agents/mcp.md#desktop-run-results).
+
+The extension also wraps `ctx.ui.askDialog` where available. Questions race the native dialog against a handup `question` request whose `input.questions` keep omp's ids, headers, single/multi choice, recommended option, option descriptions and previews; each question also permits free text. The app shows them as the same clickable radio/checkbox cards (keyboard: ↑/↓ or j/k between options, Space/Enter or 1–9 to choose, ⌘/Ctrl+Enter to submit), with Raw JSON hidden until requested. Submit returns `decision.fields.answers` (`{QID: {selected, text?}}`), mapped back to omp's submit-result shape (`selectedOptions`, `customInput`). A decline, expiry or daemon-side cancellation is also returned as an answer with no selection: `customInput` reads `Declined in handup: <feedback>` (or names the expiry or cancellation), so the agent sees the decline and continues instead of reporting "Ask tool was cancelled by the user". Answering the native dialog first, or aborting the agent turn, still cancels the handup request. From a terminal: `handup answer ID --select QID=LABEL --text QID=TEXT`.
+
+### Decision push
+
+With the extension loaded, pending requests created by this session through MCP `request_approval` / `ask_question` (including `wait=false` and harness-mounted tools) or non-blocking `handup ask` CLI output are watched over the local socket. A human decision sends one visible `handup-decision` message containing the title, status, selected option, feedback and question answers. It wakes an idle agent or steers an active turn; there is no need for another human message.
+For desktop Run decisions, the pushed message also includes the run summary
+and tells the agent not to run the command again.
+
+If a tool result already showed the final state (for example `check_request`, `wait_requests`, `handup wait`, `handup status`, or a blocking MCP call), the extension suppresses that push. Its own approval gates and question-dialog races remain inline and never push. Watchers stop on session switch/branch, shutdown or abort, retry daemon failures with backoff, and silently stop when a request is gone. Only requests observed in the current session are tracked; installing MCP alone does not enable push.
+
+### Limitations
+
+The extension targets omp 18.4.4. It gates the configured names regardless of omp's approval tier; it is not a replacement for the entire omp policy engine. Because it races omp's native prompts, whichever side answers first decides; a native answer cancels the pending handup request. Native question chat/image answers remain native-only; remote answers support option labels and free text. It uses handup's local Unix socket (`HANDUP_SOCKET`, then the standard runtime/state location), not a remote relay.
+
+Sources: https://github.com/can1357/oh-my-pi/tree/v18.4.4/packages/coding-agent/src/extensibility/extensions and https://github.com/can1357/oh-my-pi/blob/v18.4.4/packages/coding-agent/src/extensibility/shared-events.ts
+
+---
+
+Source: [docs/public/agents/shell-ci.md](docs/public/agents/shell-ci.md)
+
+# Shell and CI
+
+Ask before destructive/irreversible actions, external publication or messages, costly resource use, credential changes/access, or ambiguous intent. Include the exact proposed action and its effects. Do not execute while pending. Only approved/answered permits the approved action; bind execution to content_hash and re-request if the action changes. A deny is a normal human answer, not a transport error. Read feedback, stop, and revise only when requested. Never retry the same request or treat expired, cancelled, or error as permission.
+
+```sh
+handup ask --request - --wait --json < examples/command.json
+```
+
+Exit codes of blocking `ask --wait` and `wait`. Nonblocking `ask`, `status` and
+`show` also exit 0 while pending, so read `status` there.
+
+| Exit | Meaning |
+| --- | --- |
+| 0 | approved/answered |
+| 1 | denied |
+| 2 | expired/timeout |
+| 3 | cancelled |
+| 4 | error |
+| 5 | ran in the desktop app |
+
+Exit 0 permits the reviewed action; it is not the command's own exit status.
+Desktop **Run** returns an approved decision with `run_result` and CLI exit
+**5**, even on failure (`ask --wait`, `wait`, `status` and `show`). Consume its
+`exit_code`, `error` and output tails and **do not run again**. Wait JSON puts
+it at the top level; status/show JSON puts it under `decision.run_result`.
+See [the result contract](docs/public/agents/mcp.md#desktop-run-results).
+`examples/deploy-gate.sh` skips its own execution on exit 5 and returns the
+desktop command's `run_result.exit_code`, or 1 when no exit code is available.
+
+Capture JSON even when exit is nonzero so human feedback is not lost. Do not use `|| true` before the execution gate. Ask auto-starts the local daemon unless daemon.autostart is false; wait/status do not. CI needs a reachable local daemon and a human able to decide (CLI, desktop app, terminal inbox, or a paired phone/browser when `remote.mode` is on; see [remote access](docs/public/remote.md)); unattended timeout is denial, not approval.
+
+Agent shell tools often kill commands after a default timeout (omp: 300s), long before a human decides. Run `handup ask --wait` and `handup wait <id>` with the tool's timeout disabled or raised (omp: `timeout: 0`), or ask without waiting and keep the request id. A killed waiter is not an answer: the request stays pending. Reattach with `handup wait <id>` or read it with `handup status <id> --json`, and never act until the decision is approved.
+
+See [examples](examples/README.md) and [request schema](docs/public/schema/request.schema.json). Approval-gated shell flows must require exit 0 **and no `run_result`** before executing a command themselves. For HTTP-only runners use [submit tokens](docs/public/integrations/tokens.md); for wiring a custom harness see [any agent or custom harness](docs/public/agents/custom.md).
+
+---
+
+Source: [docs/public/agents/skill.md](docs/public/agents/skill.md)
+
+# Install the handup agent skill
+
+Install handup's approval workflow and complete offline user documentation into a supported agent's skill directory. This installs **instructions**, not the handup binary, daemon, MCP configuration or native permission hooks.
+
+## Private GitLab installation
+
+The repository is private. You need Node.js 22.20 or newer, Git, and existing SSH access to `ariel-frischer/handup` on GitLab. The command uses your normal Git/SSH authentication; it does not require publishing handup to npm.
+
+Run from the project where the agent should use handup:
+
+```sh
+DO_NOT_TRACK=1 npx --yes skills@1.7.0 add git@gitlab.com:ariel-frischer/handup.git \
+  --full-depth --skill handup --agent claude-code codex cursor --yes
+```
+
+Replace the agent names with the targets you use. Add `--global` for user-level installation instead of project-local installation. The leading `--yes` belongs to npx; the trailing one belongs to the skills installer.
+
+To target every agent registered by this version of the installer, use a project-local install:
+
+```sh
+DO_NOT_TRACK=1 npx --yes skills@1.7.0 add git@gitlab.com:ariel-frischer/handup.git \
+  --full-depth --skill handup --agent '*' --yes
+```
+
+Quote `'*'` so the shell does not expand it. “Every agent” means the installer's
+supported targets, not every possible agent runtime. Wildcard selection skips
+targets whose project directory does not exist; explicitly name your agents to
+create their installation directories. Some targets have no global installation
+directory; use explicit targets rather than `--global --agent '*'`.
+
+To inspect discovery without installing:
+
+```sh
+DO_NOT_TRACK=1 npx --yes skills@1.7.0 add git@gitlab.com:ariel-frischer/handup.git \
+  --full-depth --skill handup --list
+```
+
+`--full-depth` ensures `.skills/handup` is discovered even if the repository later contains skills in another conventional directory. In skills 1.7.0, use the exact SCP-style `git@gitlab.com:...` source shown above: the superficially equivalent `ssh://git@gitlab.com/...` form is rewritten to HTTPS and can lose the working SSH authentication path.
+
+### GitLab credentials and local fallback
+
+A working `glab` API login does **not** necessarily configure Git HTTPS clone credentials for `npx skills`. Existing GitLab SSH access is the verified private-source path. Do not put a token in an install URL or copy credentials into the skill.
+
+If you already have an authenticated clone, install from it without any remote credential lookup:
+
+```sh
+DO_NOT_TRACK=1 npx --yes skills@1.7.0 add ./handup \
+  --full-depth --skill handup --agent claude-code codex cursor --yes
+```
+
+Here `./handup` is the checkout directory; from inside that checkout use `.` instead. `glab repo clone ariel-frischer/handup` is another way to obtain a clone using your existing GitLab setup; install from the resulting local directory.
+
+## What the installed skill includes
+
+The entire skill directory is installed, including:
+
+- `SKILL.md`: approval/denial workflow, preview recipes, exit codes and topic routing.
+- `references/index.md`: inventory of every bundled public guide and machine contract.
+- `references/llms-full.txt`: full public guide text in one offline-readable file.
+- `references/docs/public/`: getting started, all agent integrations, desktop/mobile, remote access, relay, rules, lifecycle hooks, OpenAPI and request/decision/event JSON schemas.
+- `references/examples/`: runnable request examples and their preview assets.
+
+Load only the relevant reference for the current task. The full documentation is available offline; it does not have to be inserted into every agent prompt. Copying only `SKILL.md` loses the reference bundle.
+
+For an agent the skills CLI does not register, copy the **whole** `.skills/handup` directory into that agent's documented skill-loading directory, or provide its workflow/reference files as instructions. `omp` and `jcode` are not valid `--agent` IDs in skills 1.7.0. A shell-capable agent can use the installed handup CLI; an MCP-capable agent can call configured handup tools. Neither path implies native tool interception.
+
+Install the binary separately using [getting started](docs/public/index.md). Then configure [MCP](docs/public/agents/mcp.md), or the appropriate native adapter: [Claude Code](docs/public/agents/claude-code.md), [Codex](docs/public/agents/codex.md), [omp](docs/public/agents/omp.md). Installing the skill alone does not configure any of these. If neither CLI nor MCP is available, the agent must stop consequential work and report missing setup, not proceed without approval.
+
+## Future public source URL
+
+**Only after a separately authorized change makes the repository public**, replace the SSH source with the public GitLab HTTPS URL:
+
+```sh
+DO_NOT_TRACK=1 npx --yes skills@1.7.0 add https://gitlab.com/ariel-frischer/handup \
+  --full-depth --skill handup --agent claude-code codex cursor --yes
+```
+
+The skill name, package layout and agent flags stay the same. No handup npm package is needed: npx runs the public `skills` installer, which fetches the Git repository. This command is a future cutover example, not a claim that anonymous installation works while handup remains private. Anonymous discovery/install must be verified after the visibility change. If the public repository moves, substitute its actual new URL.
+
+## Maintainers: regenerate the bundle
+
+```sh
+make docs-skill
+```
+
+This documentation-only target uses Python, copies the checked-in public contracts, and does not compile Rust or start a daemon. `references/` is generated; edit canonical `docs/public` guides instead. Commit the refreshed bundle with source-document changes so remote skill installs receive current documentation.
+
+After Rust model/API changes, the existing `make docs` workflow regenerates the machine contracts and the portable bundle. Follow the repository's CI build policy; do not use a local release/desktop/mobile build to refresh skill prose.
+
+Installer behavior is pinned to [skills 1.7.0](https://github.com/vercel-labs/skills/tree/7407f3893ad4dceab546ac002c3ef806e4000c73), published 2026-09-17. See its [supported agents and source formats](https://github.com/vercel-labs/skills/blob/7407f3893ad4dceab546ac002c3ef806e4000c73/README.md). Private authenticated discovery was verified on 2026-09-30; that is distinct from anonymous public access or native-hook enforcement.
+
+---
+
+Source: [docs/public/cli.md](docs/public/cli.md)
+
+# CLI and daemon reference
+
+Request limits, exit codes, timeouts, storage paths, the daemon API, and
+notification and configuration details. `handup help COMMAND` describes every
+flag.
+
+## Commands
+
+```sh
+handup serve --foreground    # unix socket + authenticated loopback API
+handup ask --title "Review README" --preview text:README.md --wait --json
+handup ask --title "Run a command" --command "echo hello" --timeout 10m
+handup ask --title "Review changes" --git-diff HEAD --wait
+handup ask --request - --wait --json  # full request JSON on stdin
+handup ls --status pending --json
+handup show <id> --json
+handup status <id> --json
+handup wait <id> --json
+handup approve <id> --option approve -m "Looks good"
+handup approve <id> --scope session  # also project or always
+handup deny <id> -m "Please revise the migration"
+handup cancel <id>
+handup schema request        # or decision, event, openapi
+handup service install --dry-run  # inspect unit/plist without writing/enabling
+handup service install       # install and start user service
+handup service status
+handup service uninstall
+handup demo --json           # one sample request per available preview type
+handup doctor --json         # OK/WARN/FAIL diagnostics
+handup inbox                 # live terminal inbox (requires a TTY)
+handup rules list
+handup rules test request.json       # or a request ID
+handup rules rm <rule-id>
+handup log --json            # append-only audit, newest first
+handup pair --scope decide   # QR pairing link for a phone (needs remote.mode)
+handup devices list          # enabled/disabled and push state; --json includes enabled and push
+handup devices disable <id>  # pause access and push without unpairing
+handup devices enable <id>   # resume the same pairing
+handup devices mute <id>     # stop push notifications, keep API/event access
+handup devices unmute <id>   # resume push notifications
+handup devices scope <id> view # read-only; use decide to restore decision access
+handup devices revoke <id>   # permanently unpair
+handup yolo on --for 1h      # auto-approve new low/medium risk (hard: all); handup yolo off
+handup version --plain       # alias: handup v
+handup config init           # --force overwrites existing config
+handup config show|path|edit|keys
+handup config get no_color
+handup config set output_format json
+handup config toggle no_color
+handup completion zsh        # bash, zsh, fish, powershell, elvish
+handup uninstall             # --yes skips confirmation
+```
+
+`ask` starts the daemon automatically when its socket is absent unless
+`daemon.autostart` is false.
+
+## Exit codes and output
+
+| Exit | Meaning |
+| --- | --- |
+| 0 | approved/answered, or successfully submitted/pending |
+| 1 | denied |
+| 2 | expired |
+| 3 | cancelled |
+| 4 | error |
+| 5 | ran in the desktop app |
+
+These apply to `ask`, `wait`, `status`, `show`, `approve`, `deny`, and `cancel`;
+`ls` returns 0 on success. Non-TTY queue commands never prompt or print banners.
+`ask --wait --json` and `wait --json` print the decision (including feedback and
+`content_hash`) with `id` and `status`; a cancellation prints those three fields.
+Other queue commands print Request JSON. `--option id:label[:approve|deny]` adds
+custom choices (default outcome approve, except id `deny`).
+
+Desktop **Run** decisions carry `run_result`. `handup wait ID --json` (and
+`ask --wait --json`) includes it at the top level beside `id` and `status`;
+`handup status ID --json` includes it under `decision.run_result` in the full
+Request. Text output from wait prints a run summary: exit code or error,
+duration, elevation and the last 40 lines of each redacted output tail, followed
+by human feedback when present; text status shows the request and previews, so
+use `status --json` for the result. Run is an approval even when execution fails,
+but `ask --wait`, `wait`, `status` and `show` exit **5** for a decision carrying
+`run_result`, regardless of the command's own exit code. Read
+`run_result.exit_code` and `error`, and **do not run the command again**.
+See [MCP's result contract](docs/public/agents/mcp.md#desktop-run-results) for the fields.
+
+## Previews and limits
+
+Preview types: `text`, `markdown`, `code`, `diff`, `files`, `command`, `json`,
+`html`, `image`, `video`, `audio`, `file`, `pdf`, and `email`. Repeat
+`--preview TYPE:PATH`, or use `TYPE:-` for stdin. `email:FILE` reads an email
+draft JSON object and also sets it as the editable `input` (see
+[email drafts](docs/public/agents/email.md)). Files are uploaded as
+immutable, SHA-256-addressed blobs. Directories use `files` previews; an
+`index.html` becomes the bundle entry. Symlinks inside a bundled directory are
+rejected; a symlink given as the preview path itself is followed. `--command` adds a
+shell snapshot; submitting it does not execute it. The human can explicitly
+choose [Run in the desktop app](docs/public/desktop.md#run-a-command). `--git-diff [RANGE]`
+snapshots Git's unified diff. MIME is sniffed from bytes and extensions.
+
+Inline JSON-request previews over `previews.inline_max` (64 KiB) move into
+blobs. Limits: 512-byte title, 64 KiB summary/input, 64 previews, 32 choices,
+4096 bundle files, 16 MiB inline preview. `previews.max_file_bytes` defaults to
+268435456 (256 MiB) and caps uploads and previews with a known size; oversized
+uploads return 413 naming that key. CLI file and stdin previews also stop at a
+fixed 256 MiB even if that key is raised. The remote listener still has its own
+1 MiB request-body limit. Questions: 4096-byte question text and option
+descriptions, 32 options, 16 KiB option previews and answer text. Email drafts:
+500 recipients, 64 attachments, 998-byte subject.
+
+Sources auto-detect cwd, Git root/branch and host. `--agent`, `--session`, and
+`--cwd` override self-declared, **unverified** provenance, including with
+`--request -`; explicit JSON source fields are otherwise preserved.
+
+## Timeouts, dedupe and durability
+
+Requests wait for a human by default (`requests.default_timeout: none`).
+`--timeout` or a configured duration opts into expiry. `--on-timeout deny`
+(default) records an expired, denied decision; `expire` expires without
+approving; `approve` explicitly opts into automatic approval. Identical pending
+requests with the same `--dedupe-key` collapse into one ID. Pending requests
+and decisions survive daemon restart, and audit rows cannot be updated or
+deleted.
+
+## Configuration
+
+Config path: `--config` > `HANDUP_CONFIG` > `$XDG_CONFIG_HOME/handup/config.yaml`
+(default `~/.config/handup/config.yaml`). A missing file uses defaults;
+`handup config init` seeds commented examples. `handup config keys` lists the
+keys `config get`/`set` accept; relay settings (`remote.relay.*`) are edited in
+YAML (`handup config edit`), see [relay](docs/public/relay.md).
+
+```sh
+handup config set daemon.listen 127.0.0.1:7465
+handup config set requests.default_timeout 10m
+handup config set notifications.type visual
+handup config set notifications.quiet_hours 22:00-08:00
+handup config set notifications.backends '[desktop, ntfy]'
+handup config set notifications.ntfy.topic my-private-topic
+handup config set remote.mode tailscale
+handup config set history.keep_days 30      # 0 disables the age cap
+handup config set history.max_requests 500  # 0 disables the count cap
+handup config set history.max_bytes 1073741824  # best-effort 1 GiB live-storage cap
+handup config set history.files_keep_days 7    # files only; keep decisions/audit
+handup config set previews.max_file_bytes 268435456
+handup config set decisions.primary_side left  # Approve/Submit on the left
+```
+
+Storage settings accept nonnegative integer bytes/days, not size suffixes.
+`history.max_bytes` defaults to **0 (no disk cap)**; `history.files_keep_days`
+defaults to **0 (files live as long as their request)**. Retention runs at startup
+and hourly, first applying the age/count caps, then file expiry and the byte cap.
+The cap measures live database bytes (`(page_count - freelist_count) * page_size`),
+WAL bytes after checkpoint/truncation, and blob files. It removes oldest resolved
+requests first, never pending requests or files still needed by kept requests,
+until under the cap or no resolved requests remain. `handup doctor` reports the
+same live-storage measure. It is best-effort: pending data cannot be removed,
+and the physical database file can remain larger because reusable free pages do
+not shrink without VACUUM. File-only expiry preserves request and audit rows;
+files shared with pending or newer resolved requests stay stored.
+Expired blob/preview downloads return 410 Gone; the UI shows
+“File no longer stored (history.files_keep_days)”.
+
+`output_format` (text/json/yaml) is validated but no command reads it yet: queue
+commands (`ask`, `wait`, `status`, `ls`, …) print JSON only with `--json`.
+Themes: auto/light/dark. Primary side:
+right (default)/left; each app may override it per device. Global `--no-color` and
+`NO_COLOR` disable color; redirected output is plain.
+
+## Storage
+
+Linux data: `$XDG_DATA_HOME/handup/handup.db` (SQLite WAL) and
+`blobs/sha256/<2>/<62>`; state: `$XDG_STATE_HOME/handup/token` (0600); socket:
+`$XDG_RUNTIME_DIR/handup/handup.sock` (0600, parent 0700), falling back to the
+state directory. macOS uses the platform application-support directory for
+data and state. `HANDUP_DATA_DIR`, `HANDUP_STATE_DIR`, and `HANDUP_SOCKET`
+override these paths. Existing data/state/socket-parent directories must already
+be private (0700); shared directories and symlinks are rejected rather than
+chmodded. A process lock prevents a second daemon on the same state directory.
+
+## Daemon API
+
+API v1 covers health/OpenAPI, requests, long-poll wait, hash-bound decisions,
+cancellation, blob upload/Range download, and WebSocket `/v1/events`. The same
+API runs on the Unix socket and `daemon.listen` (default `127.0.0.1:7465`). Unix
+access relies on filesystem permissions. TCP requires a bearer token, a loopback
+Host, and an absent or trusted Origin (Tauri origins or `remote.web_origin`).
+`daemon.listen` must be loopback; remote access is a separate listener
+(`remote.mode`) that accepts paired device tokens and named submit tokens. See
+[remote access](docs/public/remote.md) and the generated [OpenAPI](docs/public/openapi.json).
+
+### Test requests
+
+`POST /v1/requests/test` creates a fixed synthetic request to try the inbox and
+notifications. Send no body or `{}` for an approval, or
+`{"kind":"approval"}` / `{"kind":"question"}`. The daemon returns **201** with
+the created `ApprovalRequest`; unknown kinds, extra fields, or malformed JSON
+return **400**. No custom title, source, preview, or other request fields are
+accepted.
+
+The server sets the title to **Test request** or **Test question**, agent to
+`handup`, session to `handup-test`, risk to `low`, and timeout to `15m`. The
+question includes sample choices and free text. Approving, denying, or answering
+performs no action. These samples use the normal request and decision flow.
+
+The route exists on the local Unix socket/authenticated loopback listener,
+remote HTTP listener, and relay tunnel. Remote paired devices need `decide`
+scope; `view` devices and submit tokens receive **403**. Arbitrary remote request
+submission remains a separate [submit-token](docs/public/integrations/tokens.md) capability.
+
+```sh
+curl --unix-socket "$XDG_RUNTIME_DIR/handup/handup.sock" \
+  -H 'Content-Type: application/json' http://handup/v1/requests/test \
+  -d '{"kind":"question"}'
+```
+
+## Notifications
+
+Native notifications support sound/visual/both, new requests, critical
+high-risk urgency on Linux (bypasses quiet hours), expiry warnings, reminders,
+and quiet hours. Sound uses `paplay` (Linux) or `afplay` (macOS), with a
+platform sound or `notifications.sound_file`. Notification text redacts common
+credentials and includes the request ID. Linux notification actions follow
+`none|low_risk|all`; macOS actions are not supported. Deny actions cannot bypass
+a required-feedback policy. `notifications.suppress_when_focused` is reserved.
+
+The `ntfy` backend sends only the title, risk, and a `handup://r/<id>` link
+(never preview content unless `ntfy.include_content`); `token_env` names an
+environment variable, not a secret value. See
+[notification backends](docs/public/remote.md#notification-backends). Lifecycle webhooks
+live under top-level `hooks:` ([event hooks](docs/public/integrations/hooks.md)).
+
+`handup doctor` checks Linux GStreamer H.264, VP9, and Opus plugins and idle
+detection support. It also warns when the daemon runs a different build than
+the CLI (local `GET /v1/version`) and, on Linux, lists handup processes still
+running a binary that was replaced on disk, such as a `handup mcp` server or the
+daemon left over from before `make install-global`; restart those. Daemon
+replies ignore fields a client does not know, so older clients keep working
+against a newer daemon, while request and decision input still rejects unknown
+fields. `handup demo` creates PNG/WAV/HTML/diff/bundle/JSON/command/PDF
+samples at runtime; video requires ffmpeg and is skipped when absent.
+
+## Uninstall
+
+`handup uninstall` removes the installed binary and backups and preserves
+configuration. `HANDUP_INSTALL_DIR` overrides `~/.local/bin`. `install.sh`
+downloads GitLab release archives with SHA-256 verification; `HANDUP_VERSION`
+selects a version.
+
+---
+
+Source: [docs/public/desktop.md](docs/public/desktop.md)
+
+# Desktop app
+
+The desktop app is a window onto the same local queue that `handup ls` shows.
+It talks to the daemon over the unix socket from its Rust process; the bearer
+token never reaches the web view.
+
+## Install (Linux)
+
+Build locally with `make app-build` (needs `cargo install tauri-cli --locked`,
+pnpm, and the webkit2gtk-4.1, libayatana-appindicator, and librsvg dev
+packages). Read aloud also needs Speech Dispatcher headers and libclang:
+on Arch, install `speech-dispatcher` and `clang`; on Debian/Ubuntu, install
+`libspeechd-dev libclang-dev`. The bundles land in `target/release/bundle/`:
+
+- AppImage: `chmod +x handup_*.AppImage && ./handup_*.AppImage`
+- Debian/Ubuntu: `sudo apt install ./handup_*_amd64.deb`
+
+Both bundles ship the `handup` CLI next to the app. If no daemon is running,
+the app starts `handup serve`. You can also start it from the "Daemon not
+running" screen.
+
+From a checkout, `make app-install` builds the CLI and app and installs them to
+`~/.local/bin`.
+
+Run `handup ui` to open the inbox, or `handup ui --next` to open the compact
+quick window on the oldest pending request. Only one instance runs at a time,
+so a second launch focuses the existing window. Closing the main window hides
+it to the tray, and the tray icon shows the pending count. If the app binary
+was replaced since the running instance started (an upgrade), re-opening it
+from the launcher, `handup ui`, or the tray menu starts the new version and
+exits the old one.
+
+## Run a command
+
+Run is offered only for a request with exactly one command preview and one
+approve option, with no question, nonempty form fields or free-text answer.
+
+For an eligible pending command request, **Run** executes the command shown
+on this computer. It uses the command preview's working directory, then the
+request's source cwd, or your home directory if neither is set. Shell commands
+use a supported `$SHELL` as a login shell, falling back to `/bin/sh`; argv
+commands run directly. Review the command and cwd before clicking: this is
+execution, not just permission for the agent.
+
+Output streams into the request while it runs. **Cancel** stops the run;
+commands still running after **10 minutes** are stopped automatically. Ordinary
+runs stop the process group. The final result includes redacted stdout/stderr
+tails (up to 64 KiB each), exit code, duration and any error, and appears in History.
+Output is shown as a terminal would leave it: colour and other escape codes are
+stripped, `\r` progress updates keep only their last state, and control characters
+are dropped. The request view and History show every stored line.
+
+`R` presses **Run** (or **Run as admin**) for the request on screen. When the run
+finishes, the request leaves the queue and the inbox moves to the next one; the
+footer notice says how it went and its **Output** button opens the full output.
+Settings → Decisions → **Show output after Run** opens that output by itself:
+**Never** (default), **On failure** (nonzero exit, error, or result not sent to
+the agent) or **Always**.
+
+Before starting, the desktop claims the request in the daemon. Its status stays
+`pending` with `run` metadata (`started_at`, `lease_until`, `elevated`); phone and
+web show **Running**. Other decision surfaces receive HTTP **409**,
+`running in the desktop app`, while the claim is active. Agent cancellation
+remains allowed and tells the desktop to stop the run. Request expiry and timeout
+decisions are paused while claimed. The claim has a **12-minute lease**: if the
+app crashes or cannot report, the claim lapses and ordinary decisions and expiry
+resume. This does not extend the command's 10-minute execution limit.
+
+The local-only API routes are `POST /v1/requests/{id}/run` with
+`{"content_hash":"…","elevated":false}` to claim, and
+`POST /v1/requests/{id}/run/release` to release a claim if nothing started.
+They are available on the Unix socket and authenticated loopback listener,
+not the remote/relay router; paired devices cannot claim or release runs.
+
+For a command starting with `sudo`, the button is **Run as admin** instead.
+Linux uses `pkexec` with polkit's graphical authentication prompt; install
+pkexec/polkit and ensure a polkit authentication agent is running in your desktop
+session. macOS uses `osascript` with the system administrator prompt (macOS is
+untested). handup does not store or pipe passwords. It removes only the leading
+`sudo`; sudo options such as `sudo -u root …` are unsupported. A later or nested
+`sudo` is not rewritten or given this admin path: copy complex commands and run
+them yourself.
+
+On Linux, pkexec starts a root supervisor that owns the command's process group.
+Cancel, timeout or desktop exit closes its stdin, telling it to kill the group;
+a root-side timer also stops it if the desktop loses control. On macOS,
+cancelling or timing out can stop the administrator prompt, but handup **cannot
+stop the command once it runs as root**; it may continue running.
+
+After a command starts, the desktop sends an **approve** decision with
+`run_result`, even for a nonzero exit, desktop cancellation or timeout.
+If nothing starts (including launch failure or administrator authentication
+refusal), it releases the claim and leaves the request pending. Agent
+cancellation leaves the request cancelled, so a later run result cannot replace
+that decision. If submission fails, the desktop reports that the result was
+not sent to the agent. An approved status does not mean the command succeeded:
+agents must read the result and **not run it again**; permission hooks block
+the original tool call with a run summary to prevent duplicate execution.
+If validation fails before starting, the request stays pending. Run decisions
+are sent immediately, not held for Undo; Undo cannot reverse command side effects.
+CLI `ask --wait`, `wait`, `status` and `show` return **exit 5** for a decision
+carrying `run_result`, regardless of the command's exit code. Human feedback is
+preserved in the decision and appended to the run summary.
+
+The manual path is unchanged: copy, run it yourself, then Approve. Ordinary
+Approve does not execute the command. **Phone, browser/web and relay clients
+never run commands**, and the daemon rejects `run_result` submitted by paired
+devices. Execution exists only in the local desktop app.
+
+## Keys
+
+| Key | Action |
+| --- | --- |
+| `j` / `k` | Next / previous request |
+| `a` | Approve |
+| `d` | Deny |
+| `u` | Undo the newest decision still waiting to be sent; press again for the one before |
+| `f` | Focus the feedback box |
+| `r` | Run / Run as admin (desktop app, eligible command requests) |
+| `o` / `Enter` | Open the file on screen in its default app (in a file bundle, the file picked in the list) |
+| `p` | Widen the preview (hide the list); `p` or `Esc` to go back |
+| `Shift+P` | Allow in project |
+| `t` | Toggle light/dark theme |
+| `h` | Switch between Inbox and History |
+| `i` | Back to the Inbox |
+| `m` | Devices (desktop app) |
+| `?` | Show all shortcuts |
+
+While the app stays visible, decisions wait 5 seconds before they reach the
+daemon. Hiding or leaving the app sends held decisions immediately, ending
+their undo window, and tries every queued decision, even for computers whose
+connection looked down. Decisions that still fail stay in the outbox.
+Press `u` (or click Undo) within that window and the request stays pending;
+each press takes back
+the newest decision still waiting. Decide several in a row and each one keeps
+its own countdown and **Undo**: the newest sits in the footer, older ones stack
+just above it (up to four, then "+N more"), so you can take back any of them
+without the footer moving. Change the wait per device under
+**Settings → Decisions → Undo window** (3s to 30s), or for every client with
+`handup config set decisions.undo_window 10s`.
+
+Approve, Submit and an agent's primary option sit on the right of the action
+row, with Deny and Decline to their left and extras such as **Edit & approve**,
+**Allow for session** and **Raw JSON** on the far side; Undo appears above the
+primary action. Left-handed? `handup config set decisions.primary_side left`
+mirrors every decision row for all clients, and **Settings → Decisions →
+Approve button side** (Default, Right, Left) overrides it on one device.
+
+`t` switches to an explicit light or dark theme. The **Settings** button in the
+header opens a dialog with collapsible **Appearance**, **Decisions**,
+**Read aloud**, and **Test** groups. **Appearance** sets the theme (System,
+Light, Dark), color palette, density, and layout. **Decisions** holds the undo
+window, approve button side, **Swipe cards** on narrow screens (on by default),
+and the desktop-only **Focus on new requests** switch and **Show output after Run**.
+**Palette** picks the colors for the whole app and for code in diffs and file
+previews: handup (default), Catppuccin, Gruvbox, Solarized, Rosé Pine, GitHub,
+Everforest, Tokyo Night, Nord, One, Kanagawa, Ayu, Flexoki, or Dracula. Each has
+a light and a dark variant (for example Catppuccin Latte and Mocha), and the
+theme picks which one you see. **Density** opens its own page with a live
+preview of each choice: **Compact** (default) shows expiry, agent, and location
+as small tabs on the preview, **Comfortable** shows them in a roomy header, and
+**Ultra-compact** also trims list rows and headers. The risk badge always sits
+in the request header. Density applies inside every layout. Theme, palette,
+density, layout, pane sizes, undo window and Approve button side are saved per device.
+
+**Settings → Appearance → Layout** opens its own page with a preview of each choice:
+
+- **Split** (default): the list sits beside the request; on phones, open a
+  request from the list.
+- **Stacked**: the list sits above the request, including on phones.
+- **Focus**: one request at a time, with **‹ ›**, **N of M**, and a **Queue**
+  button that opens the full list in a sheet. Desktop also shows **Next: title**.
+- **Rail**: an icon column with risk dots on desktop, or a horizontal chip strip
+  on phones, plus **‹ ›** and **Queue**.
+
+Drag the divider in Split or Stacked to resize with a mouse or touch, on
+desktop or mobile. Focus the divider and use arrow keys to adjust it;
+double-click, double-tap, or press Enter to reset. The Layout page also offers
+**Reset sizes** after resizing. Split width is 240–640px (default 380px);
+Stacked height is 15–75% (default 38%).
+
+**Settings → Decisions → Focus on new requests** (off by default) brings the handup window to
+the front when a request needs a decision: the quick window if it is open,
+otherwise the inbox, also when the inbox was closed to the tray. It watches the
+daemon's event stream itself, so it works while desktop notifications are
+silenced. Requests that rules or YOLO mode decide on arrival do not raise it.
+
+While it is on, **Ignore input after focus** (Off, 0.5s, 1s default, 2s)
+protects against typing meant for another app, as browsers do for permission
+prompts: for that long after the window gains focus, keys and clicks are
+ignored, and a key already held down stays ignored until it is released, so a
+stray `a`, `d`, or Enter cannot approve or deny. A short **Input ignored**
+notice appears when it drops input.
+
+The **YOLO** switch in the header turns on [YOLO mode](docs/public/rules.md#yolo-mode):
+**YOLO** auto-approves new low and medium risk requests, **Hard YOLO** every
+risk, for 15m, 1h, 4h, or until turned off. While it is on the header shows a
+warning pill (**HARD YOLO** in the destructive color) with the time left.
+
+If the daemon stops after the inbox has loaded, the inbox stays up and the
+header shows **Reconnecting…** then **Offline since hh:mm** (click to retry, or
+**Start daemon**). Decisions made meanwhile wait in the outbox with **Undo** and
+are sent in order once the daemon is back.
+
+**Settings → Test** offers **Send test request** and **Send test question**.
+The desktop app sends to its local daemon; the web UI sends to the daemon it
+is connected to. The daemon builds a harmless low-risk sample titled
+**Test request** or **Test question**, with agent `handup`, session
+`handup-test`, and a 15-minute timeout. Approving or denying it performs no
+action. Use it to try previews, questions, notifications, and the decision flow.
+Remote clients need `decide` scope; view-only devices cannot send tests.
+
+## Read aloud
+
+Click the speaker button (**Read aloud**) in a pending request's header;
+click **Stop reading** to stop. It reads the agent, title, a shortened summary,
+risk, questions and, by default, numbered options—not previews, diffs or tool
+input. Moving to another request, deciding it, or leaving the request view
+stops playback; History has no read-aloud button.
+
+**Settings → Read aloud** saves settings on this device: voice, **Speed**,
+**Pitch**, **Read options**, and **Test voice**. The voice picker has a search
+field that filters by voice name, language name or code, and **Natural** or
+**Online** labels. **Read → This request** is the default;
+**Whole queue** continues through the visible pending requests after the open
+one, selecting each in turn. **Read new requests** is off by default; when
+enabled, it can read a newly arrived request while handup is open and idle,
+but does not read the requests already waiting at first load.
+
+The desktop app uses native TTS through `tauri-plugin-tts`, not browser speech
+synthesis. On Linux it needs `speech-dispatcher` and an installed voice such as
+`espeak-ng`; install them and restart the app if no voices appear. Debian
+bundles declare the `libspeechd2` runtime library dependency, but you still need
+the Speech Dispatcher service and a voice. Other desktop platforms use their
+OS speech backend (macOS remains untested). Voices come from the device;
+online voices send the spoken text to the voice provider.
+
+## History
+
+The **Inbox | History** switch at the top of the list (or `h`) shows resolved
+requests, newest first and grouped by day. Each row shows the outcome
+(approved, denied, expired, cancelled, or auto for rule and YOLO decisions), the agent,
+and when it was resolved. Search matches the title, summary, and folder; the
+chips filter by outcome, **Files** (file, bundle, image, PDF, audio, or video
+previews), and request kind (Command, Edit, Review, Question, or Custom).
+Filters combine; tap the selected Files/kind chip again to clear it.
+Changing filters discards any older page still loading for the previous filters.
+`j`/`k` move and `/` focuses search. Inbox remains the default view.
+
+The detail pane is the request as it was asked, read-only, with a summary of
+who decided it (this computer, a paired device by name, a rule, or the timeout),
+the chosen option, feedback, and answers, plus any desktop Run's exit status and
+full stored output. **Audit trail** expands every event.
+Attachments retain their **Open** and **Download** actions in read-only history.
+
+The API is `GET /v1/history` with optional `outcome`, `agent`, `type` (one
+preview type), `has=attachments`, `kind`, and `q` (title, summary, folder).
+All filters combine. `limit` defaults to 50 (maximum 500); pass `next_cursor`
+as `cursor` with the same filters to fetch older results without duplicates.
+Paired view/decide devices can also read `GET /v1/requests/{id}/audit`;
+submission tokens cannot access history or request audit.
+History keeps the last `history.keep_days` days and `history.max_requests`
+decisions (90 and 2000 by default); older ones are deleted.
+
+## Pair a phone
+
+The phone button in the header opens **Pair a phone**, the desktop version of
+`handup pair`. It shows a QR code for the handup app or the phone's camera,
+the link with a Copy button, and the TLS certificate fingerprint when the
+remote listener uses TLS. Pick **Can decide** or **View only**. When
+`remote.relay.url` is set, **Through the relay** pairs through the
+[end-to-end encrypted relay](docs/public/relay.md) instead; it starts on when
+`remote.mode` is `off`.
+
+Each code works once and expires after 2 minutes; the dialog counts down and
+**New code** issues a fresh one. When a phone uses the code, the dialog shows
+"Paired: <name>". If remote access is off, the dialog explains how to turn it
+on (`handup config set remote.mode tailscale`, then restart the daemon) and
+links to [Remote access](docs/public/remote.md). The button exists only in the desktop
+app: pairing codes are local-only, so the web UI and the mobile app never
+offer it.
+
+## Devices
+
+The devices button in the header (or `m`) opens **Devices**: the phones and
+browsers paired with this computer, newest first, with when each was paired
+and last seen. Integration credentials are not listed. Per device:
+
+- **Can decide** / **View only** changes its access. It applies at once, also
+  to an open app or browser tab.
+- **Enabled** off blocks the device (403) without unpairing it; turn it back on
+  to restore access.
+- **Push** off stops push notifications and relay wake-ups to it; it keeps
+  access to the queue.
+- **Revoke** (after a confirmation) unpairs it; it has to pair again.
+
+Errors show under the device; the list refreshes after each change. With no
+devices, **Pair a phone** opens the pairing view in the same dialog. Like
+pairing, device management is local-only (`PATCH`/`DELETE /v1/devices/{id}`),
+so only the desktop app offers it.
+
+## Quick window on Hyprland
+
+```ini
+bind = SUPER, A, exec, handup ui --next
+windowrule = float, title:^(handup: next request)$
+```
+
+## Previews
+
+HTML previews load from a separate `handup-preview:` origin inside a sandboxed
+iframe with no `allow-same-origin`. The origin's CSP blocks network access, and
+Tauri IPC is not exposed to it.
+
+On Linux, audio and video play through GStreamer. If a clip says it could not
+be decoded, install `gst-plugins-good`, `gst-plugins-bad`, and `gst-libav`
+(package names vary by distro). The Linux and Android apps load the whole clip
+before it plays, so they download it only when you tap **Play**; the request
+itself opens at once.
+
+## macOS (untested)
+
+`make bundle-macos` on macOS produces a universal `.dmg` signed ad hoc
+(`signingIdentity: "-"`), with no Apple Developer ID. This has not been tested
+on a Mac. Gatekeeper will refuse the first launch. After copying the app to
+`/Applications`, run:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/handup.app
+```
+
+Or right-click the app and choose Open.
+
+---
+
+Source: [docs/public/index.md](docs/public/index.md)
+
+# Approval queue for AI agents
+
+handup is pre-alpha. Agents submit a request with previews (a command, diff,
+file, image, JSON and more), wait, and receive the human decision with the
+content hash they must bind execution to. A deny is a normal answer with
+feedback, never a transport error and never permission to retry unchanged.
+
+Command requests can also be run explicitly from the desktop app with **Run**
+or **Run as admin**. The agent receives `run_result` and must not run the command
+again. Phone and web clients only review and decide; see [Desktop](docs/public/desktop.md).
+
+## Install
+
+Build from source. You need stable Rust and Make; `mise install` selects the
+repository's tool versions.
+
+```sh
+git clone https://gitlab.com/ariel-frischer/handup.git
+cd handup
+make install
+make install-global  # ~/.local/bin/handup; add ~/.local/bin to PATH
+handup service install  # run the daemon as a user service
+handup doctor --json
+```
+
+## Set up an agent in 60 seconds
+
+```sh
+handup integrate mcp --client claude-code  # also codex, cursor, omp
+handup prompt --agent claude              # paste into your project instructions
+handup ask --title "Review action" --command "echo hello" --wait --json
+```
+
+Decide from another terminal with `handup approve ID` or
+`handup deny ID -m "feedback"`, from the desktop inbox (`handup ui`), or from a
+paired phone. Every flag is described by `handup help COMMAND`.
+
+## Where to go next
+
+- [Agents](docs/public/agents/mcp.md): Claude Code, Codex, cursor, omp, MCP and shell/CI
+  setup, with the approval contract agents must follow.
+- [Any agent or custom harness](docs/public/agents/custom.md): steps to add handup to your
+  own agent loop, SDK app or framework over MCP, CLI or HTTP.
+- [Email drafts](docs/public/agents/email.md): ask before sending, let the human edit the
+  draft, then send it with your own mail tool.
+- [Agent skill](docs/public/agents/skill.md): private GitLab npx installation with complete
+  offline docs; supported agents and the future public URL cutover.
+- [Integrations](docs/public/integrations/index.md): let other tools react to requests.
+- [Remote access](docs/public/remote.md), the [relay](docs/public/relay.md), the
+  [mobile app](docs/public/mobile.md) and the [desktop app](docs/public/desktop.md): approve away from
+  the terminal.
+- [Rules](docs/public/rules.md): scoped allow rules, presence routing and the terminal
+  inbox.
+- Machine contracts: the daemon [OpenAPI](docs/public/openapi.json) and the
+  [request](docs/public/schema/request.schema.json) and
+  [decision](docs/public/schema/decision.schema.json) JSON Schemas.
+
+Agents can read these docs as plain Markdown: [/llms.txt](index.md) indexes
+every page and [/llms-full.txt](llms-full.txt) is the whole set in one file.
+
+---
+
+Source: [docs/public/integrations/callbacks.md](docs/public/integrations/callbacks.md)
+
+# Per-request callbacks
+
+Use a callback when the submitting system cannot keep a connection open. Unlike
+[event hooks](docs/public/integrations/hooks.md), the destination belongs to one request, and receives only
+its `request.decided`, `request.expired`, or `request.cancelled` transition.
+
+## Enable permitted hosts
+
+Callbacks are disabled by default. Configure the daemon and restart it:
+
+```yaml
+callbacks:
+  allowlist: [automation.example.com, '*.workflows.example.com', '127.0.0.1']
+  secret_env: HANDUP_CALLBACK_SECRET
+```
+
+Exact host matching is case-insensitive; `*.workflows.example.com` permits
+subdomains, not the bare `workflows.example.com` or lookalike suffixes. Entries
+are hosts only, without schemes, ports, paths, or credentials. Ports and paths
+on an allowed host are not restricted. Keep the list narrow and only permit
+hosts you trust: this authorizes submitters to cause outbound requests to them,
+including any private addresses those hosts resolve to. It is not an IP-level
+network firewall. An empty allowlist rejects all callbacks with HTTP 400.
+
+URLs require HTTPS, except `http://127.0.0.1` and `http://localhost` for local
+tools. Embedded credentials and fragments are rejected. The daemon checks the
+allowlist when creating the request and again before delivery; redirects are
+not followed. Callback URLs are persisted with the request and included in its
+content hash, so treat path/query tokens as sensitive request metadata.
+
+`secret_env` is optional. Set the named variable in the daemon's environment,
+not in YAML. If configured but unset or empty, delivery fails rather than sending
+unsigned. Without it the callback is unsigned. Config CLI keys are
+`callbacks.allowlist` (YAML list) and `callbacks.secret_env` (variable name).
+
+## Submit
+
+```sh
+handup ask --title 'Deploy production' \
+  --callback-url https://automation.example.com/handup/result --json
+```
+
+The daemon API accepts the optional `callback_url` string in `POST /v1/requests`.
+`handup ask --request -` also accepts it in full request JSON; an explicit
+`--callback-url` overrides that JSON field. MCP tool arguments are unchanged.
+
+## Receive and verify
+
+The POST uses the same [versioned event envelope and signing contract](docs/public/integrations/hooks.md)
+as hooks: `v: 1`, `type`, event `id`, `time`, and `data.request` metadata plus
+`data.decision` when present. Summary and previews are excluded; decision
+feedback is included and credential-like text is redacted, as for hooks.
+
+Desktop Run also includes `data.decision.run_result`: redacted stdout/stderr
+tails and execution metadata are decision data, so excluding previews does
+not exclude this output. Treat receivers as trusted. An approve outcome with
+this field means the command was already attempted, even on nonzero exit or
+error: consume the [result](docs/public/agents/mcp.md#desktop-run-results) and **do not
+execute it again**.
+
+```text
+x-handup-timestamp: <Unix seconds>
+x-handup-signature: sha256=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>
+```
+
+Verify raw bytes with constant-time comparison, reject stale timestamps, and
+deduplicate by event `id`. Respond with a 2xx status after safely accepting the
+notification. There is one delivery scheduled per terminal transition, but
+network errors, 10-second timeouts, and HTTP 5xx can cause three retries with
+100/200/400ms backoff. Retries retain the body/event id; HTTP 4xx and redirects
+are not retried. An expired event may contain the configured timeout decision:
+inspect the event type and decision rather than treating every terminal status
+as approval.
+
+Delivery is asynchronous and best-effort, not a durable outbox or exactly-once
+transport. Daemon shutdown can lose pending delivery; it is not replayed on
+restart. Failures never undo or delay the human decision. Final outcomes append
+`callback.delivered` or `callback.failed` to request audit; failures are logged
+without the destination URL or provider response. Use polling to reconcile
+missing notifications when reliability is essential.
+
+## GitHub deployment protection outline
+
+A GitHub App integration can receive a deployment protection webhook, verify
+GitHub's signature, persist the deployment/environment correlation, and create a
+handup request with the integration's own allowlisted HTTPS callback URL. On a
+verified `request.decided` callback, the integration looks up that correlation
+and uses its GitHub App installation credentials to submit the corresponding
+approved/rejected deployment protection review. Expiration/cancellation should
+fail closed, never approve. Deduplicate event ids and GitHub review submissions.
+
+Do not use GitHub's review API as `callback_url`: handup sends its own event
+schema and does not attach GitHub App authentication. The adapter must translate
+and authenticate the review. Keep installation credentials out of request data.
+
+## n8n Wait node
+
+Use a Wait node configured to resume on a webhook call. Before waiting, submit a
+handup request whose `callback_url` is that execution's resume URL (n8n exposes
+`$execution.resumeUrl`). Allowlist the n8n production host, not a broad wildcard
+covering unrelated tenants. Configure the Wait node to accept POST.
+
+After resume, inspect `body.type` and `body.data.decision.outcome`, using deny,
+expired, and cancelled branches to stop the workflow. Verify HMAC before running
+privileged actions; if the Wait node cannot verify raw bytes itself, place a
+verifying proxy in front of its resume endpoint. Account for an immediate
+rule-based decision racing the Wait node: ensure the resume endpoint is ready
+before submitting or use a proxy that durably holds verified callbacks until
+n8n is waiting. Use polling/reconciliation for callbacks lost during restarts.
+
+---
+
+Source: [docs/public/integrations/hooks.md](docs/public/integrations/hooks.md)
+
+# Event hooks
+
+Use top-level `hooks:` in `config.yaml` to send request lifecycle events to any
+HTTP receiver or local program. Restart `handup serve` after changing config.
+Hooks are independent of desktop/ntfy/FCM notifications, quiet hours, and
+`notifications.enabled`. Delivery never changes an approval decision.
+
+```yaml
+hooks:
+  - name: automation
+    type: webhook
+    url: http://127.0.0.1:8080/handup
+    events: [request.created, request.decided]
+    format: json
+    secret_env: HANDUP_AUTOMATION_SECRET
+    include_content: false
+  - name: deploy
+    type: exec
+    command: [/home/me/bin/on-decision.py, --production]
+    events: [request.decided]
+    timeout: 30s
+```
+
+Names must be unique and match `[a-z0-9-]+`. Omit `events` for all events;
+`events: []` disables lifecycle delivery to that hook. Supported types:
+`request.created`, `request.decided`, `request.expired`, `request.cancelled`,
+`request.reminder`, and `request.expiring`. Reminder/expiring timing comes from
+`notifications.remind_every` / `notifications.on_expiring`, even when notification
+backends are disabled. Requests without deadlines never emit expiring events.
+
+## Envelope and privacy
+
+JSON bodies, exec stdin, and template context share the
+[generated event schema](docs/public/schema/event.schema.json):
+
+```json
+{"v":1,"type":"request.created","id":"01J00000000000000000000000","time":"2026-09-30T12:00:00Z","data":{"request":{"id":"01J00000000000000000000001","title":"Deploy staging","risk":"low","agent":"codex","source":{"agent":"codex"},"status":"pending","url":"handup://r/01J00000000000000000000001","deep_link":"handup://r/01J00000000000000000000001"}}}
+```
+
+The event ULID is distinct from the request id. `data.decision` is present when
+there is a decision, including timeout decisions. Request content is absent by
+default. Opting into `include_content: true` adds `data.request.content.summary`
+and `.previews` (snapshot descriptors; blob data is not fetched). Known credential
+patterns are redacted in metadata and content. Source metadata and decision
+feedback can still contain sensitive information; choose trusted receivers.
+`url` uses the configured remote web origin when available, otherwise the native
+`deep_link`. Custom templates render with strict undefined-variable handling.
+
+Desktop Run decisions include `data.decision.run_result` even when
+`include_content` is false: output tails are part of the decision, not preview
+content. They are redacted, but may still contain sensitive command output;
+choose receivers accordingly. The outcome is approve even if the command
+failed. Consumers must inspect the [result](docs/public/agents/mcp.md#desktop-run-results)
+and **not execute the command again** when it is present. Lifecycle event
+hooks are distinct from native permission hooks, which block the original
+tool call with the run summary to prevent duplicate execution.
+
+## Slack, Discord, and Teams
+
+Create an incoming webhook in the provider and keep its URL in private config:
+
+```yaml
+hooks:
+  - name: slack
+    type: webhook
+    url: https://hooks.slack.com/services/YOUR/WEBHOOK/PATH
+    format: slack
+    events: [request.created, request.decided]
+  - name: discord
+    type: webhook
+    url: https://discord.com/api/webhooks/YOUR/WEBHOOK
+    format: discord
+  - name: teams
+    type: webhook
+    url: https://YOUR-TEAMS-WEBHOOK
+    format: teams
+```
+
+Presets are minijinja templates producing Slack `text`, Discord `content`, and
+Teams MessageCard `summary`/`text`. They JSON-escape title and links. Provider
+length limits and Teams endpoint compatibility still apply; use a custom template
+for a Teams Workflow endpoint that expects a different JSON shape. No signing
+secret is required when the receiver does not implement handup HMAC verification.
+
+```yaml
+hooks:
+  - name: custom
+    type: webhook
+    url: https://example.com/events
+    format: template
+    template: '{"message": {{ (type ~ ": " ~ data.request.title)|tojson }}}'
+```
+
+Invalid template syntax is rejected at config load. A runtime missing variable
+fails that delivery, not the request decision. Use `tojson` for JSON strings.
+
+## n8n webhook node
+
+Create a Webhook node accepting POST, activate the workflow, and copy its
+production URL (test URLs only listen during n8n's test mode):
+
+```yaml
+hooks:
+  - name: n8n
+    type: webhook
+    url: https://n8n.example.com/webhook/handup
+    events: [request.decided]
+```
+
+In the workflow, branch on `{{$json.body.type}}` and inspect
+`{{$json.body.data.decision.outcome}}`. Deduplicate by `body.id` if an action is
+not safe to repeat. A hook delivery is a notification, not permission to rerun a
+denied operation. Add HMAC verification before processing if you use `secret_env`.
+For command automation, also check `body.data.decision.run_result`: consume
+an existing run result instead of running the approved command a second time.
+
+## Home Assistant webhook automation
+
+Create a local-only automation with an unguessable webhook id:
+
+```yaml
+alias: handup decision
+triggers:
+  - trigger: webhook
+    webhook_id: YOUR_RANDOM_WEBHOOK_ID
+    allowed_methods: [POST]
+    local_only: true
+conditions:
+  - condition: template
+    value_template: "{{ trigger.json.type == 'request.decided' }}"
+actions:
+  - action: persistent_notification.create
+    data:
+      title: handup
+      message: "{{ trigger.json.data.request.title }}: {{ trigger.json.data.request.status }}"
+```
+
+Point handup at `http://HOME_ASSISTANT_LAN_IP:8123/api/webhook/YOUR_RANDOM_WEBHOOK_ID`
+with `format: json`. Do not set a signing secret on non-loopback plaintext HTTP;
+use HTTPS for signed delivery. Home Assistant's webhook trigger does not itself
+verify handup signatures; use a verifying proxy if required.
+
+## Exec script
+
+Make this Python script executable and configure its absolute path in `command`:
+
+```python
+#!/usr/bin/env python3
+import json
+import os
+import sys
+
+event = json.load(sys.stdin)
+assert event["type"] == os.environ["HANDUP_EVENT"]
+assert event["data"]["request"]["id"] == os.environ["HANDUP_REQUEST_ID"]
+if event["type"] == "request.decided":
+    decision = event["data"].get("decision", {})
+    print(event["data"]["request"]["id"], decision.get("outcome"))
+```
+
+Commands are argv, never implicitly interpreted by a shell. They inherit the
+daemon environment plus `HANDUP_EVENT` and `HANDUP_REQUEST_ID`. Stdin is JSON;
+stdout/stderr are discarded. Nonzero exits fail delivery. The configured timeout
+covers both stdin writing and process completion; the direct child is killed and
+reaped on timeout. Hooks run with the daemon user's privileges. Avoid scripts
+that spawn detached descendants: timeout does not kill an entire process tree.
+
+## Signing, retries, and testing
+
+Optional `secret_env` names an environment variable available to the daemon and
+CLI test command. Unset/empty secrets skip signed delivery (never silently send
+unsigned). Signed destinations must use HTTPS or loopback HTTP.
+
+```text
+x-handup-timestamp: <Unix seconds>
+x-handup-signature: sha256=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>
+```
+
+Verify raw bytes with a constant-time comparison, reject stale timestamps (for
+example older than five minutes), and deduplicate event ids. Each retry uses the
+same body/event id with a fresh signature timestamp. There are up to three
+retries after the initial attempt, with 100/200/400ms backoff, for network errors,
+10-second network timeouts, and HTTP 5xx only. HTTP 4xx and redirects do not retry.
+Exec is not retried. Each hook has its own asynchronous task; the bounded bus can
+lose events if a receiver remains slow. This is best-effort delivery, not a durable
+queue. Failures are logged through tracing to daemon stderr.
+
+```sh
+handup hooks list
+handup hooks test automation
+handup hooks test automation --event request.decided
+```
+
+`list` validates the config and prints names/types/event filters, never URLs or
+secrets. `test` sends a synthetic event directly even if its type is excluded by
+the lifecycle filter; it does not create or decide a real request. A failed test
+returns the normal error exit code.
+
+## Migration
+
+`notifications.webhook` and `notifications.backends: [webhook]` are removed.
+Loading either fails with a hint to use `hooks:`. Move URL and `secret_env` into a
+named `type: webhook` hook, select lifecycle `events`, and update the receiver
+from the old `{event,id,title,...}` body to the versioned envelope above. Keep
+`ntfy`, `desktop`, and `fcm` in `notifications.backends` unchanged.
+
+---
+
+Source: [docs/public/integrations/index.md](docs/public/integrations/index.md)
+
+
+# Integrations
+
+Integrations connect handup to tools other than the agent that asks for
+approval, so they can react as requests are created and decided. Each page in
+this section covers one of them.
+
+Setting up an agent to ask for approval is covered under
+[Agents](docs/public/agents/mcp.md), or for any other harness in
+[Any agent or custom harness](docs/public/agents/custom.md). Phone notifications through
+ntfy are covered in [Remote access](docs/public/remote.md#notification-backends);
+lifecycle webhooks and exec commands in [event hooks](docs/public/integrations/hooks.md).
+
+---
+
+Source: [docs/public/integrations/tokens.md](docs/public/integrations/tokens.md)
+
+# Integration submission tokens
+
+A named `submit` token lets CI, n8n, Home Assistant, or a remote script submit a request and wait for a human. It cannot approve, deny, list the queue, receive events, or read another token's requests.
+
+## Create and manage locally
+
+```sh
+handup tokens create github-ci --expires 90d
+handup tokens list
+handup tokens revoke github-ci
+```
+
+Names match `[a-z0-9-]{1,40}` and are unique. The secret is printed **once**; store it in your automation's secret manager. `--json` returns the secret and metadata on create, and only metadata on list. Without `--expires` a token does not expire. Expired names remain reserved until revoked. Revocation and expiry reject subsequent calls with 401. Recreating a revoked name does not grant access to its old requests.
+
+Only SHA-256 token hashes are stored. List shows name, creation time, last use and expiry, never the secret or hash. Token management is local-only (Unix socket or the privileged loopback bearer).
+
+## HTTP contract
+
+Use the existing [remote listener](docs/public/remote.md) or loopback HTTP. Prefer Tailscale HTTPS; direct mode still requires TLS and explicit risk acceptance. Submit credentials are bearer tokens, not browser sessions. Host/Origin protections still apply.
+
+| Allowed method/path | Access |
+| --- | --- |
+| `POST /v1/requests` | Create (60 attempts per token per rolling minute; excess returns 429) |
+| `POST /v1/blobs` | Upload (remote body limit: 1 MiB) |
+| `GET /v1/requests/{id}` | Own requests only |
+| `GET /v1/requests/{id}/wait` | Own requests only; long poll, default 25s, maximum 60s |
+| `POST /v1/requests/{id}/cancel` | Own pending requests only |
+
+Other API routes return 403; other tokens' and nonexistent request IDs return 404. The server overwrites `source.integration` with the verified token name, while keeping caller-supplied agent/session/host fields self-declared. Local requests cannot forge a verified integration. UI source labels show `via <name> · verified`; this verifies the submitting credential, not the truth or safety of its content.
+
+`POST /v1/requests/test` is not a submit-token route: it returns 403, even
+though this token may create arbitrary requests through `POST /v1/requests`.
+Synthetic tests from remote Settings require a paired device with `decide` scope.
+
+## curl
+
+Set `HANDUP_URL` to your listener URL and `HANDUP_TOKEN` from your secret manager. Do not enable shell tracing.
+
+```sh
+request=$(curl --fail-with-body -sS "$HANDUP_URL/v1/requests" \
+  -H "Authorization: Bearer $HANDUP_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"title":"Deploy production?","source":{"agent":"release-runner"},"timeout":"10m"}')
+id=$(printf '%s' "$request" | jq -r .id)
+while :; do
+  result=$(curl --fail-with-body -sS "$HANDUP_URL/v1/requests/$id/wait?timeout=60s" \
+    -H "Authorization: Bearer $HANDUP_TOKEN")
+  [ "$(printf '%s' "$result" | jq -r .status)" != pending ] && break
+done
+# Only explicit approval permits the next action; denial/cancellation/expiry do not.
+printf '%s' "$result" | jq -e '.status == "approved"' >/dev/null
+```
+
+A wait response can still be pending: repeat it rather than assuming permission. Human denial feedback is in `decision.feedback`.
+
+For command requests, also inspect `decision.run_result` in the returned
+Request. Desktop Run records approval even when execution fails; if a result
+is present, consume its exit code/error and output instead of executing again.
+Submit credentials cannot run commands or submit decisions/results themselves.
+See [the result contract](docs/public/agents/mcp.md#desktop-run-results).
+
+## GitHub Actions
+
+Create a token locally, add it as repository secret `HANDUP_SUBMIT_TOKEN`, and set repository variable `HANDUP_URL` to a reachable HTTPS listener. The runner needs network access (for example a self-hosted runner on your tailnet).
+
+```yaml
+- name: Human deploy approval
+  env:
+    HANDUP_TOKEN: ${{ secrets.HANDUP_SUBMIT_TOKEN }}
+    HANDUP_URL: ${{ vars.HANDUP_URL }}
+  shell: bash
+  run: |
+    set -euo pipefail
+    id=$(curl --fail-with-body -sS "$HANDUP_URL/v1/requests" \
+      -H "Authorization: Bearer $HANDUP_TOKEN" -H 'Content-Type: application/json' \
+      -d '{"title":"Approve production deployment?","timeout":"10m","source":{"agent":"github-actions"}}' | jq -r .id)
+    while :; do
+      result=$(curl --fail-with-body -sS "$HANDUP_URL/v1/requests/$id/wait?timeout=60s" \
+        -H "Authorization: Bearer $HANDUP_TOKEN")
+      status=$(jq -r .status <<< "$result")
+      [ "$status" != pending ] && break
+    done
+    test "$status" = approved
+- name: Deploy
+  run: ./deploy.sh
+```
+
+## n8n
+
+1. Create a named `n8n` token and save it in an n8n Header Auth credential (`Authorization: Bearer <token>`), not in workflow JSON.
+2. HTTP Request node: `POST <listener>/v1/requests`, JSON body `{"title":"Run maintenance?","timeout":"10m","source":{"agent":"n8n"}}`.
+3. Retain the response `id`; HTTP Request node: `GET <listener>/v1/requests/<id>/wait?timeout=60s` using the same credential. Set the node's request timeout above 60 seconds.
+4. If status is `pending`, loop back to wait. Only an `approved` status takes the action branch; route all other terminal statuses to a stop/feedback branch. Surface `decision.feedback` on denial.
+
+Rotate by revoking the old name and creating a replacement; save any pending request decisions first because the replacement cannot read the old credential's requests.
+
+---
+
+Source: [docs/public/mobile.md](docs/public/mobile.md)
+
+# Mobile app
+
+The handup app in `apps/handup-app` also builds for Android. On a phone it has
+no daemon of its own. It is a client of the handup daemon on your computer and
+reaches it through the daemon's [remote listener](docs/public/remote.md), so turn on remote
+access first (`remote.mode: tailscale` is the recommended mode).
+
+Android is the supported target. iOS is configured but has never been built or
+tested (see [iOS](docs/public/mobile.md#ios)). The app is not in any store: you build a debug APK
+and sideload it.
+
+Phone clients never execute command requests and have no **Run** or **Run as
+admin** button. Approval grants permission to the agent; it does not start a
+desktop run. Paired devices cannot submit `run_result`. A command run locally
+in the desktop app can still be reviewed in History with its returned result.
+During a desktop run, the phone shows **Running** and decisions are blocked
+with 409 `running in the desktop app`. Agent cancellation can still stop the
+run; expiry is paused while its 12-minute claim lease is active.
+
+## Build and install (Android)
+
+You need the Android SDK and NDK, JDK 17, `cargo tauri` (tauri-cli 2), and the
+rustup targets `aarch64-linux-android` and `x86_64-linux-android`.
+
+```bash
+export ANDROID_HOME=~/Android/Sdk                  # default when unset
+export NDK_HOME=~/Android/Sdk/ndk/27.1.12297006    # newest NDK when unset
+export JAVA_HOME=/path/to/jdk-17
+make app-android-build                             # ANDROID_TARGETS="aarch64 x86_64" by default
+adb install -r apps/handup-app/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
+```
+
+To sideload without adb, copy the APK to the phone and open it. Android asks
+you to allow installs from that source. The debug APK is large (about 390 MB
+with both ABIs and debug symbols). Use `ANDROID_TARGETS=aarch64` for phones
+only.
+
+## Pairing
+
+1. On the computer, run `handup pair` (add `--scope view` for a read-only device),
+   or open **Pair a phone** in the desktop app.
+2. In the app, tap **Scan QR code** and point the camera at the QR code. Or
+   paste the printed link (`http://100.x.y.z:7466/pair#code=…`) into
+   **Pairing link** and tap **Pair with link**. Away from your tailnet, use
+   `handup pair --relay` instead: the app then talks to the daemon through
+   your [end-to-end encrypted relay](docs/public/relay.md) (`…/pair#ch=…`).
+3. The code works once and expires after two minutes.
+
+The app can pair with several computers (say a laptop, a desktop and a build
+server). Their pending requests share one inbox; once two or more are paired,
+each row and request shows a chip with its computer's name. Approve, deny,
+previews, attachments, history and audit always go to the request's own
+computer, and each computer stays the only authority for its requests (they
+never sync with each other). Pairing the same computer again replaces just
+that pairing.
+
+**Settings** (the gear icon) lists the paired computers with the device name
+and scope and the pinned certificate. Rename a computer there (the name
+defaults to its hostname), tap **Pair another computer** to add one, or
+**Unpair** one. Unpairing only forgets that computer's token on the phone. To
+cut the device off, also run `handup devices revoke <id>` on the computer.
+When every paired computer has revoked the device, the app shows "This device
+was revoked" and offers pairing again; a single revoked computer shows as
+offline in the header while the others keep working.
+
+If a computer is asleep or off the tailnet, its name shows as offline in the
+header (with one computer: "Can't reach handup") and the app keeps retrying;
+the other computers' requests stay usable. **History** shows one computer at a
+time, picked above the search box.
+
+## Approval feedback
+
+For ordinary Approve/Deny requests, **Deny** is on the left and **Approve** is
+on the right in the bottom action row, above the phone's safe area. Questions
+follow the same rule (**Decline** left, **Submit** right), as do custom
+choices: the agent's primary option takes the right edge and deny options the
+left. Extras such as **Raw JSON** or **Edit & approve** sit in a row above;
+the allow scopes (**Allow for session**, **Allow in project**, **Always allow**)
+fold behind an **Allow…** toggle there so the footer stays short.
+To mirror every decision row (primary on the left, Undo above it), set
+`decisions.primary_side: left` in the laptop's config, or choose **Settings →
+Decisions → Approve button side → Left** for this phone only. The 48px
+feedback slot is always reserved above the controls: showing Undo, replacing
+the feedback, or clearing it never moves the decision buttons. Undo has a 44px
+touch target and is separated from the decision row.
+
+Swipe the approval card—including its title and preview—right to approve or
+left to deny, like dealing a card. The card follows your finger, tilts, and
+shows an **Approve** or **Deny** stamp. A short drag (about a fifth of the
+card) or a quick flick sends it off; let go earlier and it springs back. There
+is no separate swipe strip. Cancelled, edge-started, and multi-finger gestures
+do nothing. Turn **Swipe cards** off under **Settings → Decisions** to use only the buttons.
+Swipe right always approves, also when the buttons are mirrored to the left.
+Vertical scrolling and pinch zoom remain native. A drag locks to an axis after
+a few pixels: mostly-vertical drags scroll, mostly-horizontal drags move the
+card from anywhere on it, including file lists, diffs and code previews. A
+preview that is already scrolled sideways (a long code or diff line) scrolls
+back to its edge first; the next drag moves the card. Taps on buttons, file
+rows and checkboxes still work. Swipes starting on input fields, sliders,
+media controls or an existing text selection do not decide. Interactive HTML
+frames keep their own input. Buttons and tabs have 44px touch targets on
+narrow screens.
+The buttons remain available; swipes are not offered for custom choices,
+questions, multiple selected requests, or view-only devices. Both methods use
+the same validation, biometric gate, and held-send/Undo behavior.
+
+After the last decision, **All clear** replaces the card, but Undo remains in
+the same bottom slot above the former Approve button—not in the center of the
+screen. The last action row's space remains reserved during the Undo window.
+Long titles truncate so the countdown and Undo stay visible. Swipe through
+several requests quickly and every decision still waiting keeps its own
+countdown and 44px **Undo**: the newest stays in the footer slot, older ones
+stack above it over the card (up to four, then "+N more"), so you can take
+back any one without the buttons moving. Desktop keeps its compact sizing and
+shows the `U` shortcut.
+
+While the app stays visible, decisions wait for the undo window (5 seconds by
+default). Switching apps or otherwise hiding handup ends that window and hands
+held decisions to delivery immediately. On Android, a native outbox keeps
+retrying offline decisions in the background; see [Offline](docs/public/mobile.md#offline) for limits.
+
+## History
+
+The **History** tab above the request list shows resolved requests grouped by
+day, with search and outcome chips. Tap one for the read-only detail with the
+decision summary and audit trail; **History** (or the back gesture) returns to
+the list. It uses the same API as the desktop app, so a view-only device sees
+it too.
+
+## Security model
+
+- **The token stays out of the webview.** The React UI calls Rust commands.
+  Rust attaches `Authorization: Bearer <device token>` and talks to the daemon
+  over its own HTTP/WebSocket client. No command returns the token.
+- **Secure storage.** On Android the pairing (base URL, fingerprint, token) and
+  settings are sealed with AES-256-GCM under a non-exportable Android Keystore
+  key (`SecureStorePlugin`, alias `handup-secure-store`). Only the ciphertext
+  is written to the app-private `shared_prefs/handup.secure.xml`. App backup is
+  disabled (`allowBackup="false"`). On iOS the Keychain is used through the
+  `keyring` crate (untested).
+- **TLS pinning.** When the pairing link carries a certificate fingerprint
+  (`fp=`, e.g. `direct` mode with its self-signed certificate), the app accepts
+  only a server certificate whose SHA-256 matches it. Without a fingerprint,
+  HTTPS URLs are checked against the public web roots. In `tailscale` mode the
+  daemon listens on plain HTTP inside the tailnet, and WireGuard provides the
+  encryption.
+- **Relay pairing.** A relay link carries the daemon's Noise static public key
+  (`pk=`) and the device's relay bearer credential (`dk=`). The app pins the
+  key and runs `Noise_IK_25519_ChaChaPoly_SHA256` with the
+  daemon, so the relay sees only ciphertext. The app's per-device Noise key
+  and the channel credential live in the same Keystore-sealed pairing.
+
+## Biometric confirmation
+
+Approving a **high-risk** request asks for your fingerprint or face, or falls
+back to the screen lock PIN or pattern ("Use PIN"). Denying never asks, and
+neither do low- or medium-risk requests. The setting **Confirm high-risk
+approvals** is on by default. Turning it off requires the same confirmation
+when the device has a lock screen. The gate fails closed. If the device has no
+screen lock, high-risk approvals fail with an error until you set one up or turn
+the setting off.
+
+Turning on **Hard YOLO** from the header switch ([YOLO mode](docs/public/rules.md#yolo-mode))
+asks for the same confirmation, since it auto-approves high-risk requests.
+
+The prompt appears when you tap **Approve** or swipe to approve, before the few-second undo window
+and before an offline approval is queued. The confirmation covers that request
+at that content only: if the request changes before the approval is sent, the
+daemon refuses it. On Android, a queued high-risk approval with its tap-time
+confirmation can send in the background. Without that confirmation, it waits
+for the open app and prompts there; background delivery never bypasses the gate.
+
+## Offline
+
+Once the inbox has loaded, losing the connection to your computer never hides
+it. The header shows **Live**, **Reconnecting…**, or **Offline since 14:03**;
+tap it to retry immediately. The app also retries as soon as it returns to the
+foreground or the network comes back. The last queue is kept on the phone, so
+opening the app while offline still shows it, marked with when it last synced.
+
+Approve, deny, and answers made while offline are queued in **Decisions waiting
+to send**, each marked *Sending when connected* with an **Undo** button. When
+the connection returns they are sent in the order you made them, bound to the
+content you saw. If the daemon refuses one (already decided elsewhere, expired,
+or changed since), that row says why and nothing else is sent for it. Nothing
+is ever sent that you did not tap. Each computer keeps its own cached queue
+and outbox: one being offline never holds back decisions for another.
+On Android, queued decisions are also stored in a durable native outbox
+(`outbox.db`), separate from the disposable History/file cache. Rust delivers
+them without relying on the webview to keep running. Hiding the app ends any
+remaining undo windows and tries every queued decision, even for a computer
+whose connection looked down. Network failures stay queued and retry in the
+background.
+
+When you leave the app with pending work, Android starts a foreground service.
+Its silent **Sending 1 decision…** or **Sending N decisions…** notification
+shows how many decisions are waiting and disappears when none are waiting.
+If Android refuses to start the service, delivery waits for the next open.
+Swiping handup away or **Force stop** stops background decision delivery until
+you reopen it; queued decisions survive. Android 15 limits `dataSync` foreground
+services to about six hours per day. When that allowance runs out, unsent
+decisions remain queued for the next open. This native background delivery is
+Android-only; desktop and web behavior is unchanged.
+Unpairing a computer forgets its cached queue and any unsent decisions for it.
+
+### Offline copy and Downloads autosave
+
+The app keeps a copy of the History pages, request details, audit trails and
+files you read, per paired computer, in an app-private SQLite database. When
+that computer is unreachable, History serves the copy and shows **Offline copy
+from …** with its age; online, every read goes to the computer and refreshes
+the copy. Only these reads are kept: never the pending queue (it has its own
+store above), decisions or other writes, settings, pairing, devices, or any
+token. Files are checked against their SHA-256 before they are kept.
+
+Each computer's card in **Settings** has its own controls:
+
+- **History kept on this phone**: **Last 30 days** (default) of what you read,
+  **Everything read**, or **Off** (nothing is kept, files included).
+- **Space limit**: 256 MB by default (16–4096). Past it, the least recently
+  used entries go first; lowering it trims at once.
+- **Files kept**: **Files I open** (default), or **Also new files on Wi-Fi**,
+  which downloads new requests' files up to a size (10 MB by default) only on an
+  unmetered network.
+- **Also save files to Downloads** (off by default, Android 10 and later): new
+  requests' named files, and files you open, are copied to `Download/handup`
+  once each, up to a per-file limit (25 MB by default). It uses Android's
+  MediaStore, so no storage permission is asked. Saved files stay after you
+  unpair; delete them in a file manager.
+- **Clear cache** deletes that computer's copy only. Unpairing a computer also
+  deletes its copy and settings; other computers keep theirs.
+
+The copy holds request content (titles, previews, files), so anyone who can
+unlock the phone and open the app can read it offline. Set History to **Off**
+on a computer whose requests should not stay on the phone.
+
+## Display and navigation
+
+**Settings** opens a full-screen page on Android, with a persistent **Back**
+button and independently scrolling sections. Android Back also returns to the
+inbox. Changes save automatically on this device; there is no separate Save
+step and no confirmation when you leave. The header always shows the save
+state: **Saving…**, **Saved** with a check, or **Not saved** with **Retry**.
+Back during a pending save waits for it to finish, then returns. If a save
+failed, Back keeps Settings open and offers **Retry** or **Discard and go
+back**; discarding keeps the settings that were actually stored.
+
+Settings has collapsible **Appearance**, **Decisions**, **Read aloud**, and
+**Test** groups alongside the paired-computer controls. **Decisions** contains
+the undo window, approve button side, and **Swipe cards**.
+**Settings → Appearance** sets the theme (System follows the phone's light/dark
+setting live, or Light, or Dark), color palette, density, and layout. The mobile
+header has no separate theme shortcut. **Density** opens its own page with a live preview of each
+choice; Back returns to Settings. **Compact** (the default) puts expiry, agent,
+and location in small tabs on top of the preview; tap a tab to show that
+detail. **Comfortable** shows them in a roomy header; **Ultra-compact** also
+trims list rows and headers. In every density the risk badge sits in the
+request header, next to the title.
+
+**Settings → Appearance → Layout** opens a page with a preview of each choice:
+**Split** (default) shows the list, then the request you open; **Stacked** keeps
+the list above the request; **Focus** shows one request at a time; **Rail**
+adds a horizontal chip strip. Focus and Rail have **‹ ›** controls, **N of M**,
+and a **Queue** button that opens the full list in a sheet. Density applies
+inside every layout. Layout and pane sizes save on this device.
+
+Drag the Split or Stacked divider to resize with touch or a mouse. With the
+divider focused, arrow keys adjust it; double-tap, double-click, or Enter
+resets it. **Reset sizes** also appears on the Layout page after resizing.
+Split width is 240–640px (default 380px); Stacked height is 15–75% (default 38%).
+
+Android Back closes an open dialog or settings, returns from a request
+(including one opened from a notification) to the list, and leaves the app
+only from the list.
+Command and text previews have a **Copy** button.
+
+**Settings → Test** has one row per paired computer, each with **Send test
+request** and **Send test question**. Choose the row for the computer whose
+inbox and notifications you want to try. It creates a harmless server-built
+sample on that computer, not on the phone: **Test request** or **Test question**,
+low risk, agent `handup`, session `handup-test`, with a 15-minute timeout.
+Approving, denying, or answering performs no action. The pairing needs
+`decide` scope; a view-only computer returns an explanatory error. If the
+computer runs an older daemon without this route, update it.
+
+### Read aloud
+
+Tap the speaker button (**Read aloud**) in an open pending request's header;
+tap **Stop reading** to stop. It reads the agent, title, a shortened summary,
+risk, questions and, by default, numbered options—not previews, diffs or tool
+input. Changing or deciding the request, returning to the list, or opening
+History stops playback. History has no read-aloud button.
+
+**Settings → Read aloud** saves the voice, **Speed**, **Pitch**, **Read options**
+and scope on this phone; **Test voice** plays a sample. **This request** is the
+default; **Whole queue** continues through the visible pending requests after
+the open one, selecting each in turn. **Read new requests** is off by default;
+when enabled, it can read a newly arrived request while handup is open and
+idle, but does not read the requests already waiting at first load.
+
+The searchable voice picker filters by name, language name or code, and
+**Natural** or **Online** labels.
+
+Android uses native TTS through `tauri-plugin-tts`, not the System WebView's
+speech APIs. It always reads aloud with the system default text-to-speech
+engine. To change the engine or install voices (for example if none appear),
+use Android's own text-to-speech settings, then reopen Read aloud in handup.
+Online voices send the spoken text to the voice provider. iOS remains untested.
+For a phone browser rather than the native app, see
+[Web UI read aloud](docs/public/remote.md#read-aloud).
+
+## Attachments and Markdown
+
+File attachments offer **Download** and **Open** on Android. Download fetches
+the attachment through your authenticated pairing, then opens Android's save
+picker. Choose a location on the phone; the suggested name preserves the
+original basename, including Unicode. You may rename it, and the selected
+storage provider may adjust duplicate names. Cancelling saves nothing and shows
+**Download cancelled**. Wait for **Saved** followed by the final file name
+before assuming a download finished.
+A write failure reports an error and attempts to remove the newly created
+partial document; providers that refuse deletion may retain that partial file.
+
+Open passes a temporary, read-only content URI and the file's MIME type to an
+installed viewer. Another app receives the attachment, not your pairing token
+or the computer's file URL. If no suitable viewer is installed, use Download
+and choose a compatible app. The private Open copy remains available until
+Android evicts the cache. Open hands over the file's own type first, then plain
+text for text-like files (code, JSON, YAML…), then any app that accepts the
+file.
+
+Files previews list every file with its size and type. Tap a row to view it
+(code is highlighted, Markdown renders, images and media play), or use its
+open icon to hand it to another app. Each viewed file has **Open** and
+**Download**. Check rows (or the select-all box) to **Download** several at
+once; more than one file downloads as a single `.zip` that keeps the folder
+layout. On Android the `.zip` goes through the same save picker; on desktop,
+downloads land in your Downloads folder without overwriting existing files.
+HTML files only open in the sandboxed preview; download them instead.
+
+JSON previews are pretty-printed and syntax-highlighted with the active
+palette; switch to **Tree** to fold objects and arrays.
+
+`.md` and `.markdown` attachments (case-insensitive), or attachments marked
+`text/markdown`, render in the app with headings, lists, GFM tables and
+syntax-highlighted fenced code. Unknown code languages remain readable plain
+text. Tables and long code lines scroll inside the reader rather than widening
+the page. Raw HTML is not rendered and remote images are blocked. Tapping a
+web or `mailto:` link in Markdown, a summary or a plain-text preview opens it
+in your browser or mail app, never inside handup; other links do nothing.
+Open and Download remain available if reading fails.
+
+These native file actions support Android; iOS attachment delivery is not
+implemented. Browser downloads continue to use the browser's own file handling.
+
+## Notifications
+
+Android can receive native Firebase Cloud Messaging (FCM) notifications directly
+in handup; the ntfy app is not required. Push is optional at build time.
+
+Queued decision delivery uses a separate silent **Sending decisions** channel
+(`outbox`, low importance), not FCM or ntfy. It has no sound, vibration, or badge
+and is shown only while the foreground service has work waiting. This does not
+require a Firebase-enabled build. Tapping it opens handup.
+
+### Android permissions
+
+The app declares `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_DATA_SYNC` to keep
+queued decision delivery running after you leave it. These are manifest
+permissions, not extra runtime prompts. Android 13+'s notification permission
+controls notification visibility; it is requested after pairing as described
+below. The service is still subject to Android's start restrictions and
+Android 15's daily `dataSync` limit; reopening the app resumes queued work.
+
+### Owner setup
+
+1. In the [Firebase console](https://console.firebase.google.com/), create a
+   project and add an Android app with package name **`dev.handup.app`**.
+2. Download its **`google-services.json`** and place it at
+   **`apps/handup-app/gen/android/app/google-services.json`** before building
+   the APK. This file is gitignored. The Google Services Gradle plugin is applied
+   only when the file exists. Without it the release APK still builds, and
+   **Settings → Notifications** says **Not available in this build**.
+3. Enable the Firebase Cloud Messaging HTTP v1 API for the project. In
+   **Project settings → Service accounts**, generate a service-account private
+   key (or create a dedicated account with the Firebase Cloud Messaging API
+   Admin role). Save the JSON key on the daemon host, outside the repository,
+   readable only by its owner (`chmod 600`). Never put this private key in the
+   APK or commit it.
+
+Steps 1–3 can be scripted with `gcloud` (logged in as the project owner). The
+one manual step is opening the Firebase console once to add Firebase to the new
+project, which accepts the Firebase terms; the API returns 403 until then.
+
+```sh
+P=handup-push-$(head -c3 /dev/urandom | od -An -tx1 | tr -d ' \n')
+gcloud projects create "$P" --name="handup push"
+gcloud services enable firebase.googleapis.com fcm.googleapis.com iam.googleapis.com --project "$P"
+# Console: Add project → choose the existing Google Cloud project "$P".
+T=$(gcloud auth print-access-token)
+H=(-H "Authorization: Bearer $T" -H "x-goog-user-project: $P" -H 'Content-Type: application/json')
+F=https://firebase.googleapis.com/v1beta1/projects/$P
+curl -s -X POST "${H[@]}" "$F/androidApps" -d '{"packageName":"dev.handup.app","displayName":"handup"}'
+APP=$(curl -s "${H[@]}" "$F/androidApps" | jq -r '.apps[] | select(.packageName=="dev.handup.app") | .appId')
+curl -s "${H[@]}" "$F/androidApps/$APP/config" | jq -r .configFileContents | base64 -d \
+  > apps/handup-app/gen/android/app/google-services.json
+SA=handup-fcm@$P.iam.gserviceaccount.com
+gcloud iam service-accounts create handup-fcm --project "$P"
+gcloud projects add-iam-policy-binding "$P" --member "serviceAccount:$SA" \
+  --role roles/firebasecloudmessaging.admin --condition None
+(umask 077; gcloud iam service-accounts keys create ~/.config/handup/firebase-service-account.json --iam-account "$SA")
+```
+
+For CI-built APKs, store `google-services.json` as a protected GitLab CI file
+variable named `GOOGLE_SERVICES_JSON`; the `android` job copies it into place.
+
+4. Configure the daemon and restart it:
+
+   ```yaml
+   notifications:
+     backends: [desktop, fcm]
+     fcm:
+       service_account: /absolute/path/to/firebase-service-account.json
+       payload: title
+   ```
+
+   `handup doctor` checks the account and reports the project id without
+   printing credentials. The APK and service account must use the same Firebase
+   project.
+5. Install the configured APK and pair it with the daemon. Android 13+ asks for
+   notification permission **after pairing succeeds**, not on initial launch.
+   **Settings → Notifications** shows On or Blocked and opens the system's
+   app-notification settings. If the status cannot be read within a few
+   seconds, it says **Could not check** with the reason and a **Retry** button.
+   Android 12 and earlier use the system setting
+   without a runtime permission prompt.
+
+The app registers its FCM token using device authentication, over either the
+tailnet listener or the encrypted relay tunnel. Token refresh is synchronized
+while the app is running, and on the next launch after an Android background
+refresh. Registration retries when the daemon is offline. Unpairing attempts to
+remove push registration; revoking the device always deletes it on the daemon.
+
+FCM uses two system channels: **Approval requests** (`requests`, default
+importance) and **High-risk approvals** (`high_risk`, high importance), separate
+from the outbox's **Sending decisions** channel.
+Android controls sound, lock-screen display, and heads-up eligibility per
+channel. Push messages are high-priority, data-only; the app constructs the
+notification even when its activity is not running. Swiping the app away is
+supported; Android's explicit **Force stop** prevents FCM delivery until the app
+is opened again.
+
+`payload: title` (default) sends only the redacted title, request id, and risk;
+**preview content is never sent**. `payload: wake` substitutes the generic
+“Approval requested” title. Google can see this push metadata; the relay's
+end-to-end encryption does not cover the daemon-to-FCM notification. The usual
+notification rules and quiet hours apply. Decide, cancel, and expiry send a
+`resolved` message to cancel the matching notification, even during quiet hours.
+Android can delay that message while the app is closed, so the app also clears
+notifications for requests it decides and, whenever its queue syncs (including
+when it is opened or brought back), those that are no longer pending.
+Tapping a notification opens the request via `handup://r/<id>`. Push contains no
+Approve/Deny actions.
+
+## Deep links and ntfy
+
+The app handles `handup://r/<request id>` and opens that request:
+
+```bash
+adb shell am start -a android.intent.action.VIEW -d handup://r/01M3S8C6H0CP6R88FFXM4NPFSF
+```
+
+The [ntfy backend](docs/public/remote.md#notification-backends) adds an **Open** action
+with this link to every notification, so tapping **Open** in the ntfy Android
+app opens the request in handup. When remote access is on, tapping the
+notification itself (`click`) opens the web UI (`<web UI>/#/r/<id>`) in the
+browser instead. ntfy remains an optional alternative; native FCM is Android-only.
+Native APNs delivery from the daemon is not implemented.
+
+## iOS
+
+`make app-ios-init` (macOS with Xcode) adds the Rust iOS targets and generates
+the Xcode project. The configuration (`tauri.ios.conf.json`, `Info.ios.plist`
+with camera and Face ID usage strings, Keychain storage) exists, but this
+target has never been built or run. Limits:
+
+- Without a paid Apple Developer account you can only run the app on your own
+  iPhone from Xcode on a Mac, with a free provisioning profile that expires
+  after 7 days. Then you have to rebuild and reinstall it.
+- No TestFlight and no App Store build.
+- The fallback on an iPhone is the daemon's web UI over Tailscale: pair from
+  Safari by scanning the `handup pair` QR code and add it to the Home Screen.
+  It lacks biometric confirmation and deep links, but it has the same inbox.
+
+---
+
+Source: [docs/public/relay.md](docs/public/relay.md)
+
+# End-to-end encrypted relay
+
+Use `handup-relay` when your phone is not on your tailnet. It is a small
+server you host yourself. It forwards encrypted envelopes between your handup
+daemon and your paired phones. It never sees previews, decisions, device
+tokens, pairing codes, or keys, and it never sees request titles unless you
+set `push: title`. It can also send content-free FCM/APNs wake-ups.
+
+The relay works alongside any `remote.mode`, including `off`. The phone uses
+the same API v1, scopes, biometric gate, and content-hash-bound decisions as
+the [remote listener](docs/public/remote.md).
+
+**Settings → Test** can send a synthetic request or question through the relay
+to the selected paired computer. `POST /v1/requests/test` uses the same
+[test request contract](docs/public/cli.md#test-requests) as local and remote HTTP access:
+paired `decide` scope is required; `view` devices and submit tokens get 403.
+The daemon builds the sample, and deciding it performs no action.
+
+Relay connections never execute command requests. **Run** is local-desktop-only;
+the daemon rejects `run_result` from paired devices over the relay just as it
+does over the remote listener.
+
+## Run a relay
+
+```bash
+make relay-build                     # bin/handup-relay
+bin/handup-relay --listen 127.0.0.1:8787 --db /var/lib/handup-relay/relay.db
+bin/handup-relay --help              # every flag and its environment variable
+```
+
+`make relay-run ARGS='--listen 127.0.0.1:8787'` runs it from source.
+
+Settings merge in this order: built-in defaults, then `--config relay.yaml`,
+then flags and `HANDUP_RELAY_*` environment variables.
+
+```yaml
+listen: 0.0.0.0:8787
+db: /var/lib/handup-relay/relay.db
+log: /var/log/handup-relay.log      # default: stderr
+tls: { cert: /etc/handup-relay/fullchain.pem, key: /etc/handup-relay/key.pem }
+trust_forwarded: false               # legacy: true trusts loopback proxies only
+trusted_proxies: []                  # explicit CIDRs for your own proxy chain
+forwarded_hops: null                 # proxies behind the trusted peer that append X-Forwarded-For
+direct_clients: false               # tenant mode without a proxy: clients connect directly
+probe_listen: null                   # e.g. 127.0.0.1:9091 moves /healthz and /readyz off the main listener
+probe_allow_public: false
+no_new_channels: false              # creation kill switch, restart to change
+no_wakes: false                     # push kill switch, restart to change
+drain_timeout: 10s
+metrics_listen: 127.0.0.1:9090       # omit to disable metrics
+metrics_allow_public: false
+log_format: text                    # text or json
+log_ips: true                       # set false for hosted use; forced false in tenant mode
+tenants: false                       # true requires a tenant credential to create channels
+database:                            # optional: shared Postgres instead of `db`
+  url: postgres://relay@db.example.com/handup_relay?sslmode=verify-full  # prefer HANDUP_RELAY_DATABASE_URL
+  ca: /etc/handup-relay/db-ca.pem    # extra CA besides the Mozilla roots
+  allow_plaintext: false
+  pool_size: 16                      # pooled connections per instance
+  migrate_url: postgres://owner@…    # optional schema-owning role; prefer HANDUP_RELAY_DATABASE_MIGRATE_URL
+  statement_timeout: 10s             # per statement, and per idle open transaction
+  acquire_timeout: 5s                # waiting for a pooled connection
+limits:
+  max_envelope: 65553                # bytes; the protocol maximum is the floor
+  max_queue: 64                      # queued envelopes per offline channel end
+  queue_ttl: 10m                     # older queued envelopes are dropped, unless being delivered
+  max_connections: 512               # authenticated WebSockets
+  tenant:                            # per-tenant defaults (tenant mode)
+    channels: 1000                   # default: a quarter of max_channels
+    wakes_per_hour: 600              # default: unlimited
+push:
+  fcm: { service_account: /etc/handup-relay/fcm.json }
+  apns: { key: /etc/handup-relay/AuthKey.p8, key_id: ABC123, team_id: TEAM123, topic: dev.handup.app }
+```
+
+Other limits guard the relay against abuse:
+
+- A per-IP cap on authentication failures.
+- A per-IP cap on channel creations and connections.
+- A total byte cap for queued and in-flight ciphertext (`max_queued_bytes`).
+- A maximum number of channels.
+- A minimum interval between wake-ups, per channel and per push token
+  (`wake_interval`), plus a relay-wide cap (`wakes_per_minute`, default 120).
+- A write deadline (`write_timeout`, default 30s). A phone or daemon that
+  stops reading is disconnected; its traffic waits in the mailbox instead.
+- A body-read deadline (`body_timeout`, default 10s) on channel creation,
+  push registration, and wake requests. Channel credentials are checked before
+  reading push or wake bodies. Timed-out or oversized bodies close the connection;
+  creation accepts at most 4 KiB, registration and wake at most 16 KiB.
+
+Channels with a connected end are never swept as idle.
+
+Set `HANDUP_RELAY_REGISTRATION_TOKEN` so only your daemons can create
+channels. Give the daemon the same value in `HANDUP_RELAY_TOKEN`. You can
+rename that variable with `remote.relay.registration_token_env`. The relay
+refuses to start with `push` credentials unless it has a registration token or
+runs in tenant mode, because anyone could otherwise send wake-ups through your
+FCM/APNs account.
+
+The relay creates its database, SQLite sidecar files, and log with mode 0600.
+Clients only ever see `storage error` (HTTP 503) when the database fails; the
+log records the SQLSTATE code, never query text or values.
+
+### Instance operations
+
+`GET /healthz` is an empty, unauthenticated liveness response (200).
+`GET /readyz` returns 503 while draining or when the database probe fails;
+database health is cached for five seconds, and concurrent probes on a cold
+cache share one database query. Keep probes internal: set `probe_listen` to
+serve both only on that address (it may equal `metrics_listen`, which then
+serves `/metrics`, `/healthz` and `/readyz` together); the main listener then
+answers them with 404. Like `metrics_listen`, `probe_listen` accepts loopback
+and specific private addresses; wildcard or public binds require
+`probe_allow_public` (`--probe-allow-public`, `HANDUP_RELAY_PROBE_ALLOW_PUBLIC`).
+Tenant mode on a non-loopback listener without
+`probe_listen` logs a warning at startup. The probe and metrics listeners stay
+up until the drain ends, so readiness reports 503 throughout. The existing
+`/v1/health` endpoint remains available for protocol clients.
+
+SIGTERM and SIGINT stop admission and drain for up to `drain_timeout` (10s).
+Already-started HTTP writes finish within the deadline; WebSockets close with
+1001 (going away), so clients reconnect. Give the supervisor a longer grace.
+Setting `no_new_channels` rejects creation with 503 JSON and `Retry-After: 1`;
+existing channels are unaffected. `no_wakes` rejects wakes without contacting
+FCM/APNs. Both switches are read only at startup, so changing one needs a restart.
+
+Metrics are disabled by default. `metrics_listen` enables Prometheus text at
+`/metrics` on a separate, unauthenticated listener. Loopback and specific private
+addresses are allowed; wildcard or public binds require `metrics_allow_public`.
+Firewall the scrape listener. Labels use only fixed roles, dispositions,
+platforms, outcomes and rejection reasons, never channel/tenant ids, tokens or IPs.
+Scale on authenticated daemon/device connections, not the HTTP connection gauge.
+`handup_relay_db_lookups_total{kind="channel"|"tenant"|"readiness"}` counts
+credential and readiness lookups that reached the database.
+
+`log_format` supports `text` (default) or `json`; `log_ips` defaults to true for
+self-hosted compatibility but tenant mode forces false. Set false for hosted
+use. Logs omit channel identifiers and provider error bodies; channel-creation
+lines name the tenant id. Output is capped at 120 lines/minute per instance;
+metrics retain counts. Arrange external rotation and retention.
+Each of these settings has a matching hyphenated flag and `HANDUP_RELAY_*`
+environment variable (for example `--no-wakes`, `HANDUP_RELAY_NO_WAKES`).
+
+`trusted_proxies` accepts CIDRs via YAML, `--trusted-proxies`, or the comma-separated
+`HANDUP_RELAY_TRUSTED_PROXIES`. Forwarded headers are ignored unless the TCP peer
+is trusted; by default the right-most untrusted hop is the client IP. Repeated
+`X-Forwarded-For` headers are read as one list. When more proxies sit behind
+the trusted peer (for example a CDN in front of your load balancer), set
+`forwarded_hops` (`--forwarded-hops`, `HANDUP_RELAY_FORWARDED_HOPS`) to how many
+right-most entries they append; the client is the entry just left of them. A
+header shorter than that, or with an unparsable entry, falls back to the TCP
+peer. `forwarded_hops` requires `trusted_proxies`. The legacy
+`trust_forwarded: true` alias trusts loopback only. IPv6 per-IP counters aggregate
+by /64; bounded sharded counters evict rather than locking out new clients.
+Valid credentials are not rejected because another caller exhausted failed-auth
+limits: past the limit, lookups wait in a small relay-wide slow lane (two at a
+time, at least 100ms each) instead of being refused.
+
+Additional YAML controls: `preauth_timeout` (3s), `max_preauth_connections` (64),
+`per_ip_connections` (16), `ws_idle_timeout` (120s), `ws_ping_interval` (30s),
+`ws_max_lifetime` (24h), `ws_messages_per_second` (120), and
+`ws_bytes_per_second` (4194304). Authenticated WebSockets use
+`limits.max_connections`; unauthenticated TLS/HTTP uses a separate bounded pool.
+An extra pool of at most 16 connections answers overload with 503/Retry-After;
+when that pool is full, excess sockets are dropped. Put equivalent admission
+limits on the proxy. Trusted proxies also have a TCP-peer concurrent cap, so
+size `per_ip_connections` for their legitimate fan-in.
+WebSockets ping and close after two unanswered pings; idle/lifetime checks run
+at heartbeat ticks. Text frames close with 1003, ingress floods with 1008.
+Ping, pong and close frames spend the same `ws_messages_per_second` and
+`ws_bytes_per_second` budget as envelopes, so a ping flood also closes with 1008.
+Wake titles are limited to 120 characters and control characters are removed.
+
+
+### Tenant mode
+
+Tenant mode gives each daemon owner a separate channel-creation credential with
+its own quotas, which you can rotate, turn off, or remove on its own. Enable it
+with `--tenants`, `tenants: true`, or `HANDUP_RELAY_TENANTS=true`. Creating a
+channel then needs an enabled tenant credential. The relay refuses to start in
+tenant mode when `HANDUP_RELAY_REGISTRATION_TOKEN` is set: a shared token
+would create channels that no tenant's quota or revocation reaches. Give your
+own daemons a tenant of their own instead.
+
+Per-address limits need the real client address. On a listener that is not
+loopback, tenant mode refuses to start unless `trusted_proxies` names your
+proxies, or `direct_clients: true` (`--direct-clients`,
+`HANDUP_RELAY_DIRECT_CLIENTS`) confirms that clients connect with no proxy in
+front. A proxy on the same host can use a loopback listener and needs neither.
+
+Failed tenant credentials count against the same per-address failure budget
+as channel credentials. A credential that is not `hrt_` plus 64 hex digits
+never reaches the database, and neither does one the database did not know
+within the last ten seconds (each instance remembers up to 4096); both fail with
+401, or 429 once the address is over its budget. Past the budget, a well-formed
+credential this instance has not seen succeed waits in the slow lane. A tenant
+enabled, or a token rotated, on another instance works here within ten seconds.
+
+Manage tenants against the relay's database. The commands honor `--config`,
+`--db`, `HANDUP_RELAY_DB`, and `HANDUP_RELAY_DATABASE_URL`, and work while the
+relay is running:
+
+```bash
+bin/handup-relay tenant add "Alice"     # prints id and token (hrt_…); the token is shown once
+bin/handup-relay tenant add "Alice" --token-file alice.token  # token to a new 0600 file, only the id on stdout
+bin/handup-relay tenant list [--json]   # id, name, enabled, push titles, last use, usage/limit per quota; never tokens
+bin/handup-relay tenant rotate <id> [--token-file <path>]  # a new token; the old one stops working at once
+bin/handup-relay tenant disable <id>
+bin/handup-relay tenant enable <id>
+bin/handup-relay tenant set-quota <id> channels 50   # or `default` to clear the override
+bin/handup-relay tenant set-push-titles <id> on      # or `off` (the default)
+bin/handup-relay tenant remove <id>     # deletes its channels, queued envelopes and push tokens
+```
+
+`--token-file` keeps the credential out of terminal scrollback and logs. It
+refuses to overwrite an existing file, and removes the file it created if the
+change fails. Last use is the last channel creation with the tenant's token,
+recorded at most once a minute; a tenant unused for months is a candidate for
+removal.
+
+A tenant's daemons send wake-ups with the generic title "Approval requested"
+even when they ask for `push: title`, until you run
+`tenant set-push-titles <id> on`: a request title then reaches FCM/APNs, which
+you, not the tenant, have an agreement with. A wake-up authorized just before
+a tenant is disabled or removed is refused rather than sent or counted.
+
+Give the daemon the tenant token in `HANDUP_RELAY_TOKEN`. Each channel it
+creates records its tenant. Disabling a tenant rejects its credential and every
+one of its channels: new channels, phone and daemon connections, push
+registration, and wake-ups. Its open connections close within about a second
+(at once on every instance with Postgres). Enabling the tenant restores its
+channels. Removing it deletes them for good. Rotation keeps existing channels
+and connections; only channel creation uses the tenant token. Channels created
+before tenant mode belong to no tenant, so no quota or revocation reaches them:
+tenant mode refuses them. Moving a self-hosted relay to tenant mode therefore
+means pairing each daemon and phone again (`handup pair --relay`) with a tenant
+token.
+
+#### Quotas
+
+Each tenant gets a fair share of the relay so one cannot starve the others.
+Over a quota, HTTP requests get `429` with
+`{"error": "tenant quota exceeded", "quota": "<name>"}`, and a WebSocket sender
+whose envelope does not fit gets a text notice
+`{"t": "relay", "error": "tenant quota exceeded", "quota": "queued_bytes"}`.
+
+| Quota | Counts | Default |
+|---|---|---|
+| `channels` | channels the tenant owns | a quarter of `max_channels` |
+| `connections` | open phone and daemon connections, all instances | a quarter of `max_connections` |
+| `queued_bytes` | ciphertext waiting for an offline end | a quarter of `max_queued_bytes` |
+| `wakes_per_minute` | wake-ups sent | a quarter of `wakes_per_minute` |
+| `wakes_per_hour` | wake-ups sent | unlimited |
+| `bytes_per_day` | accepted ciphertext, UTC day | unlimited |
+
+Change the defaults under `limits.tenant`, or one tenant's with
+`tenant set-quota`. A changed quota applies to connected senders from their
+next envelope. Refused envelopes count against nothing.
+
+### Several instances on Postgres
+
+Point every instance at one Postgres database with
+`HANDUP_RELAY_DATABASE_URL=postgres://…` (or `database.url`; `db` is then
+ignored) and put them behind any load balancer, no sticky sessions needed. They
+share channels, mailboxes, push tokens, tenants, quotas, and the relay-wide
+channel, queued-byte and wake budgets. A message to a phone connected to
+another instance is stored and announced with `NOTIFY` once committed; the
+instance holding that phone delivers it in order. Each envelope stays stored,
+and counted against the queued-byte budgets, until it is written to the
+socket; what a closed or replaced connection did not write goes to the next
+connection for that end, in order. A newer connection for a channel end
+replaces the older one wherever it is. A lost `NOTIFY` only delays delivery:
+every instance also checks for waiting mail each second. `NOTIFY` payloads
+carry channel, instance and tenant ids only, never ciphertext or credentials.
+
+TLS to Postgres is required for any host that is not loopback or a Unix
+socket. Without `sslmode`, such hosts get verified TLS; `localhost` and Unix
+sockets default to plaintext. `sslmode=require`, `verify-ca` and `verify-full`
+all verify the certificate chain and host name (against the Mozilla roots plus
+`database.ca`). `sslmode=disable` or `prefer` to a remote host is refused
+URL, and sessions use a 10s statement timeout.
+
+Every session also ends a transaction left idle longer than
+`database.statement_timeout` (default 10s), and waiting for a pooled
+connection gives up after `database.acquire_timeout` (default 5s), so a stuck
+lock or an exhausted pool fails requests with `storage error` instead of
+stalling them. A `statement_timeout` or `idle_in_transaction_session_timeout`
+already in the URL's `options` wins. If an instance loses its `LISTEN`
+connection it reconnects within about a second, retrying each second, and
+re-checks every local socket for mail that arrived meanwhile.
+
+Run the relay as a least-privilege role. Without `database.migrate_url`, the
+first start creates the schema and later releases upgrade it, so the serving
+role needs to own it. For a serving role with data access only, give the
+schema owner's URL as `HANDUP_RELAY_DATABASE_MIGRATE_URL` (or
+`database.migrate_url`, or `--database-migrate-url`) and run
+`bin/handup-relay migrate` before the first start and after each upgrade. With
+a migration URL set, the relay and `tenant` commands run no DDL: they refuse
+to start until the schema is at the version they need, and tell you to run
+`handup-relay migrate`. Then grant the serving role data access:
+
+```sql
+CREATE ROLE handup_relay LOGIN PASSWORD '…';
+GRANT CONNECT ON DATABASE handup_relay TO handup_relay;
+GRANT USAGE ON SCHEMA public TO handup_relay;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO handup_relay;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO handup_relay;
+```
+
+Re-run the grants after a `migrate` that adds tables. The serving role needs
+no `CREATE`, superuser, or replication rights. Tenant tokens are stored as
+SHA-256 digests; channel credentials as digests too.
+
+`make relay-test-pg` runs the multi-instance tests against a throwaway Postgres
+(downloaded once, checksum verified, into `~/.cache/handup`). The download is
+behind the `pg-tests` Cargo feature, so other builds never fetch it.
+`make deny` checks dependencies against `deny.toml` (advisories, licenses,
+crates.io only, no OpenSSL) with the `cargo-deny` version pinned in `mise.toml`.
+
+### TLS
+
+Use HTTPS for anything that is not loopback or a private network. You can
+pass `--tls-cert/--tls-key`, or put the relay behind a reverse proxy (Caddy,
+nginx) with a public certificate. The daemon and the app check relay
+certificates against the Mozilla roots.
+
+TLS protects the per-channel relay credentials and push tokens in transit.
+Request content is end-to-end encrypted either way. The client refuses plain
+`http://` except for loopback, private, link-local, and tailnet addresses.
+
+## Configure the daemon
+
+```yaml
+remote:
+  relay:
+    url: https://relay.example.com       # how the daemon reaches the relay
+    public_url: ""                       # link URL for phones, when it differs from url
+    push: wake                           # wake (generic title), title (request title), or off
+```
+
+Restart the daemon, then pair:
+
+```bash
+handup pair --relay [--scope view|decide] [--name "Pixel"]
+```
+
+Scan the QR code with the handup app, or paste the printed link into it. The
+link is `https://relay…/pair#ch=…&dk=…&pk=…&code=…`: `ch` is the channel id,
+`dk` is the phone's relay bearer credential for that channel, and `pk` is
+your daemon's public key, which the phone pins. Everything after `#` stays
+on the phone. The code expires after 2 minutes and works once.
+
+Paired relay devices show up in `handup devices list`. Revoke one with
+`handup devices revoke <id>`. Revocation deletes the device's channel on the
+relay, ends its sessions, and makes its token useless.
+
+## What the relay can and cannot see
+
+The relay **can** see:
+
+- Channel ids.
+- Connection times, IP addresses, and envelope sizes and counts.
+- Which end of a channel is online.
+- Push tokens and their platform.
+- When wake-ups are sent. With `push: title`, it also sees the request title
+  sent in the notification.
+
+The relay stores:
+
+- Channel ids, and the tenant id of channels created with a tenant credential.
+- Hashes of the two per-channel credentials. Each end still sends its
+  bearer credential on every request, so the relay sees it in transit (it
+  only lets that end use its own channel).
+- Timestamps.
+- Queued ciphertext, up to the TTL.
+- Push tokens.
+- Tenants: id, name, enabled flag, creation time, a SHA-256 hash of the
+  credential, quota overrides, and usage counters.
+
+The relay **cannot**:
+
+- Read requests, previews, decisions, device tokens, or pairing codes. They
+  travel only inside Noise sessions.
+- Pair a device of its own. The code is encrypted to your daemon's static
+  key, which the phone pins from the QR code.
+- Pose as your daemon or your phone. Both static keys are pinned, and the
+  daemon still checks the device token on every call.
+- Replay, reorder, or alter envelopes. Any of these ends the session.
+- Post to or read a channel without that channel's credential.
+
+A malicious relay can still drop or delay traffic, or refuse service.
+
+## Push notifications
+
+Phones register an FCM or APNs token with the relay. The registration is
+scoped to their channel. When a request arrives, the daemon posts a
+content-free wake hint. The relay then sends one of these requests:
+
+- FCM HTTP v1 with a service-account OAuth JWT.
+- APNs HTTP/2 with a token-based ES256 JWT.
+
+The notification carries only a title: "Approval requested" by default, or
+the credential-redacted request title with `push: title`. Redaction happens in
+the daemon before sending the title to the relay. It has no request id and never
+includes preview content. Tapping it opens the app, which fetches the queue
+through the encrypted channel.
+
+Push registration and removal (`PUT`/`DELETE /v1/devices/self/push`) also
+travel through the encrypted session, with the same paired-device scope checks
+as direct remote access.
+
+If the provider reports an invalid or unregistered token, the relay removes
+it. The Android app registers an FCM token only when built with your own
+Firebase configuration (see [mobile.md](docs/public/mobile.md)); builds without it receive
+no push.
+
+---
+
+Source: [docs/public/remote.md](docs/public/remote.md)
+
+# Remote access
+
+Approve requests from a phone or another computer. Remote access is off by
+default: the daemon listens only on its unix socket and `127.0.0.1`.
+
+| `remote.mode` | Use it for | How it works |
+| --- | --- | --- |
+| `off` | default | Unix socket plus the authenticated loopback API only |
+| `tailscale` | **recommended** | Binds the tailnet IP (`tailscale ip -4`). Only your tailnet can connect, and each device still needs a paired token |
+| `direct` | **not recommended** | Binds a LAN or public IP over TLS. Needs `remote.direct.accept_risk: true` |
+
+Phones that are not on your tailnet can use a self-hosted
+[end-to-end encrypted relay](docs/public/relay.md) instead (`remote.relay.url`, `handup
+pair --relay`). The relay works with any `remote.mode`, including `off`.
+
+A remote listener accepts paired device tokens and named
+[submit tokens](docs/public/integrations/tokens.md). The loopback bearer token in
+`$XDG_STATE_HOME/handup/token` never works on it. Device tokens view or decide
+but cannot create requests or upload; submit tokens create, upload and read only
+their own requests. Rules, the audit log, pairing, and device and token
+management stay local-only.
+
+## Tailscale (recommended)
+
+```sh
+handup config set remote.mode tailscale
+handup serve --foreground   # or restart the user service
+handup pair                 # scan the QR code with your phone
+```
+
+The daemon discovers the tailnet IP with the read-only `tailscale ip -4` (or
+set `remote.bind` to it) and serves the web UI and API on `remote.port`
+(default 7466). HTML previews use a second port, `remote.preview_port`
+(default 7467), which is a separate browser origin. Traffic between tailnet
+devices is encrypted by WireGuard.
+
+handup never runs `tailscale serve`, `tailscale funnel`, or any other command
+that changes your Tailscale configuration. If you want a browser-trusted HTTPS
+name, set it up yourself and tell handup the URL so pairing links and
+Host/Origin checks use it:
+
+```sh
+tailscale serve --bg --https=8443 http://100.x.y.z:7466   # you run this, not handup
+handup config set remote.public_url https://your-host.your-tailnet.ts.net:8443
+```
+
+Never use `tailscale funnel` for handup: it publishes the listener to the internet.
+
+## Pairing
+
+`handup pair [--scope view|decide] [--name NAME] [--json]` prints a QR code in
+the terminal. The desktop app shows the same code under **Pair a phone** (see
+[Desktop app](docs/public/desktop.md#pair-a-phone)); both use the local-only
+`POST /v1/pair`, which answers 409 while remote access is off. The QR code encodes:
+
+```text
+http://100.x.y.z:7466/pair#code=<32 hex chars>&scope=decide&fp=&name=
+```
+
+- The one-time code (128 random bits) sits in the URL **fragment**, so it never reaches server or
+  proxy logs. It expires after 2 minutes, works once, and is compared in constant time.
+- `fp` is the SHA-256 fingerprint of the TLS certificate when TLS is on. Compare
+  it with your browser's certificate details before you pair.
+- The pairing page trades the code (`POST /v1/pair/exchange`) for a device token.
+  Browsers receive it as an `HttpOnly; SameSite=Strict` cookie (`Secure` over
+  HTTPS) that page scripts cannot read. API clients can request the token in
+  the JSON response instead.
+
+Tokens are `hu_` plus 64 hex characters (256 random bits). The daemon stores
+only their SHA-256 digest, with the device name, scope, creation time, and last
+use.
+
+### Scopes
+
+| Scope | Can |
+| --- | --- |
+| `view` | List and show requests, browse decision history and each request's audit trail, fetch blobs and previews, see YOLO mode, and receive live events. The web UI is read-only. The global audit log (`/v1/log`) stays local |
+| `decide` | Everything `view` can, plus approve, deny, answer, cancel, send server-built test requests/questions (`POST /v1/requests/test`), and change [YOLO mode](docs/public/rules.md#yolo-mode) |
+| `submit` | Create requests and upload blobs; show, wait for, and cancel only requests created by that token. Never decide, list, send synthetic tests, or read/change YOLO mode. See [integration tokens](docs/public/integrations/tokens.md) |
+
+Scoped allow (session, project, or always rules) writes local policy, so it is
+available only on the machine itself. Remote decisions are recorded in the audit log as
+`device:<id>`.
+
+`POST /v1/requests/test` is available on the remote HTTP listener and encrypted
+relay tunnel as well as locally. Only paired `decide` devices can call it
+remotely; `view` devices and submit tokens get 403. Unlike arbitrary request
+submission, it accepts no caller-supplied content. See the
+[test request contract](docs/public/cli.md#test-requests).
+
+### Managing devices
+
+```sh
+handup devices list          # id, scope, name, enabled/disabled, push state, timestamps
+handup devices list --json   # includes enabled and push booleans
+handup devices disable ID    # pause access and push without unpairing
+handup devices enable ID     # resume with the same device token
+handup devices mute ID       # stop push notifications, keep API/event access
+handup devices unmute ID     # resume push notifications
+handup devices scope ID view # read-only; use decide to restore decision access
+handup devices revoke ID     # immediate, permanent unpairing
+```
+
+Disabling rejects device requests and preview links with HTTP 403
+(`device disabled`) and closes open event WebSockets with code 4403. Reconnects
+are refused while disabled. Decisions already in flight cannot commit after
+disable. Push delivery stops, but the stored push token and relay pairing are
+kept; enabling resumes access and push without registering or pairing again.
+
+Muting stops FCM delivery and relay wake-ups without closing event streams or
+blocking API access. Push defaults to on, including for existing pairings.
+Scope changes apply to the next call, including calls on already-open relay
+connections; a device downgraded to `view` cannot decide.
+
+Revocation takes effect on the next request (HTTP 401), and open event
+WebSockets for that device close at once with close code 4401. A decision or
+cancel commits only if the device still exists with `decide` scope inside the
+same database transaction, so a request that is already in flight cannot
+approve after its device is revoked. Request bodies are read only after the
+token, CSRF, and scope checks pass, and must arrive within 10 seconds (1 MiB
+max). Each remote listener serves at most 64 connections at once, and open
+event WebSockets count toward that limit. Connections that send no request
+headers within 10 seconds (including the TLS handshake and idle keep-alive
+connections) are closed. The API equivalents are local-only:
+`GET /v1/devices`, `PATCH /v1/devices/{id}` with any combination of
+`{"enabled": false, "push": false, "scope": "view"}`, and `DELETE /v1/devices/{id}`.
+PATCH requires at least one field, accepts only `view` or `decide` scope, and
+returns the updated device, 404 for an unknown id, or 400 for an invalid/empty
+body or a scope change to a submission token. Unknown fields are rejected. None of these
+management routes are available through the remote listener or relay tunnel.
+
+## Web UI
+
+The remote listener serves the built `ui/` (from `remote.web_dir`,
+`$HANDUP_WEB_DIR`, `<prefix>/share/handup/web`, or the source tree's `ui/dist`;
+build it with `make ui-build`). A `view` device sees a read-only inbox.
+
+The browser UI never executes command requests, even on the same computer as
+the daemon. **Run** and **Run as admin** exist only in the local desktop app;
+phone/web/relay clients only review and decide. The daemon rejects
+`run_result` from paired-device credentials, including relay connections.
+
+The header's **Settings** button opens collapsible **Appearance**, **Decisions**,
+**Read aloud**, and **Test** groups. **Decisions** contains the undo window,
+approve button side, and **Swipe cards** on narrow screens; window focus and
+**Show output after Run** are desktop-app-only. **Test** offers **Send test request** and **Send test question**
+to the connected daemon (requires `decide` scope).
+**Settings → Appearance → Layout**, beside **Density**, opens a page with previews: **Split**
+(default) puts the list beside the request, or shows list then request on
+phones; **Stacked** puts the list above the request on any screen; **Focus**
+shows one request at a time; **Rail** uses an icon column with risk dots on
+desktop or a horizontal chip strip on phones. Focus and Rail offer **‹ ›**,
+**N of M**, and **Queue** to open the full list sheet; desktop Focus also shows
+**Next: title**. Density applies inside every layout.
+
+Drag the Split or Stacked divider with a mouse or touch to resize, including
+on phones. Arrow keys adjust a focused divider; double-click, double-tap, or
+Enter resets it. The Layout page offers **Reset sizes** after resizing.
+Split width is 240–640px (default 380px); Stacked height is 15–75% (default 38%).
+Layout and pane sizes save per device in the browser's localStorage, not the
+daemon config; see the [desktop guide](docs/public/desktop.md) for the other Settings controls.
+
+Browser protections on the remote listener:
+
+- A **Host** allow-list (the listener address, `remote.public_url`, and
+  `remote.web_origin`) blocks DNS rebinding.
+- An **Origin** allow-list applies to every request that sends an Origin.
+  Cookie-authenticated state changes and WebSocket upgrades must send an
+  allowed Origin.
+- A **CSRF** check: cookie-authenticated `POST` requests must also send
+  `x-handup-csrf`. Its value is derived from the token and exposed to page
+  scripts through the non-HttpOnly `handup_csrf` cookie.
+- A strict CSP on the app (`default-src 'self'`, `frame-ancestors 'none'`).
+- HTML and file previews load from the separate preview port using short-lived
+  capabilities bound to the device and request. They get the same sandbox and
+  CSP as the desktop app: `sandbox="allow-scripts"` without
+  `allow-same-origin`, and network blocked unless `previews.html.allow_network`.
+  A revoked or disabled device's preview links stop working.
+- Blobs (`/v1/blobs/{hash}`) are agent-supplied, so they never run as the app
+  origin. Every response carries `Content-Security-Policy: sandbox;
+  default-src 'none'` and `X-Content-Type-Options: nosniff`. Anything other
+  than passive images, audio, video, PDF, and plain text (for example HTML,
+  SVG, or XML) is sent with `Content-Disposition: attachment`, and the web UI's
+  Open button downloads those types instead of opening a tab.
+
+### Read aloud
+
+In a browser with Web Speech synthesis, the speaker button (**Read aloud**) in
+a pending request's header reads the agent, title, shortened summary, risk,
+questions and, by default, numbered options—not previews, diffs or tool input.
+Click **Stop reading** to stop. Changing or deciding the request or leaving
+its view stops playback; History has no read-aloud button.
+
+**Settings → Read aloud** saves voice, **Speed**, **Pitch**, **Read options** and
+scope per device; **Test voice** plays a sample. Search the voice picker by name,
+language name or code, or **Natural**/**Online** labels. **This request** is the default;
+**Whole queue** reads the visible pending requests after the open one, selecting
+each in turn. **Read new requests** is off by default; when enabled, it can read
+a newly arrived request while handup is open and idle, but not the requests
+already waiting at first load. Browsers may require a user gesture before
+speech can start.
+
+The web UI uses the browser's Web Speech backend and available voices; the
+native [desktop](docs/public/desktop.md#read-aloud) and [Android](docs/public/mobile.md#read-aloud) apps
+use `tauri-plugin-tts` instead. Unsupported browsers hide the request button
+and explain the limitation in Read aloud settings. On Linux, install
+`speech-dispatcher` and a voice such as `espeak-ng` if the browser offers no
+voices. Online voices send the spoken text to the voice provider.
+
+## Direct mode (not recommended)
+
+```yaml
+remote:
+  mode: direct
+  bind: 192.168.1.20          # LAN address; plaintext non-loopback binds are refused
+  direct: { accept_risk: true }
+  tls: { enabled: true }      # self-signed cert generated and persisted; or set cert + key
+```
+
+The daemon refuses to start in direct mode without `accept_risk: true` and TLS,
+and it refuses plaintext listeners outside loopback and the tailnet. When `tls.cert` and
+`tls.key` are empty, handup generates a self-signed certificate under the state
+directory, reuses it across restarts, and pins its fingerprint in the pairing
+QR code. At every start the daemon prints this warning, `handup doctor` reports
+it, and every UI shows it as a persistent red banner (`remote_warning` in
+`GET /v1/ui-settings`):
+
+> Anyone who can reach this port and obtain a device token can approve arbitrary actions your agents take, including running commands on this machine. Prefer `tailscale` mode. Never port-forward without TLS; use short token lifetimes and revoke unused devices.
+
+### Rate limits
+
+In every remote mode, and per peer IP:
+
+- 5 pairing exchanges per minute. Every attempt counts, even before its body arrives.
+- 10 failed authentications per minute. After that, requests get HTTP 429 until the window passes.
+
+## Notification backends
+
+`notifications.backends` accepts `desktop`, `ntfy`, and `fcm`. Every
+backend follows `on_new_request`, `on_high_risk` (high risk bypasses
+`quiet_hours`), `on_expiring`, `remind_every`, and `quiet_hours`. Delivery runs
+in the background with bounded timeouts (10 seconds; FCM 15 seconds per HTTP call), and failures are logged without
+blocking the queue.
+Requests without a deadline do not emit `on_expiring` notifications.
+`remind_every` (off by default) re-notifies while they wait for the human.
+
+```yaml
+notifications:
+  backends: [desktop, ntfy]
+  ntfy: { server: https://ntfy.sh, topic: "", token_env: HANDUP_NTFY_TOKEN, include_content: false }
+```
+
+**fcm** delivers Android native notifications to registered paired devices.
+Configure `notifications.fcm.service_account` with a Firebase service-account
+JSON key path and `notifications.fcm.payload` with `title` (default) or `wake`
+(generic title). Payloads contain only request id, risk, and redacted title,
+never previews. Decide/cancel/expire also send cancellation messages, independent
+of quiet hours. Invalid/unregistered provider tokens are removed automatically.
+The app registers or removes its own token at `PUT` / `DELETE
+/v1/devices/self/push` with device-token auth (view or decide scope). Device
+revocation removes registration. See [Android notifications](docs/public/mobile.md#notifications)
+for Firebase project and APK setup.
+
+**ntfy** publishes JSON to `<server>/` with the topic, the redacted title, and
+the deep link `handup://r/<id>` as the message. When remote access is on, the
+click URL opens `<web UI>/#/r/<id>`. Priorities: 5 (urgent) for high risk, 4
+for medium, 3 for low. Preview content is never sent unless
+`include_content: true`, which adds the summary and inline preview text. If the
+environment variable named by `token_env` is set, its value is sent as a bearer
+token. handup refuses to send that token over plaintext `http://` to anything
+other than loopback: the notification is skipped and a warning is logged. Use
+a hard-to-guess topic, or better, a self-hosted server. Anyone who knows a
+public topic can read it.
+
+Lifecycle webhooks and local commands are configured separately under top-level
+`hooks:`. They run independently of notification policies and also receive
+decisions, cancellations, and expirations. See [event hooks](docs/public/integrations/hooks.md)
+for signing, templates, migration, and automation recipes. The old
+`notifications.webhook` configuration and `webhook` notification backend are
+removed; loading them reports a migration hint.
+
+## Keys
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `remote.mode` | `off` | `off`, `tailscale`, or `direct`; restart the daemon to apply |
+| `remote.bind` | empty | Listener IP; tailscale discovers it when empty |
+| `remote.port` | `7466` | API and web UI |
+| `remote.preview_port` | `7467` | Separate preview origin |
+| `remote.public_url` | empty | Externally visible origin for pairing links and Host checks |
+| `remote.web_dir` | empty | Built UI directory |
+| `remote.web_origin` | empty | Extra trusted browser origin |
+| `remote.tls.enabled` | `false` | TLS on the remote listener (required for direct) |
+| `remote.tls.cert`, `remote.tls.key` | empty | Your PEM cert and key; empty generates a self-signed pair |
+| `remote.direct.accept_risk` | `false` | Required for direct mode |
+
+The Android app is a native client of the same remote listener; see
+[mobile.md](docs/public/mobile.md). Native FCM push and the end-to-end encrypted
+[relay](docs/public/relay.md) (FCM/APNs wake-ups) are available; native APNs delivery from
+the daemon is not.
+
+---
+
+Source: [docs/public/rules.md](docs/public/rules.md)
+
+# Rules, scoped allow, presence, and terminal inbox
+
+Rules live beside the selected config file: `~/.config/handup/rules.yaml` on Linux by default. `--config /tmp/handup/config.yaml` or `HANDUP_CONFIG` also isolates the rules file. The daemon validates the entire file before starting and reloads changed contents before evaluating new requests. Invalid YAML, unknown fields, invalid regex/globs, duplicate IDs, and empty matchers are errors; no approval occurs from an invalid file.
+
+```yaml
+- id: safe-status
+  match: {agent: claude-code, kind: command, command: '^git status$'}
+  action: approve
+- id: destructive
+  match: {command: 'rm -rf|sudo|curl .*\| *sh'}
+  action: ask
+  risk: high
+- id: scratch
+  match: {cwd: '~/repos/scratch/**'}
+  action: approve
+```
+
+Rules are evaluated top to bottom; the **first matching rule wins**, including `ask`. All fields in a matcher must match. Supported fields are `agent`, `kind`, `command` (Rust regex), `cwd` and `repo` (globs, with `~` expanded using the daemon's HOME), `tool`, `risk`, and `session`. Missing source fields do not match. `command` comes from command previews (shell or joined argv, outer whitespace trimmed); `tool` comes from the request's optional `tool` field, or `input.tool`/`input.tool_name`. Actions are `approve`, `deny`, and `ask`. Optional `risk` overrides request risk; optional `feedback` is valid only for deny. `ask` leaves the request pending and only adjusts risk.
+
+Auto decisions use the normal hash-bound decision path and append-only audit. Their decision metadata includes `decided_by: rule` and `rule_id`. The desktop **Auto-handled** tab shows them, and [YOLO mode](docs/public/rules.md#yolo-mode) approvals, read-only. A request decided on arrival is announced on the event stream with its final status (`request.created`, then `request.decided`), never as pending. API callers can use `GET /v1/requests?decided_by=rule` and `GET /v1/log?limit=100`; `handup log --json` prints the newest audit entries first, including rule IDs.
+
+Rule, scoped-allow and YOLO approvals do not execute request commands.
+Desktop **Run** requires an explicit human click (or `r`) on a pending request and
+returns `run_result`; an agent must not run that command again. See
+[Desktop](docs/public/desktop.md#run-a-command).
+
+## YOLO mode
+
+```sh
+handup yolo on --for 1h   # auto-approve new low and medium risk requests for an hour
+handup yolo hard          # every risk, including high, until turned off
+handup yolo off
+handup yolo               # YOLO: on (low+medium risk) until 16:05; --json for {mode, until}
+```
+
+YOLO mode is a runtime daemon switch, off by default and never persisted: a daemon restart turns it off. `on` approves newly arriving requests with risk `low` or `medium`; `hard` approves every risk. `--for` (or the duration in the UI's header switch) turns it off again automatically; without it, it stays on until turned off. Requests already pending when you turn it on are not touched.
+
+Rules run first and win: a request matched by any rule (`approve`, `deny`, or `ask`) is handled by that rule, so a `deny` or `ask` rule still stops a request under YOLO. Requests that need a human answer always stay pending: questions (`kind: question`), forms (`input.fields`), free-text answers (`input.allow_free_text`), a feedback policy (`input.feedback: required_on_deny`), and requests with several (or no) approve options.
+
+YOLO approvals take the normal decision path with `decided_by: yolo` in the decision and audit (`GET /v1/requests?decided_by=yolo`), appear in the **Auto-handled** tab, and count as `auto` in history. The API is `GET /v1/yolo` and `PUT /v1/yolo` with `{"mode": "on", "for": "1h"}`; every change emits a `yolo.changed` event (`{type, yolo: {mode, until}}`) so all open clients update live, and the daemon log records who changed it. Paired `view` devices can see the mode; changing it needs `decide` scope. On the phone app, turning on Hard YOLO asks for the same biometric confirmation as a high-risk approval. Agents must never turn YOLO on: it is a human decision.
+
+## Scoped allow
+
+```sh
+handup approve ID --scope session
+handup approve ID --scope project
+handup approve ID --scope always
+handup rules list
+handup rules test request.json    # or an existing request ID
+handup rules rm RULE_ID
+handup log --json --limit 50
+```
+
+The decision API accepts optional `scope: session|project|always` on approvals. Session scope matches the exact agent and session and remains in daemon memory (cleared on restart). Project scope matches the exact agent and escaped repo path, not neighboring repos. Always scope matches the agent and normalized command prefix, or the exact tool if no command exists. Plain prefixes normalize whitespace and permit additional plain arguments (letters, digits, `_./=:@%+,-`), never shell operators/substitution/quotes. Commands already containing shell syntax are matched exactly. It intentionally does **not** widen to the first executable: `git status; rm -rf ...` must not inherit approval for `git status`. Generated IDs start with `scope-`. Project/always rules are atomically saved in rules.yaml, after existing rules so earlier deny/ask policies retain precedence. Scoped allow requires the relevant source fields, and cannot be combined with edited input. Sources remain self-declared/unverified, not authentication boundaries.
+
+Desktop action buttons expose all three scopes; `s` allows for session and `Shift+P` in project (plain `p` widens the preview), within the held undo window. Agents should not grant themselves scopes: these are human decisions.
+
+## Presence routing
+
+```yaml
+presence:
+  mode: always       # default; away only routes while idle
+  idle_after: 2m
+```
+
+`GET /v1/presence` reports mode, backend, `idle_ms`, `route_to_handup`, and an optional warning. On Linux, handup tries ScreenSaver `GetSessionIdleTime`, then logind `IdleHint`/`IdleSinceHintMonotonic`. These use D-Bus without additional system packages. The compositor/session must maintain these signals; a Hyprland installation without a ScreenSaver provider should configure hypridle to set logind idle hints. Unknown/unreachable sources fall back to always routing, and `handup doctor` reports a warning and backend. macOS uses an `ioreg HIDIdleTime` implementation; it is not validated on the Linux development host.
+
+The Claude PermissionRequest hook consults presence before submitting. When the user is present in away mode, it emits no decision so Claude retains its native prompt. Missing presence support/unreachable daemon never produces an allow. CLI/MCP requests always enter the queue; only integrations with a native fallback use presence routing.
+
+## Terminal inbox
+
+`handup inbox` requires stdin and stdout TTYs (otherwise exit 4). It uses a split list/detail view, WebSocket updates, immutable text blob previews, colored diffs, and raw metadata fallbacks for binary/media/HTML previews. HTML is displayed as text, never executed. Long text previews are capped at 256 KiB.
+
+Keys: `j/k` or arrows move; `a` approves; `d` opens a feedback prompt; `1–9` selects a custom option; `s/p` grant session/project allow; `u` cancels a held decision; `/` filters titles; `?` toggles help; PageUp/PageDown scroll detail; `q` quits. Enter submits feedback/filter and Esc cancels the prompt. Decisions send the displayed content_hash after `decisions.undo_window` (default 5s); approvals with 0s are immediate, while denies retain 3s undo. Quit waits for a held decision or requires undo, preventing silent loss of a staged decision. A daemon disconnect exits with an error; restart inbox to reconnect.
+
+---

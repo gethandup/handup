@@ -1,0 +1,12 @@
+{
+  "title": "Review audio sample",
+  "previews": [
+    {
+      "type": "audio",
+      "blob": "sha256:56d4af65701c26df20bd4021eda95b6e830348ce3a746086079fe89285548dc9",
+      "mime": "audio/wav",
+      "name": "audio.wav",
+      "size": 16044
+    }
+  ]
+}

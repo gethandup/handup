@@ -1,0 +1,728 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EventEnvelope",
+  "type": "object",
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/EventData"
+    },
+    "id": {
+      "description": "Event identifier (ULID), distinct from the request identifier.",
+      "type": "string"
+    },
+    "time": {
+      "description": "Event time in RFC3339 UTC.",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/EventType"
+    },
+    "v": {
+      "description": "Envelope version, currently 1.",
+      "type": "integer",
+      "format": "uint8",
+      "maximum": 255,
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "v",
+    "type",
+    "id",
+    "time",
+    "data"
+  ],
+  "$defs": {
+    "Answer": {
+      "description": "The human's answer to one question.",
+      "type": "object",
+      "properties": {
+        "selected": {
+          "description": "Chosen option labels; at most one unless the question is `multi`.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "text": {
+          "description": "Typed answer; only when the question allows free text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Command": {
+      "type": "object",
+      "properties": {
+        "argv": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "env_keys": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "shell": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "Decision": {
+      "type": "object",
+      "properties": {
+        "content_hash": {
+          "type": "string"
+        },
+        "decided_at": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "default": null,
+          "minimum": 0
+        },
+        "decided_by": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "feedback": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fields": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecisionFields"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "option": {
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Outcome"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rule_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_result": {
+          "description": "The desktop app ran the request's command for the human: this is how\nit ended. Present only on approved command requests decided by Run.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scope": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "option",
+        "content_hash"
+      ]
+    },
+    "DecisionFields": {
+      "description": "Decision `fields`. Question requests carry only `answers`, keyed by question\nid; other requests carry answers to `input.fields` or edited tool input.",
+      "type": "object",
+      "properties": {
+        "answers": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Answer"
+          }
+        }
+      }
+    },
+    "Email": {
+      "description": "An email draft for review. handup never sends it: on approval the agent\nsends the draft (or the edited `decision.fields`) with its own mail tool.",
+      "type": "object",
+      "properties": {
+        "attachments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EmailAttachment"
+          }
+        },
+        "bcc": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "body": {
+          "description": "Message body as Markdown (plain text renders as-is).",
+          "type": "string",
+          "default": ""
+        },
+        "body_html": {
+          "description": "Optional HTML alternative; rendered only in the sandboxed HTML preview frame.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cc": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "date": {
+          "description": "Date shown in the header, as the agent formats it (e.g. RFC 2822).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "in_reply_to": {
+          "description": "The message this draft replies to, shown collapsed under the body.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EmailQuote"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reply_to": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject": {
+          "type": "string",
+          "default": ""
+        },
+        "to": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "EmailAttachment": {
+      "type": "object",
+      "properties": {
+        "blob": {
+          "description": "Uploaded blob hash (`POST /v1/blobs`) so the reviewer can open the file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "EmailQuote": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "description": "Plain text of the earlier message (or a snippet of it).",
+          "type": "string",
+          "default": ""
+        },
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "EventContent": {
+      "type": "object",
+      "properties": {
+        "previews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Preview"
+          }
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "previews"
+      ]
+    },
+    "EventData": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request": {
+          "$ref": "#/$defs/EventRequest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "request"
+      ]
+    },
+    "EventRequest": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EventContent"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deep_link": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "risk": {
+          "$ref": "#/$defs/Risk"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "risk",
+        "source",
+        "status",
+        "url",
+        "deep_link"
+      ]
+    },
+    "EventType": {
+      "type": "string",
+      "enum": [
+        "request.created",
+        "request.decided",
+        "request.expired",
+        "request.cancelled",
+        "request.reminder",
+        "request.expiring"
+      ]
+    },
+    "Outcome": {
+      "type": "string",
+      "enum": [
+        "approve",
+        "deny"
+      ]
+    },
+    "Preview": {
+      "type": "object",
+      "properties": {
+        "after_blob": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "before_blob": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blob": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Command"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "email": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Email"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entry": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/PreviewFile"
+          }
+        },
+        "inline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lang": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "$ref": "#/$defs/PreviewType"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    "PreviewFile": {
+      "type": "object",
+      "properties": {
+        "blob": {
+          "type": "string"
+        },
+        "lang": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "mime": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "blob",
+        "mime",
+        "size"
+      ]
+    },
+    "PreviewType": {
+      "type": "string",
+      "enum": [
+        "text",
+        "markdown",
+        "code",
+        "diff",
+        "files",
+        "command",
+        "json",
+        "html",
+        "image",
+        "video",
+        "audio",
+        "file",
+        "pdf",
+        "email"
+      ]
+    },
+    "Risk": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "RunResult": {
+      "description": "Outcome of running a command request in the handup desktop app. The\ncommand already ran: an agent must not run it again. Output is the\nredacted tail of each stream.",
+      "type": "object",
+      "properties": {
+        "duration_ms": {
+          "description": "Wall time from start to exit, in milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 0,
+          "minimum": 0
+        },
+        "elevated": {
+          "description": "Ran with administrator rights (pkexec on Linux, osascript on macOS).",
+          "type": "boolean",
+          "default": false
+        },
+        "error": {
+          "description": "Why it did not finish normally: timeout, cancellation, signal, or a\nstart failure (for example pkexec missing or authentication refused).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exit_code": {
+          "description": "Process exit status; absent when it never started or a signal ended it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "stderr_tail": {
+          "description": "Last bytes of standard error (at most 64 KiB), credentials redacted.",
+          "type": "string",
+          "default": ""
+        },
+        "stdout_tail": {
+          "description": "Last bytes of standard output (at most 64 KiB), credentials redacted.",
+          "type": "string",
+          "default": ""
+        },
+        "truncated": {
+          "description": "Earlier output was dropped from either tail.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "Source": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "host": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "integration": {
+          "description": "Server-verified integration token name; caller values are overwritten.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "repo": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "session": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "session_title": {
+          "description": "Display-only session name; scoped rules always use the session ID.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "denied",
+        "answered",
+        "expired",
+        "cancelled"
+      ]
+    }
+  }
+}

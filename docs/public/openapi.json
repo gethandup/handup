@@ -1,0 +1,2521 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "handup API",
+    "description": "",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "version": "1"
+  },
+  "paths": {
+    "/v1/blobs": {
+      "post": {
+        "tags": [],
+        "operationId": "upload",
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds previews.max_file_bytes"
+          }
+        }
+      }
+    },
+    "/v1/blobs/{hash}": {
+      "get": {
+        "tags": [],
+        "operationId": "blob",
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Blob"
+          },
+          "206": {
+            "description": "Byte range"
+          },
+          "410": {
+            "description": "File no longer stored (history.files_keep_days)"
+          },
+          "416": {
+            "description": "Unsatisfiable range"
+          }
+        }
+      }
+    },
+    "/v1/devices": {
+      "get": {
+        "tags": [
+          "crate::remote"
+        ],
+        "description": "Local only. Paired devices (token hashes are never returned).",
+        "operationId": "devices_list",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Device"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/devices/self/push": {
+      "put": {
+        "tags": [
+          "crate::remote"
+        ],
+        "description": "Remote listener and relay tunnel only. Requires a paired device bearer token with either view or decide scope.",
+        "operationId": "push_register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushRegistration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Registered"
+          },
+          "400": {
+            "description": "Invalid registration"
+          },
+          "401": {
+            "description": "Device token required"
+          },
+          "403": {
+            "description": "Device revoked"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::remote"
+        ],
+        "description": "Remote listener and relay tunnel only. Requires a paired device bearer token with either view or decide scope.",
+        "operationId": "push_remove",
+        "responses": {
+          "200": {
+            "description": "Removed"
+          },
+          "401": {
+            "description": "Device token required"
+          },
+          "403": {
+            "description": "Device revoked"
+          }
+        }
+      }
+    },
+    "/v1/devices/{id}": {
+      "delete": {
+        "tags": [
+          "crate::remote"
+        ],
+        "description": "Local only. Revokes a device immediately: later requests get 401 and its open event WebSockets close.",
+        "operationId": "device_revoke",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoked"
+          },
+          "404": {
+            "description": "Unknown device"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "crate::remote"
+        ],
+        "description": "Local only. Update enabled, push, or scope (view or decide); at least one field is required. Muting push preserves API/event access. Scope changes apply immediately. Disabled devices get 403 and their event WebSockets close with code 4403.",
+        "operationId": "device_update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Device"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or empty body; submit scope cannot be changed"
+          },
+          "404": {
+            "description": "Unknown device"
+          }
+        }
+      }
+    },
+    "/v1/events": {
+      "get": {
+        "tags": [],
+        "operationId": "events",
+        "responses": {
+          "101": {
+            "description": "WebSocket events: {type, request} for request.created (carrying the final status, so auto-handled requests arrive already decided), request.decided, request.expired and request.cancelled; request.updated when a pending request's desktop run starts or its claim is released (`request.run`); {type: yolo.changed, yolo} when YOLO mode changes or its timer ends. Closed immediately when the calling device is revoked (4401) or disabled (4403)"
+          }
+        }
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "tags": [],
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Daemon healthy"
+          }
+        }
+      }
+    },
+    "/v1/history": {
+      "get": {
+        "tags": [],
+        "description": "Resolved requests, newest resolution first, with cursor pagination. history.keep_days/max_requests and best-effort history.max_bytes bound retained requests; history.files_keep_days can expire files while keeping history.",
+        "operationId": "history",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "next_cursor of the previous page",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 50, maximum 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "description": "approved, denied, expired, cancelled, or auto (rule or YOLO decision)",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/HistoryOutcome"
+            }
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Only requests with a preview of this type",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PreviewType"
+            }
+          },
+          {
+            "name": "has",
+            "in": "query",
+            "description": "attachments: any file, files, image, pdf, audio, or video preview",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/HistoryHas"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "description": "Request kind: command, edit, review, question, or custom",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Kind"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Case-insensitive search in title, summary, and cwd",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/History"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid filter or cursor"
+          }
+        }
+      }
+    },
+    "/v1/log": {
+      "get": {
+        "tags": [],
+        "operationId": "audit_log",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openapi.json": {
+      "get": {
+        "tags": [],
+        "operationId": "openapi",
+        "responses": {
+          "200": {
+            "description": "OpenAPI v1"
+          }
+        }
+      }
+    },
+    "/v1/pair": {
+      "post": {
+        "tags": [
+          "crate::remote"
+        ],
+        "description": "Local only (unix socket or loopback bearer). Issues a one-time pairing code for `handup pair`. With `relay: true`, opens a fresh relay channel and returns a relay pairing link that carries the channel, the device's relay credential, the daemon's Noise public key, and the code.",
+        "operationId": "pair_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairCode"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Remote access (or the relay) is off or has no reachable base URL"
+          },
+          "502": {
+            "description": "The relay refused or could not be reached"
+          }
+        }
+      }
+    },
+    "/v1/pair/exchange": {
+      "post": {
+        "tags": [
+          "crate::remote"
+        ],
+        "description": "Remote listener only. Trades a one-time pairing code for a device token. Rate-limited per peer IP; every attempt counts.",
+        "operationId": "pair_exchange",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairExchange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Paired"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid, used, or expired code"
+          },
+          "429": {
+            "description": "Rate limited"
+          }
+        }
+      }
+    },
+    "/v1/presence": {
+      "get": {
+        "tags": [],
+        "operationId": "presence",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresenceStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/requests": {
+      "get": {
+        "tags": [],
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "decided_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Request"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Request"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "413": {
+            "description": "Preview exceeds previews.max_file_bytes"
+          }
+        }
+      }
+    },
+    "/v1/requests/test": {
+      "post": {
+        "tags": [],
+        "description": "Send a fixed synthetic approval or question to try the inbox. Missing body or kind defaults to approval; no client-supplied request content is accepted.",
+        "operationId": "create_test",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TestRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Request"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid test request kind"
+          },
+          "403": {
+            "description": "Remote device without decide scope or submit token"
+          }
+        }
+      }
+    },
+    "/v1/requests/{id}": {
+      "get": {
+        "tags": [],
+        "operationId": "show",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Request"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/v1/requests/{id}/audit": {
+      "get": {
+        "tags": [],
+        "description": "Audit events of one request, oldest first (created, decided, expired, cancelled), with the deciding device's name when it is still paired.",
+        "operationId": "request_audit",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEntry"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/v1/requests/{id}/cancel": {
+      "post": {
+        "tags": [],
+        "operationId": "cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Request"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not pending"
+          }
+        }
+      }
+    },
+    "/v1/requests/{id}/decision": {
+      "post": {
+        "tags": [],
+        "operationId": "decide",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Request"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not pending"
+          },
+          "412": {
+            "description": "Content hash mismatch"
+          }
+        }
+      }
+    },
+    "/v1/requests/{id}/run": {
+      "post": {
+        "tags": [],
+        "operationId": "run_claim",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunStart"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Claimed: `run` is set and no other decision, expiry, or timeout applies until the desktop app reports the result, the request is cancelled, or the lease lapses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Request"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not pending, or already running"
+          },
+          "412": {
+            "description": "Content hash mismatch"
+          }
+        }
+      }
+    },
+    "/v1/requests/{id}/run/release": {
+      "post": {
+        "tags": [],
+        "operationId": "run_release",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run claim dropped (the command never started)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Request"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not pending"
+          }
+        }
+      }
+    },
+    "/v1/requests/{id}/wait": {
+      "get": {
+        "tags": [],
+        "operationId": "wait",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timeout",
+            "in": "query",
+            "description": "Long poll duration, default 25s, maximum 60s",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Request"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/rules": {
+      "get": {
+        "tags": [],
+        "operationId": "rules_list",
+        "responses": {
+          "200": {
+            "description": "Ordered rules including session rules"
+          }
+        }
+      }
+    },
+    "/v1/rules/test": {
+      "post": {
+        "tags": [],
+        "operationId": "rules_test",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "First matching rule, or null"
+          }
+        }
+      }
+    },
+    "/v1/rules/{id}/remove": {
+      "post": {
+        "tags": [],
+        "operationId": "rules_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rule removed"
+          }
+        }
+      }
+    },
+    "/v1/tokens": {
+      "get": {
+        "tags": [],
+        "operationId": "tokens_list",
+        "responses": {
+          "200": {
+            "description": "Local only: metadata, never secrets or hashes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IntegrationToken"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "tokens_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Local only: new submit secret (shown once) and integration metadata"
+          },
+          "400": {
+            "description": "Invalid name, expiry, or duplicate name"
+          }
+        }
+      }
+    },
+    "/v1/tokens/{name}": {
+      "delete": {
+        "tags": [],
+        "operationId": "tokens_revoke",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Local only: token revoked"
+          },
+          "404": {
+            "description": "Token not found"
+          }
+        }
+      }
+    },
+    "/v1/ui-settings": {
+      "get": {
+        "tags": [],
+        "operationId": "ui_settings",
+        "responses": {
+          "200": {
+            "description": "UI policy: undo window, primary action side, HTML network access, remote mode/warning, relay pairing, calling device",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiSettings"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/version": {
+      "get": {
+        "tags": [],
+        "summary": "Build of the running daemon, so clients and `handup doctor` can spot a daemon left over from an older install.",
+        "operationId": "version",
+        "responses": {
+          "200": {
+            "description": "Local only: daemon version and commit"
+          }
+        }
+      }
+    },
+    "/v1/yolo": {
+      "get": {
+        "tags": [],
+        "description": "YOLO mode: off, on (auto-approve new low and medium risk requests) or hard (every risk). Runtime only; a daemon restart turns it off.",
+        "operationId": "yolo_get",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YoloState"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "description": "Set YOLO mode, optionally `for` a duration after which it turns off. Applies to requests created afterwards; matching rules still win and requests that need a human answer (questions, fields, feedback policies, several approve options) stay pending. Emits `yolo.changed`.",
+        "operationId": "yolo_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YoloSet"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YoloState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid mode or duration"
+          },
+          "403": {
+            "description": "Remote device without decide scope"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Answer": {
+        "type": "object",
+        "description": "The human's answer to one question.",
+        "properties": {
+          "selected": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Chosen option labels; at most one unless the question is `multi`."
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Typed answer; only when the question allows free text."
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "request_id",
+          "event",
+          "actor",
+          "at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rule_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Name of the paired device when `actor` is `device:<id>` and that device is still paired."
+          }
+        }
+      },
+      "Command": {
+        "type": "object",
+        "properties": {
+          "shell": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "argv": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "default": null
+          },
+          "cwd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "env_keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          }
+        },
+        "additionalProperties": false
+      },
+      "Decision": {
+        "type": "object",
+        "required": [
+          "option",
+          "content_hash"
+        ],
+        "properties": {
+          "option": {
+            "type": "string"
+          },
+          "feedback": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fields": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DecisionFields"
+              }
+            ]
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "decided_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decided_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "outcome": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Outcome"
+              }
+            ]
+          },
+          "rule_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "run_result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunResult",
+                "description": "The desktop app ran the request's command for the human: this is how\nit ended. Present only on approved command requests decided by Run."
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "DecisionFields": {
+        "type": "object",
+        "description": "Decision `fields`. Question requests carry only `answers`, keyed by question\nid; other requests carry answers to `input.fields` or edited tool input.",
+        "properties": {
+          "answers": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Answer"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Device": {
+        "type": "object",
+        "description": "A paired remote device. The bearer token itself is never stored; only its\nSHA-256 digest is (see `remote::hash_token`).",
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "enabled",
+          "push",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "description": "`view` (read-only) or `decide` (adds decision, cancel and test requests)."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "push": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "last_seen": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "DeviceScope": {
+        "type": "string",
+        "enum": [
+          "view",
+          "decide"
+        ]
+      },
+      "DeviceUpdate": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "push": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "scope": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeviceScope"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Email": {
+        "type": "object",
+        "description": "An email draft for review. handup never sends it: on approval the agent\nsends the draft (or the edited `decision.fields`) with its own mail tool.",
+        "properties": {
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "bcc": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "reply_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "subject": {
+            "type": "string",
+            "default": ""
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Date shown in the header, as the agent formats it (e.g. RFC 2822).",
+            "default": null
+          },
+          "body": {
+            "type": "string",
+            "description": "Message body as Markdown (plain text renders as-is).",
+            "default": ""
+          },
+          "body_html": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional HTML alternative; rendered only in the sandboxed HTML preview frame.",
+            "default": null
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmailAttachment"
+            },
+            "default": []
+          },
+          "in_reply_to": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EmailQuote",
+                "description": "The message this draft replies to, shown collapsed under the body."
+              }
+            ],
+            "default": null
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmailAttachment": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "mime": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "blob": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Uploaded blob hash (`POST /v1/blobs`) so the reviewer can open the file."
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmailQuote": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "body": {
+            "type": "string",
+            "description": "Plain text of the earlier message (or a snippet of it).",
+            "default": ""
+          }
+        },
+        "additionalProperties": false
+      },
+      "History": {
+        "type": "object",
+        "description": "Retention for resolved requests (decision history). The daemon prunes at\nstart and hourly; 0 disables a cap. Pending requests are never pruned.",
+        "properties": {
+          "keep_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Delete resolved requests older than this many days (0 = no age cap).",
+            "default": 90,
+            "minimum": 0
+          },
+          "max_requests": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Keep at most this many resolved requests (0 = no count cap).",
+            "default": 2000,
+            "minimum": 0
+          },
+          "max_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Best-effort live database/WAL/blob byte cap, excluding free database pages (0 = unlimited).",
+            "default": 0,
+            "minimum": 0
+          },
+          "files_keep_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Remove files belonging only to resolutions older than N days (0 = request lifetime).",
+            "default": 0,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "HistoryHas": {
+        "type": "string",
+        "description": "Grouped history preview filter.",
+        "enum": [
+          "attachments"
+        ]
+      },
+      "HistoryItem": {
+        "type": "object",
+        "required": [
+          "outcome",
+          "resolved_at",
+          "request"
+        ],
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/HistoryOutcome"
+          },
+          "resolved_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix milliseconds when the request left `pending`.",
+            "minimum": 0
+          },
+          "request": {
+            "$ref": "#/components/schemas/Request"
+          }
+        }
+      },
+      "HistoryOutcome": {
+        "type": "string",
+        "description": "How a resolved request ended, as history shows it. `auto` is a rule or\nYOLO-mode decision; `expired` includes timeouts that auto-approved (`on_timeout: approve`).",
+        "enum": [
+          "approved",
+          "denied",
+          "expired",
+          "cancelled",
+          "auto"
+        ]
+      },
+      "IntegrationToken": {
+        "type": "object",
+        "description": "Named submission credential. Secrets and digests are never serialized.",
+        "required": [
+          "id",
+          "name",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "last_used": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "Kind": {
+        "type": "string",
+        "enum": [
+          "command",
+          "edit",
+          "review",
+          "question",
+          "custom"
+        ]
+      },
+      "OnTimeout": {
+        "type": "string",
+        "enum": [
+          "deny",
+          "approve",
+          "expire"
+        ]
+      },
+      "Option": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "outcome"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/Outcome"
+          },
+          "style": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Outcome": {
+        "type": "string",
+        "enum": [
+          "approve",
+          "deny"
+        ]
+      },
+      "PairCode": {
+        "type": "object",
+        "required": [
+          "code",
+          "url",
+          "expires_at",
+          "scope",
+          "mode"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "One-time code (single use, expires after 2 minutes)."
+          },
+          "url": {
+            "type": "string",
+            "description": "Pairing page URL; the code travels in the fragment so it never reaches server logs."
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Epoch milliseconds.",
+            "minimum": 0
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fingerprint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "TLS leaf certificate SHA-256 fingerprint when the remote listener uses TLS."
+          },
+          "mode": {
+            "type": "string"
+          }
+        }
+      },
+      "PairCreate": {
+        "type": "object",
+        "description": "Local-only: create a pairing request (body for `POST /v1/pair`).",
+        "properties": {
+          "scope": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Scope",
+                "description": "Defaults to `decide`."
+              }
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Device name; the pairing page may suggest one when empty."
+          },
+          "relay": {
+            "type": "boolean",
+            "description": "Pair through the end-to-end encrypted relay (`remote.relay.url`)\ninstead of the remote listener."
+          }
+        },
+        "additionalProperties": false
+      },
+      "PairExchange": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cookie": {
+            "type": "boolean",
+            "description": "Browser flow: set `HttpOnly` session cookies instead of returning the token."
+          }
+        },
+        "additionalProperties": false
+      },
+      "Paired": {
+        "type": "object",
+        "required": [
+          "device"
+        ],
+        "properties": {
+          "device": {
+            "$ref": "#/components/schemas/Device"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Long-lived device token (`hu_` + 64 hex). Omitted in the cookie flow."
+          },
+          "host": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "This computer's name (its hostname), so a device paired with several\ncomputers can tell them apart. Absent when unknown."
+          }
+        }
+      },
+      "PresenceStatus": {
+        "type": "object",
+        "required": [
+          "mode",
+          "backend",
+          "route_to_handup"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "backend": {
+            "type": "string"
+          },
+          "idle_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "route_to_handup": {
+            "type": "boolean"
+          },
+          "warning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Preview": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/PreviewType"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lang": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inline": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "blob": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mime": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "files": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PreviewFile"
+            }
+          },
+          "entry": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "command": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Command"
+              }
+            ]
+          },
+          "email": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Email"
+              }
+            ]
+          },
+          "before_blob": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "after_blob": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "PreviewFile": {
+        "type": "object",
+        "required": [
+          "path",
+          "blob",
+          "mime",
+          "size"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "blob": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "lang": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "PreviewType": {
+        "type": "string",
+        "enum": [
+          "text",
+          "markdown",
+          "code",
+          "diff",
+          "files",
+          "command",
+          "json",
+          "html",
+          "image",
+          "video",
+          "audio",
+          "file",
+          "pdf",
+          "email"
+        ]
+      },
+      "PushRegistration": {
+        "type": "object",
+        "required": [
+          "platform",
+          "token"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Question": {
+        "type": "object",
+        "description": "A question for the human; answered in `decision.fields.answers[id]`.",
+        "required": [
+          "id",
+          "question"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable id, unique within the request."
+          },
+          "header": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Short topic chip, e.g. \"Database\"."
+          },
+          "question": {
+            "type": "string",
+            "description": "The question itself (markdown)."
+          },
+          "multi": {
+            "type": "boolean",
+            "description": "Allow selecting several options."
+          },
+          "recommended": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Index of the suggested option.",
+            "minimum": 0
+          },
+          "allow_free_text": {
+            "type": "boolean",
+            "description": "Allow a typed answer besides (or instead of) the options."
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuestionOption": {
+        "type": "object",
+        "description": "One selectable answer to a [`Question`].",
+        "required": [
+          "label"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Answer text; unique within its question and returned in `selected`."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One-line explanation shown under the label."
+          },
+          "preview": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Markdown shown while the option is focused (code blocks allowed)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "Request": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "tool": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "callback_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Terminal-event destination; requires the daemon callbacks.allowlist."
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
+          "risk": {
+            "$ref": "#/components/schemas/Risk"
+          },
+          "previews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Preview"
+            }
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Option"
+            }
+          },
+          "input": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RequestInput"
+              }
+            ]
+          },
+          "timeout": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional positive duration, at most one year. Absent uses config; null/`none` disables expiry."
+          },
+          "on_timeout": {
+            "$ref": "#/components/schemas/OnTimeout"
+          },
+          "dedupe_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "content_hash": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Decision"
+              }
+            ]
+          },
+          "run": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunClaim",
+                "description": "Present while the desktop app runs the command (daemon-managed)."
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "RequestInput": {
+        "type": "object",
+        "description": "Request `input`. Only `kind: question` requests interpret `questions`;\nother keys (for example raw agent tool input) pass through unchanged.",
+        "properties": {
+          "feedback": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`optional` (default) or `required_on_deny`."
+          },
+          "fields": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {},
+            "description": "Generic form fields (`text`, `textarea`, `select`, `boolean`) for non-question requests."
+          },
+          "questions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Question"
+            },
+            "description": "Structured questions (1..=10) for `kind: question`; answers arrive in `decision.fields.answers`."
+          }
+        }
+      },
+      "Risk": {
+        "type": "string",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "RunClaim": {
+        "type": "object",
+        "description": "The handup desktop app on this computer is running the request's command\nright now. While the claim holds, the request stays pending but no other\ndecision, expiry, or timeout applies; cancelling it stops the run. Set and\ncleared only by the daemon.",
+        "required": [
+          "started_at",
+          "lease_until"
+        ],
+        "properties": {
+          "started_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix milliseconds when the run was claimed.",
+            "minimum": 0
+          },
+          "lease_until": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix milliseconds after which an unreported run no longer holds the\nrequest (the app crashed or lost the daemon).",
+            "minimum": 0
+          },
+          "elevated": {
+            "type": "boolean",
+            "description": "Running with administrator rights."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunResult": {
+        "type": "object",
+        "description": "Outcome of running a command request in the handup desktop app. The\ncommand already ran: an agent must not run it again. Output is the\nredacted tail of each stream.",
+        "properties": {
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Process exit status; absent when it never started or a signal ended it."
+          },
+          "stdout_tail": {
+            "type": "string",
+            "description": "Last bytes of standard output (at most 64 KiB), credentials redacted."
+          },
+          "stderr_tail": {
+            "type": "string",
+            "description": "Last bytes of standard error (at most 64 KiB), credentials redacted."
+          },
+          "duration_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Wall time from start to exit, in milliseconds.",
+            "minimum": 0
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Earlier output was dropped from either tail."
+          },
+          "elevated": {
+            "type": "boolean",
+            "description": "Ran with administrator rights (pkexec on Linux, osascript on macOS)."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why it did not finish normally: timeout, cancellation, signal, or a\nstart failure (for example pkexec missing or authentication refused)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunStart": {
+        "type": "object",
+        "description": "Body of `POST /v1/requests/{id}/run`.",
+        "required": [
+          "content_hash"
+        ],
+        "properties": {
+          "content_hash": {
+            "type": "string",
+            "description": "Content hash the window showed; the claim fails if the request changed."
+          },
+          "elevated": {
+            "type": "boolean",
+            "description": "Running with administrator rights."
+          }
+        },
+        "additionalProperties": false
+      },
+      "Scope": {
+        "type": "string",
+        "enum": [
+          "view",
+          "decide",
+          "submit"
+        ]
+      },
+      "Source": {
+        "type": "object",
+        "properties": {
+          "integration": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Server-verified integration token name; caller values are overwritten.",
+            "default": null
+          },
+          "agent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "session": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "session_title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display-only session name; scoped rules always use the session ID.",
+            "default": null
+          },
+          "cwd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "repo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "branch": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "host": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "additionalProperties": false
+      },
+      "Status": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "denied",
+          "answered",
+          "expired",
+          "cancelled"
+        ]
+      },
+      "TestRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/TestRequestKind"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TestRequestKind": {
+        "type": "string",
+        "enum": [
+          "approval",
+          "question"
+        ]
+      },
+      "TokenCreate": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "expires": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "UiSettings": {
+        "type": "object",
+        "description": "Read-only UI policy derived from daemon config; never includes secrets.",
+        "required": [
+          "undo_window_ms",
+          "primary_side",
+          "html_allow_network",
+          "remote_mode",
+          "pair_relay"
+        ],
+        "properties": {
+          "undo_window_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "`decisions.undo_window` in milliseconds (0 = approvals send instantly).",
+            "minimum": 0
+          },
+          "primary_side": {
+            "type": "string",
+            "description": "`decisions.primary_side`: right or left, the edge of decision footers\nthat holds the primary (approve) action. Apps may override it per device."
+          },
+          "html_allow_network": {
+            "type": "boolean",
+            "description": "`previews.html.allow_network`."
+          },
+          "remote_mode": {
+            "type": "string",
+            "description": "`remote.mode`: off, tailscale, or direct."
+          },
+          "remote_warning": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Direct-mode risk warning; UIs show it as a persistent banner when set."
+          },
+          "pair_relay": {
+            "type": "boolean",
+            "description": "`remote.relay.url` is set, so local callers can pair through the relay\n(`POST /v1/pair {relay: true}`). Always false for paired devices."
+          },
+          "device": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Device",
+                "description": "The calling paired device on the remote listener; null for local callers."
+              }
+            ]
+          }
+        }
+      },
+      "YoloMode": {
+        "type": "string",
+        "enum": [
+          "off",
+          "on",
+          "hard"
+        ]
+      },
+      "YoloSet": {
+        "type": "object",
+        "description": "`PUT /v1/yolo` body.",
+        "required": [
+          "mode"
+        ],
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/YoloMode"
+          },
+          "for": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional duration (`15m`, `1h`); absent = until turned off. Not valid with `off`."
+          }
+        },
+        "additionalProperties": false
+      },
+      "YoloState": {
+        "type": "object",
+        "description": "`GET`/`PUT /v1/yolo` response and the `yolo.changed` event payload.",
+        "required": [
+          "mode"
+        ],
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/YoloMode"
+          },
+          "until": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix milliseconds when the mode turns itself off; null = until turned off.",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}

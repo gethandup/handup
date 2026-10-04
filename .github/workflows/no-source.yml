@@ -1,0 +1,12 @@
+name: no-source
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  allowlist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh scripts/check-no-source.sh

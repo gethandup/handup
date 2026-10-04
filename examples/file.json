@@ -1,0 +1,12 @@
+{
+  "title": "Review file sample",
+  "previews": [
+    {
+      "type": "file",
+      "blob": "sha256:47fcef74bd0f5a115511670c775472a459168188afa7e56a940fad2b65c815b7",
+      "mime": "application/zip",
+      "name": "file.zip",
+      "size": 156
+    }
+  ]
+}

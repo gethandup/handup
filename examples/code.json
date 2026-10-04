@@ -1,0 +1,10 @@
+{
+  "title": "Review code sample",
+  "kind": "review",
+  "previews": [
+    {
+      "type": "code",
+      "inline": "print(\"review me\")\n"
+    }
+  ]
+}

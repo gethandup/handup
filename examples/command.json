@@ -1,0 +1,15 @@
+{
+  "title": "Approve harmless command",
+  "kind": "command",
+  "previews": [
+    {
+      "type": "command",
+      "command": {
+        "argv": [
+          "printf",
+          "approved\\n"
+        ]
+      }
+    }
+  ]
+}

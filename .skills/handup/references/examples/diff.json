@@ -1,0 +1,10 @@
+{
+  "title": "Review diff sample",
+  "kind": "review",
+  "previews": [
+    {
+      "type": "diff",
+      "inline": "--- a/settings\n+++ b/settings\n@@ -1 +1 @@\n-staging\n+production\n"
+    }
+  ]
+}

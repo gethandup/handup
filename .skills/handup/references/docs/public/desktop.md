@@ -4,23 +4,16 @@ The desktop app is a window onto the same local queue that `handup ls` shows.
 It talks to the daemon over the unix socket from its Rust process; the bearer
 token never reaches the web view.
 
-## Install (Linux)
+## Install
 
-Build locally with `make app-build` (needs `cargo install tauri-cli --locked`,
-pnpm, and the webkit2gtk-4.1, libayatana-appindicator, and librsvg dev
-packages). Read aloud also needs Speech Dispatcher headers and libclang:
-on Arch, install `speech-dispatcher` and `clang`; on Debian/Ubuntu, install
-`libspeechd-dev libclang-dev`. The bundles land in `target/release/bundle/`:
+Use the compiled desktop package for your OS and architecture from
+[downloads and releases](downloads.md). Linux is the primary tested platform;
+the local preview does not publish a customer desktop installer yet. No Rust
+toolchain or source build is required.
 
-- AppImage: `chmod +x handup_*.AppImage && ./handup_*.AppImage`
-- Debian/Ubuntu: `sudo apt install ./handup_*_amd64.deb`
-
-Both bundles ship the `handup` CLI next to the app. If no daemon is running,
-the app starts `handup serve`. You can also start it from the "Daemon not
-running" screen.
-
-From a checkout, `make app-install` builds the CLI and app and installs them to
-`~/.local/bin`.
+Internal CI installations include both the desktop app and the CLI. When a
+supported desktop release is installed, the app starts `handup serve` if no
+daemon is running. You can also start it from the "Daemon not running" screen.
 
 Run `handup ui` to open the inbox, or `handup ui --next` to open the compact
 quick window on the oldest pending request. Only one instance runs at a time,
@@ -312,6 +305,9 @@ HTML previews load from a separate `handup-preview:` origin inside a sandboxed
 iframe with no `allow-same-origin`. The origin's CSP blocks network access, and
 Tauri IPC is not exposed to it.
 
+Web and `mailto:` links always open in your system browser or mail app, never
+inside the handup window.
+
 On Linux, audio and video play through GStreamer. If a clip says it could not
 be decoded, install `gst-plugins-good`, `gst-plugins-bad`, and `gst-libav`
 (package names vary by distro). The Linux and Android apps load the whole clip
@@ -320,13 +316,7 @@ itself opens at once.
 
 ## macOS (untested)
 
-`make bundle-macos` on macOS produces a universal `.dmg` signed ad hoc
-(`signingIdentity: "-"`), with no Apple Developer ID. This has not been tested
-on a Mac. Gatekeeper will refuse the first launch. After copying the app to
-`/Applications`, run:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/handup.app
-```
-
-Or right-click the app and choose Open.
+No tested macOS customer release is available. Desktop configuration and
+Intel/Apple Silicon CLI targets exist, but they are not a support guarantee.
+See [platform availability](downloads.md); do not disable platform security
+checks to install an unverified build.

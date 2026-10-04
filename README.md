@@ -53,6 +53,9 @@ and global installs.
 
 ## Docs
 
+Read them on [docs.gethandup.dev](https://docs.gethandup.dev); the product site
+is [gethandup.dev](https://gethandup.dev).
+
 - [Getting started](docs/public/index.md)
 - [Agent setup](docs/public/agents/mcp.md): [Claude Code](docs/public/agents/claude-code.md),
   [Codex](docs/public/agents/codex.md), [Cursor](docs/public/agents/cursor.md),
@@ -68,7 +71,8 @@ and global installs.
 ## Issues
 
 Bug reports and feature requests are welcome in
-[Issues](https://github.com/gethandup/handup/issues). Report security problems
+[Issues](https://github.com/gethandup/handup/issues). For anything else, email
+[support@gethandup.dev](mailto:support@gethandup.dev). Report security problems
 privately; see [SECURITY.md](SECURITY.md).
 
 ## License

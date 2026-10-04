@@ -234,7 +234,7 @@ live under top-level `hooks:` ([event hooks](integrations/hooks.md)).
 detection support. It also warns when the daemon runs a different build than
 the CLI (local `GET /v1/version`) and, on Linux, lists handup processes still
 running a binary that was replaced on disk, such as a `handup mcp` server or the
-daemon left over from before `make install-global`; restart those. Daemon
+daemon left over from before a binary upgrade; restart those. Daemon
 replies ignore fields a client does not know, so older clients keep working
 against a newer daemon, while request and decision input still rejects unknown
 fields. `handup demo` creates PNG/WAV/HTML/diff/bundle/JSON/command/PDF
@@ -243,6 +243,7 @@ samples at runtime; video requires ffmpeg and is skipped when absent.
 ## Uninstall
 
 `handup uninstall` removes the installed binary and backups and preserves
-configuration. `HANDUP_INSTALL_DIR` overrides `~/.local/bin`. `install.sh`
-downloads GitLab release archives with SHA-256 verification; `HANDUP_VERSION`
-selects a version.
+configuration. `HANDUP_INSTALL_DIR` overrides `~/.local/bin`. See
+[downloads and releases](downloads.md) for customer binary availability;
+the private repository's maintainer installer is not a customer source-access
+or distribution requirement.

@@ -1,13 +1,12 @@
 # Mobile app
 
-The handup app in `apps/handup-app` also builds for Android. On a phone it has
-no daemon of its own. It is a client of the handup daemon on your computer and
-reaches it through the daemon's [remote listener](remote.md), so turn on remote
-access first (`remote.mode: tailscale` is the recommended mode).
+The handup mobile app is a companion to the daemon on your computer, not a
+daemon of its own. It connects through the [remote listener](remote.md), so
+turn on remote access first (`remote.mode: tailscale` is recommended).
 
-Android is the supported target. iOS is configured but has never been built or
-tested (see [iOS](#ios)). The app is not in any store: you build a debug APK
-and sideload it.
+Android has an internal CI-built, sideloaded pre-alpha APK. There is no
+customer APK, Play Store listing or native iOS release published by this local
+preview. See [downloads and releases](downloads.md) for availability.
 
 Phone clients never execute command requests and have no **Run** or **Run as
 admin** button. Approval grants permission to the agent; it does not start a
@@ -17,23 +16,12 @@ During a desktop run, the phone shows **Running** and decisions are blocked
 with 409 `running in the desktop app`. Agent cancellation can still stop the
 run; expiry is paused while its 12-minute claim lease is active.
 
-## Build and install (Android)
+## Install (Android)
 
-You need the Android SDK and NDK, JDK 17, `cargo tauri` (tauri-cli 2), and the
-rustup targets `aarch64-linux-android` and `x86_64-linux-android`.
-
-```bash
-export ANDROID_HOME=~/Android/Sdk                  # default when unset
-export NDK_HOME=~/Android/Sdk/ndk/27.1.12297006    # newest NDK when unset
-export JAVA_HOME=/path/to/jdk-17
-make app-android-build                             # ANDROID_TARGETS="aarch64 x86_64" by default
-adb install -r apps/handup-app/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
-```
-
-To sideload without adb, copy the APK to the phone and open it. Android asks
-you to allow installs from that source. The debug APK is large (about 390 MB
-with both ABIs and debug symbols). Use `ANDROID_TARGETS=aarch64` for phones
-only.
+Use a published handup APK when a supported customer release is available.
+Download it on your phone, open it, and allow installation from that download
+source only if you trust the release. No Android SDK, Rust toolchain or
+application source is needed. The phone app then pairs with your computer.
 
 ## Pairing
 
@@ -457,8 +445,10 @@ end-to-end encryption does not cover the daemon-to-FCM notification. The usual
 notification rules and quiet hours apply. Decide, cancel, and expiry send a
 `resolved` message to cancel the matching notification, even during quiet hours.
 Android can delay that message while the app is closed, so the app also clears
-notifications for requests it decides and, whenever its queue syncs (including
-when it is opened or brought back), those that are no longer pending.
+a request's notification as soon as you tap its decision (not after the undo
+window or delivery; Undo keeps the request in the inbox but does not bring the
+notification back) and, whenever its queue syncs (including when it is opened or
+brought back), clears those that are no longer pending.
 Tapping a notification opens the request via `handup://r/<id>`. Push contains no
 Approve/Deny actions.
 
@@ -479,15 +469,10 @@ Native APNs delivery from the daemon is not implemented.
 
 ## iOS
 
-`make app-ios-init` (macOS with Xcode) adds the Rust iOS targets and generates
-the Xcode project. The configuration (`tauri.ios.conf.json`, `Info.ios.plist`
-with camera and Face ID usage strings, Keychain storage) exists, but this
-target has never been built or run. Limits:
+No native iOS release, TestFlight or App Store download is available. The iOS
+configuration exists but has never been built or run; there is no customer
+installation procedure to offer yet.
 
-- Without a paid Apple Developer account you can only run the app on your own
-  iPhone from Xcode on a Mac, with a free provisioning profile that expires
-  after 7 days. Then you have to rebuild and reinstall it.
-- No TestFlight and no App Store build.
-- The fallback on an iPhone is the daemon's web UI over Tailscale: pair from
-  Safari by scanning the `handup pair` QR code and add it to the Home Screen.
-  It lacks biometric confirmation and deep links, but it has the same inbox.
+The existing alternative is the daemon's web UI over Tailscale: pair from
+Safari using the `handup pair` QR code and add it to the Home Screen. It lacks
+native biometric confirmation and deep links, but has the same inbox.

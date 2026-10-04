@@ -1,10 +1,31 @@
-# Install the handup agent skill
+# Give your agent the handup workflow
 
-Install handup's approval workflow and complete offline user documentation into a supported agent's skill directory. This installs **instructions**, not the handup binary, daemon, MCP configuration or native permission hooks.
+Agents need the approval contract and usage instructions, not the handup
+application source. Install the compiled program separately using
+[downloads and releases](../downloads.md), then configure [MCP](mcp.md) or the
+appropriate native adapter: [Claude Code](claude-code.md), [Codex](codex.md),
+[Cursor](cursor.md) or [omp](omp.md).
 
-## Install from GitHub
+## Use the installed program
 
-The skill is published from [gethandup/handup](https://github.com/gethandup/handup), which holds handup's docs, this skill and examples (not the application source). You need Node.js 22.20 or newer and Git. No handup npm package is needed: npx runs the `skills` installer, which fetches the Git repository.
+For Claude Code, print the instruction snippet:
+
+```sh
+handup prompt --agent claude
+```
+
+Paste the output into your project's agent instructions. `handup prompt --help`
+lists available agents. Printing instructions does not install the daemon,
+configure MCP or intercept native permissions; follow the integration guide
+for those steps.
+
+An agent with CLI access can call handup commands; an MCP client can call its
+configured tools. If neither is available, it must stop consequential work and
+report missing setup—not proceed without approval.
+
+## Install the skill from GitHub
+
+The skill installs handup's approval workflow and complete offline user documentation into a supported agent's skill directory. It is published from [gethandup/handup](https://github.com/gethandup/handup), which holds handup's docs, this skill and examples (not the application source). You need Node.js 22.20 or newer and Git. No handup npm package is needed: npx runs the `skills` installer, which fetches the Git repository.
 
 Run from the project where the agent should use handup:
 
@@ -36,26 +57,6 @@ To inspect discovery without installing:
 DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup --list
 ```
 
-## Install from the source repository
-
-With access to the private GitLab source repository, install the same skill from it over SSH:
-
-```sh
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add git@gitlab.com:ariel-frischer/handup.git \
-  --full-depth --skill handup --agent claude-code codex cursor --yes
-```
-
-`--full-depth` ensures `.skills/handup` is discovered alongside the source tree's other conventional skill directories. In skills 1.7.0, use the exact SCP-style `git@gitlab.com:...` source: the superficially equivalent `ssh://git@gitlab.com/...` form is rewritten to HTTPS and can lose the working SSH authentication path. A working `glab` API login does **not** necessarily configure Git HTTPS clone credentials for `npx skills`.
-
-From an existing clone of either repository, install without any remote credential lookup:
-
-```sh
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add ./handup \
-  --full-depth --skill handup --agent claude-code codex cursor --yes
-```
-
-Here `./handup` is the checkout directory; from inside that checkout use `.` instead.
-
 ## What the installed skill includes
 
 The entire skill directory is installed, including:
@@ -68,18 +69,14 @@ The entire skill directory is installed, including:
 
 Load only the relevant reference for the current task. The full documentation is available offline; it does not have to be inserted into every agent prompt. Copying only `SKILL.md` loses the reference bundle.
 
-For an agent the skills CLI does not register, copy the **whole** `.skills/handup` directory into that agent's documented skill-loading directory, or provide its workflow/reference files as instructions. `omp` and `jcode` are not valid `--agent` IDs in skills 1.7.0. A shell-capable agent can use the installed handup CLI; an MCP-capable agent can call configured handup tools. Neither path implies native tool interception.
+For an agent the skills CLI does not register, copy the **whole** `.skills/handup` directory into that agent's documented skill-loading directory, or provide its workflow/reference files as instructions. `omp` and `jcode` are not valid `--agent` IDs in skills 1.7.0. A shell-capable agent can use the installed handup CLI; an MCP-capable agent can call configured handup tools. Neither path implies native tool interception. Installing the skill alone does not install the binary or configure MCP or native adapters.
 
-Install the binary separately using [getting started](../index.md). Then configure [MCP](mcp.md), or the appropriate native adapter: [Claude Code](claude-code.md), [Codex](codex.md), [omp](omp.md). Installing the skill alone does not configure any of these. If neither CLI nor MCP is available, the agent must stop consequential work and report missing setup, not proceed without approval.
+## Public documentation, private application source
 
-## Maintainers: regenerate the bundle
+The usage guides and machine contracts are readable independently of the
+application repository. The [MCP guide](mcp.md) and [shell/CI guide](shell-ci.md)
+describe the approval contract: wait for a human decision, bind the exact action
+to the returned content hash, and treat denial as a normal answer. Do not request
+application source access merely to install agent instructions.
 
-```sh
-make docs-skill
-```
-
-This documentation-only target uses Python, copies the checked-in public contracts, and does not compile Rust or start a daemon. `references/` is generated; edit canonical `docs/public` guides instead. Commit the refreshed bundle with source-document changes, then publish it to GitHub with `make public-export` so remote skill installs receive current documentation.
-
-After Rust model/API changes, the existing `make docs` workflow regenerates the machine contracts and the portable bundle. Follow the repository's CI build policy; do not use a local release/desktop/mobile build to refresh skill prose.
-
-Installer behavior is pinned to [skills 1.7.0](https://github.com/vercel-labs/skills/tree/7407f3893ad4dceab546ac002c3ef806e4000c73), published 2026-09-17. See its [supported agents and source formats](https://github.com/vercel-labs/skills/blob/7407f3893ad4dceab546ac002c3ef806e4000c73/README.md). Private authenticated installation was verified from GitLab on 2026-09-30 and from GitHub (`gethandup/handup`) on 2026-10-03; that is distinct from anonymous public access or native-hook enforcement.
+Installer behavior is pinned to [skills 1.7.0](https://github.com/vercel-labs/skills/tree/7407f3893ad4dceab546ac002c3ef806e4000c73), published 2026-09-17. See its [supported agents and source formats](https://github.com/vercel-labs/skills/blob/7407f3893ad4dceab546ac002c3ef806e4000c73/README.md). Authenticated installation from GitHub (`gethandup/handup`) was verified on 2026-10-03; that is distinct from anonymous public access or native-hook enforcement.

@@ -131,9 +131,10 @@ management routes are available through the remote listener or relay tunnel.
 
 ## Web UI
 
-The remote listener serves the built `ui/` (from `remote.web_dir`,
-`$HANDUP_WEB_DIR`, `<prefix>/share/handup/web`, or the source tree's `ui/dist`;
-build it with `make ui-build`). A `view` device sees a read-only inbox.
+The remote listener serves installed web assets from `remote.web_dir`,
+`$HANDUP_WEB_DIR` or `<prefix>/share/handup/web`. Distribution must include
+these assets; customers should not compile a web UI from application source.
+A `view` device sees a read-only inbox.
 
 The browser UI never executes command requests, even on the same computer as
 the daemon. **Run** and **Run as admin** exist only in the local desktop app;

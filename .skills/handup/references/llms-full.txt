@@ -117,9 +117,10 @@ harness must consume without executing the command again.
 
 ## 1. Install the binary and daemon
 
+Install the compiled program from [downloads and releases](docs/public/downloads.md),
+then start the daemon:
+
 ```sh
-git clone https://gitlab.com/ariel-frischer/handup.git && cd handup
-make install && make install-global   # ~/.local/bin/handup; add it to PATH
 handup service install                 # user service; or: handup serve --foreground
 handup doctor --json                   # daemon reachable, versions match
 ```
@@ -604,13 +605,34 @@ See [examples](examples/README.md) and [request schema](docs/public/schema/reque
 
 Source: [docs/public/agents/skill.md](docs/public/agents/skill.md)
 
-# Install the handup agent skill
+# Give your agent the handup workflow
 
-Install handup's approval workflow and complete offline user documentation into a supported agent's skill directory. This installs **instructions**, not the handup binary, daemon, MCP configuration or native permission hooks.
+Agents need the approval contract and usage instructions, not the handup
+application source. Install the compiled program separately using
+[downloads and releases](docs/public/downloads.md), then configure [MCP](docs/public/agents/mcp.md) or the
+appropriate native adapter: [Claude Code](docs/public/agents/claude-code.md), [Codex](docs/public/agents/codex.md),
+[Cursor](docs/public/agents/cursor.md) or [omp](docs/public/agents/omp.md).
 
-## Install from GitHub
+## Use the installed program
 
-The skill is published from [gethandup/handup](https://github.com/gethandup/handup), which holds handup's docs, this skill and examples (not the application source). You need Node.js 22.20 or newer and Git. No handup npm package is needed: npx runs the `skills` installer, which fetches the Git repository.
+For Claude Code, print the instruction snippet:
+
+```sh
+handup prompt --agent claude
+```
+
+Paste the output into your project's agent instructions. `handup prompt --help`
+lists available agents. Printing instructions does not install the daemon,
+configure MCP or intercept native permissions; follow the integration guide
+for those steps.
+
+An agent with CLI access can call handup commands; an MCP client can call its
+configured tools. If neither is available, it must stop consequential work and
+report missing setup—not proceed without approval.
+
+## Install the skill from GitHub
+
+The skill installs handup's approval workflow and complete offline user documentation into a supported agent's skill directory. It is published from [gethandup/handup](https://github.com/gethandup/handup), which holds handup's docs, this skill and examples (not the application source). You need Node.js 22.20 or newer and Git. No handup npm package is needed: npx runs the `skills` installer, which fetches the Git repository.
 
 Run from the project where the agent should use handup:
 
@@ -642,26 +664,6 @@ To inspect discovery without installing:
 DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup --list
 ```
 
-## Install from the source repository
-
-With access to the private GitLab source repository, install the same skill from it over SSH:
-
-```sh
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add git@gitlab.com:ariel-frischer/handup.git \
-  --full-depth --skill handup --agent claude-code codex cursor --yes
-```
-
-`--full-depth` ensures `.skills/handup` is discovered alongside the source tree's other conventional skill directories. In skills 1.7.0, use the exact SCP-style `git@gitlab.com:...` source: the superficially equivalent `ssh://git@gitlab.com/...` form is rewritten to HTTPS and can lose the working SSH authentication path. A working `glab` API login does **not** necessarily configure Git HTTPS clone credentials for `npx skills`.
-
-From an existing clone of either repository, install without any remote credential lookup:
-
-```sh
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add ./handup \
-  --full-depth --skill handup --agent claude-code codex cursor --yes
-```
-
-Here `./handup` is the checkout directory; from inside that checkout use `.` instead.
-
 ## What the installed skill includes
 
 The entire skill directory is installed, including:
@@ -674,21 +676,17 @@ The entire skill directory is installed, including:
 
 Load only the relevant reference for the current task. The full documentation is available offline; it does not have to be inserted into every agent prompt. Copying only `SKILL.md` loses the reference bundle.
 
-For an agent the skills CLI does not register, copy the **whole** `.skills/handup` directory into that agent's documented skill-loading directory, or provide its workflow/reference files as instructions. `omp` and `jcode` are not valid `--agent` IDs in skills 1.7.0. A shell-capable agent can use the installed handup CLI; an MCP-capable agent can call configured handup tools. Neither path implies native tool interception.
+For an agent the skills CLI does not register, copy the **whole** `.skills/handup` directory into that agent's documented skill-loading directory, or provide its workflow/reference files as instructions. `omp` and `jcode` are not valid `--agent` IDs in skills 1.7.0. A shell-capable agent can use the installed handup CLI; an MCP-capable agent can call configured handup tools. Neither path implies native tool interception. Installing the skill alone does not install the binary or configure MCP or native adapters.
 
-Install the binary separately using [getting started](docs/public/index.md). Then configure [MCP](docs/public/agents/mcp.md), or the appropriate native adapter: [Claude Code](docs/public/agents/claude-code.md), [Codex](docs/public/agents/codex.md), [omp](docs/public/agents/omp.md). Installing the skill alone does not configure any of these. If neither CLI nor MCP is available, the agent must stop consequential work and report missing setup, not proceed without approval.
+## Public documentation, private application source
 
-## Maintainers: regenerate the bundle
+The usage guides and machine contracts are readable independently of the
+application repository. The [MCP guide](docs/public/agents/mcp.md) and [shell/CI guide](docs/public/agents/shell-ci.md)
+describe the approval contract: wait for a human decision, bind the exact action
+to the returned content hash, and treat denial as a normal answer. Do not request
+application source access merely to install agent instructions.
 
-```sh
-make docs-skill
-```
-
-This documentation-only target uses Python, copies the checked-in public contracts, and does not compile Rust or start a daemon. `references/` is generated; edit canonical `docs/public` guides instead. Commit the refreshed bundle with source-document changes, then publish it to GitHub with `make public-export` so remote skill installs receive current documentation.
-
-After Rust model/API changes, the existing `make docs` workflow regenerates the machine contracts and the portable bundle. Follow the repository's CI build policy; do not use a local release/desktop/mobile build to refresh skill prose.
-
-Installer behavior is pinned to [skills 1.7.0](https://github.com/vercel-labs/skills/tree/7407f3893ad4dceab546ac002c3ef806e4000c73), published 2026-09-17. See its [supported agents and source formats](https://github.com/vercel-labs/skills/blob/7407f3893ad4dceab546ac002c3ef806e4000c73/README.md). Private authenticated installation was verified from GitLab on 2026-09-30 and from GitHub (`gethandup/handup`) on 2026-10-03; that is distinct from anonymous public access or native-hook enforcement.
+Installer behavior is pinned to [skills 1.7.0](https://github.com/vercel-labs/skills/tree/7407f3893ad4dceab546ac002c3ef806e4000c73), published 2026-09-17. See its [supported agents and source formats](https://github.com/vercel-labs/skills/blob/7407f3893ad4dceab546ac002c3ef806e4000c73/README.md). Authenticated installation from GitHub (`gethandup/handup`) was verified on 2026-10-03; that is distinct from anonymous public access or native-hook enforcement.
 
 ---
 
@@ -930,7 +928,7 @@ live under top-level `hooks:` ([event hooks](docs/public/integrations/hooks.md))
 detection support. It also warns when the daemon runs a different build than
 the CLI (local `GET /v1/version`) and, on Linux, lists handup processes still
 running a binary that was replaced on disk, such as a `handup mcp` server or the
-daemon left over from before `make install-global`; restart those. Daemon
+daemon left over from before a binary upgrade; restart those. Daemon
 replies ignore fields a client does not know, so older clients keep working
 against a newer daemon, while request and decision input still rejects unknown
 fields. `handup demo` creates PNG/WAV/HTML/diff/bundle/JSON/command/PDF
@@ -939,9 +937,10 @@ samples at runtime; video requires ffmpeg and is skipped when absent.
 ## Uninstall
 
 `handup uninstall` removes the installed binary and backups and preserves
-configuration. `HANDUP_INSTALL_DIR` overrides `~/.local/bin`. `install.sh`
-downloads GitLab release archives with SHA-256 verification; `HANDUP_VERSION`
-selects a version.
+configuration. `HANDUP_INSTALL_DIR` overrides `~/.local/bin`. See
+[downloads and releases](docs/public/downloads.md) for customer binary availability;
+the private repository's maintainer installer is not a customer source-access
+or distribution requirement.
 
 ---
 
@@ -953,23 +952,16 @@ The desktop app is a window onto the same local queue that `handup ls` shows.
 It talks to the daemon over the unix socket from its Rust process; the bearer
 token never reaches the web view.
 
-## Install (Linux)
+## Install
 
-Build locally with `make app-build` (needs `cargo install tauri-cli --locked`,
-pnpm, and the webkit2gtk-4.1, libayatana-appindicator, and librsvg dev
-packages). Read aloud also needs Speech Dispatcher headers and libclang:
-on Arch, install `speech-dispatcher` and `clang`; on Debian/Ubuntu, install
-`libspeechd-dev libclang-dev`. The bundles land in `target/release/bundle/`:
+Use the compiled desktop package for your OS and architecture from
+[downloads and releases](docs/public/downloads.md). Linux is the primary tested platform;
+the local preview does not publish a customer desktop installer yet. No Rust
+toolchain or source build is required.
 
-- AppImage: `chmod +x handup_*.AppImage && ./handup_*.AppImage`
-- Debian/Ubuntu: `sudo apt install ./handup_*_amd64.deb`
-
-Both bundles ship the `handup` CLI next to the app. If no daemon is running,
-the app starts `handup serve`. You can also start it from the "Daemon not
-running" screen.
-
-From a checkout, `make app-install` builds the CLI and app and installs them to
-`~/.local/bin`.
+Internal CI installations include both the desktop app and the CLI. When a
+supported desktop release is installed, the app starts `handup serve` if no
+daemon is running. You can also start it from the "Daemon not running" screen.
 
 Run `handup ui` to open the inbox, or `handup ui --next` to open the compact
 quick window on the oldest pending request. Only one instance runs at a time,
@@ -1261,6 +1253,9 @@ HTML previews load from a separate `handup-preview:` origin inside a sandboxed
 iframe with no `allow-same-origin`. The origin's CSP blocks network access, and
 Tauri IPC is not exposed to it.
 
+Web and `mailto:` links always open in your system browser or mail app, never
+inside the handup window.
+
 On Linux, audio and video play through GStreamer. If a clip says it could not
 be decoded, install `gst-plugins-good`, `gst-plugins-bad`, and `gst-libav`
 (package names vary by distro). The Linux and Android apps load the whole clip
@@ -1269,16 +1264,195 @@ itself opens at once.
 
 ## macOS (untested)
 
-`make bundle-macos` on macOS produces a universal `.dmg` signed ad hoc
-(`signingIdentity: "-"`), with no Apple Developer ID. This has not been tested
-on a Mac. Gatekeeper will refuse the first launch. After copying the app to
-`/Applications`, run:
+No tested macOS customer release is available. Desktop configuration and
+Intel/Apple Silicon CLI targets exist, but they are not a support guarantee.
+See [platform availability](docs/public/downloads.md); do not disable platform security
+checks to install an unverified build.
+
+---
+
+Source: [docs/public/downloads.md](docs/public/downloads.md)
+
+# Downloads and installation
+
+handup ships as compiled binaries and packages from its public release host,
+[github.com/gethandup/handup](https://github.com/gethandup/handup/releases).
+Downloads are public; you never need the application source, Git, Rust, Make or
+an Android SDK.
+
+A handup Personal license is $30 USD one-time, sold through Polar (merchant of
+record): one person on their own machines, perpetual use and all future released
+updates. The license key arrives by email after checkout. No hosted service,
+unlimited personal support or indefinite development is promised.
+
+> **No public release has been published yet.** The commands below work once
+> the first release is out; until then the release page has no files.
+
+## Platforms
+
+| Platform | Package | Status |
+| --- | --- | --- |
+| Linux x86-64 / ARM64 | install script, AUR, .deb, .rpm, Alpine .apk, tar.gz | Primary platform. ARM64 builds are not runtime-tested. |
+| Linux desktop app, x86-64 | AppImage, .deb, .rpm | Pre-alpha; needs the CLI daemon installed too. |
+| macOS Intel / Apple Silicon | Homebrew cask, tar.gz | Built but **untested**; not notarized. |
+| Android | APK (sideload) | Pre-alpha companion app for the daemon on your computer. |
+| iPhone / iPad | — | No native app. Use the daemon's web inbox over Tailscale. |
+| Windows | — | Not available. The Linux build in WSL is untested. |
+
+## Linux
+
+### Any distribution (install script)
 
 ```sh
-xattr -dr com.apple.quarantine /Applications/handup.app
+curl -fsSL https://github.com/gethandup/handup/releases/latest/download/install.sh | sh
 ```
 
-Or right-click the app and choose Open.
+The script detects your OS and CPU (x86-64 or ARM64), downloads the matching
+`handup_<version>_<os>_<arch>.tar.gz`, verifies it against the release
+`checksums.txt` (SHA-256) and installs `handup` to `~/.local/bin`. It never
+uses sudo and refuses to install if the checksum is missing or wrong.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `HANDUP_INSTALL_DIR` | `~/.local/bin` | Install directory (must be writable). |
+| `HANDUP_VERSION` | latest | Release tag to install, e.g. `v0.1.0`. |
+
+### Arch Linux (AUR)
+
+```sh
+yay -S handup-bin
+```
+
+`handup-bin` repackages the released x86-64/ARM64 binary into `/usr/bin/handup`.
+
+### Debian and Ubuntu
+
+Download `handup_<version>_amd64.deb` (or `_arm64.deb`) from the release, then:
+
+```sh
+sudo apt install ./handup_*.deb
+```
+
+### Fedora and RHEL
+
+Download `handup-<version>-1.x86_64.rpm` (or `.aarch64.rpm`), then:
+
+```sh
+sudo dnf install ./handup-*.rpm
+```
+
+### Alpine
+
+The Alpine package contains a musl build. It is not signed with an Alpine
+key, so verify its checksum first (below), then:
+
+```sh
+sudo apk add --allow-untrusted ./handup_*.apk
+```
+
+### Desktop app
+
+Download `handup-desktop_<version>_amd64.AppImage` (or the desktop `.deb`/`.rpm`
+bundle), then:
+
+```sh
+chmod +x ./handup-desktop_*.AppImage && ./handup-desktop_*.AppImage
+```
+
+The desktop app is an inbox for the `handup` daemon; install the CLI with one
+of the methods above as well. See [desktop](docs/public/desktop.md).
+
+## macOS (untested)
+
+```sh
+brew install --cask gethandup/tap/handup
+```
+
+The install script above also works on macOS. Builds exist for Intel and Apple
+Silicon but have not been tested, and the binary is not notarized: the cask
+removes the download quarantine flag for you.
+
+## Android
+
+Download `handup-android_<version>_arm64.apk` on the phone, allow your browser
+to install unknown apps when Android asks, and open it. Pair it with
+`handup pair` on the computer. See [mobile](docs/public/mobile.md).
+
+## iPhone and iPad
+
+There is no native iOS app. Enable Tailscale mode and pair; then open the
+pairing link in Safari and add it to the Home Screen:
+
+```sh
+handup config set remote.mode tailscale
+handup pair
+```
+
+See [remote access](docs/public/remote.md).
+
+## Verify a download
+
+Every release publishes `checksums.txt` with SHA-256 sums for all files. Put it
+next to your download and check:
+
+```sh
+curl -fsSLO https://github.com/gethandup/handup/releases/latest/download/checksums.txt
+sha256sum --ignore-missing -c checksums.txt          # Linux
+shasum -a 256 --ignore-missing -c checksums.txt      # macOS
+```
+
+For an older release, replace `latest/download` with `download/<tag>`. The
+install script, AUR package and Homebrew cask verify checksums for you.
+
+## After installing
+
+```sh
+handup service install
+handup doctor --json
+handup integrate claude
+```
+
+See [agent setup](docs/public/agents/mcp.md) for other agents.
+
+## Updates
+
+Every update is a new binary release; see the [changelog](https://github.com/gethandup/handup/releases).
+
+- Install script: re-run the same one-liner. It upgrades only when the release is
+  newer, keeps the previous binary as `handup.backup.<date>` (newest three kept)
+  and restores it if the new binary fails to start.
+- AUR: `yay -Syu`. Debian/Fedora/Alpine: install the newer package file the same way.
+- Homebrew: `brew upgrade --cask handup`.
+- Android: install the newer APK over the old one.
+
+## Uninstall
+
+Install script:
+
+```sh
+handup uninstall
+```
+
+or, without a working binary,
+`curl -fsSL https://github.com/gethandup/handup/releases/latest/download/uninstall.sh | sh -s -- --yes`.
+Both remove the binary from `~/.local/bin` (or `HANDUP_INSTALL_DIR`) plus
+installer backups. Configuration and data are kept.
+
+Packages: `yay -R handup-bin`, `sudo apt remove handup`, `sudo dnf remove handup`,
+`sudo apk del handup`, `brew uninstall --cask handup`. Run `handup service uninstall`
+first if you installed the user service.
+
+## Source and documentation
+
+The application source stays private. Buying a personal license does not grant
+repository access or application-source modification rights. Public usage
+documentation, machine contracts and [agent instructions](docs/public/agents/skill.md) are
+distributed separately from the application repository.
+
+Some integrations and web assets necessarily include readable scripts; that is
+not publication of the complete application source. Third-party components
+retain their licenses, and distribution must satisfy their notice and any
+applicable source-offer requirements.
 
 ---
 
@@ -1297,14 +1471,14 @@ again. Phone and web clients only review and decide; see [Desktop](docs/public/d
 
 ## Install
 
-Build from source. You need stable Rust and Make; `mise install` selects the
-repository's tool versions.
+Install compiled handup software from [downloads and releases](docs/public/downloads.md).
+You do not need Git, Rust, Make or application source access. The local preview
+does not publish customer installers yet; platform availability is listed in
+the downloads guide.
+
+After installing a supported release:
 
 ```sh
-git clone https://gitlab.com/ariel-frischer/handup.git
-cd handup
-make install
-make install-global  # ~/.local/bin/handup; add ~/.local/bin to PATH
 handup service install  # run the daemon as a user service
 handup doctor --json
 ```
@@ -1329,8 +1503,8 @@ paired phone. Every flag is described by `handup help COMMAND`.
   own agent loop, SDK app or framework over MCP, CLI or HTTP.
 - [Email drafts](docs/public/agents/email.md): ask before sending, let the human edit the
   draft, then send it with your own mail tool.
-- [Agent skill](docs/public/agents/skill.md): `npx skills add gethandup/handup` installation
-  with complete offline docs; supported agents and source-repository installs.
+- [Agent skill](docs/public/agents/skill.md): print instructions with the installed CLI or
+  run `npx skills add gethandup/handup` for complete offline docs.
 - [Integrations](docs/public/integrations/index.md): let other tools react to requests.
 - [Remote access](docs/public/remote.md), the [relay](docs/public/relay.md), the
   [mobile app](docs/public/mobile.md) and the [desktop app](docs/public/desktop.md): approve away from
@@ -1343,6 +1517,11 @@ paired phone. Every flag is described by `handup help COMMAND`.
 
 Agents can read these docs as plain Markdown: [/llms.txt](index.md) indexes
 every page and [/llms-full.txt](llms-full.txt) is the whole set in one file.
+
+## Support
+
+Email [support@gethandup.dev](mailto:support@gethandup.dev). The product site
+is [gethandup.dev](https://gethandup.dev).
 
 ---
 
@@ -1790,14 +1969,13 @@ Source: [docs/public/mobile.md](docs/public/mobile.md)
 
 # Mobile app
 
-The handup app in `apps/handup-app` also builds for Android. On a phone it has
-no daemon of its own. It is a client of the handup daemon on your computer and
-reaches it through the daemon's [remote listener](docs/public/remote.md), so turn on remote
-access first (`remote.mode: tailscale` is the recommended mode).
+The handup mobile app is a companion to the daemon on your computer, not a
+daemon of its own. It connects through the [remote listener](docs/public/remote.md), so
+turn on remote access first (`remote.mode: tailscale` is recommended).
 
-Android is the supported target. iOS is configured but has never been built or
-tested (see [iOS](docs/public/mobile.md#ios)). The app is not in any store: you build a debug APK
-and sideload it.
+Android has an internal CI-built, sideloaded pre-alpha APK. There is no
+customer APK, Play Store listing or native iOS release published by this local
+preview. See [downloads and releases](docs/public/downloads.md) for availability.
 
 Phone clients never execute command requests and have no **Run** or **Run as
 admin** button. Approval grants permission to the agent; it does not start a
@@ -1807,23 +1985,12 @@ During a desktop run, the phone shows **Running** and decisions are blocked
 with 409 `running in the desktop app`. Agent cancellation can still stop the
 run; expiry is paused while its 12-minute claim lease is active.
 
-## Build and install (Android)
+## Install (Android)
 
-You need the Android SDK and NDK, JDK 17, `cargo tauri` (tauri-cli 2), and the
-rustup targets `aarch64-linux-android` and `x86_64-linux-android`.
-
-```bash
-export ANDROID_HOME=~/Android/Sdk                  # default when unset
-export NDK_HOME=~/Android/Sdk/ndk/27.1.12297006    # newest NDK when unset
-export JAVA_HOME=/path/to/jdk-17
-make app-android-build                             # ANDROID_TARGETS="aarch64 x86_64" by default
-adb install -r apps/handup-app/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
-```
-
-To sideload without adb, copy the APK to the phone and open it. Android asks
-you to allow installs from that source. The debug APK is large (about 390 MB
-with both ABIs and debug symbols). Use `ANDROID_TARGETS=aarch64` for phones
-only.
+Use a published handup APK when a supported customer release is available.
+Download it on your phone, open it, and allow installation from that download
+source only if you trust the release. No Android SDK, Rust toolchain or
+application source is needed. The phone app then pairs with your computer.
 
 ## Pairing
 
@@ -2247,8 +2414,10 @@ end-to-end encryption does not cover the daemon-to-FCM notification. The usual
 notification rules and quiet hours apply. Decide, cancel, and expiry send a
 `resolved` message to cancel the matching notification, even during quiet hours.
 Android can delay that message while the app is closed, so the app also clears
-notifications for requests it decides and, whenever its queue syncs (including
-when it is opened or brought back), those that are no longer pending.
+a request's notification as soon as you tap its decision (not after the undo
+window or delivery; Undo keeps the request in the inbox but does not bring the
+notification back) and, whenever its queue syncs (including when it is opened or
+brought back), clears those that are no longer pending.
 Tapping a notification opens the request via `handup://r/<id>`. Push contains no
 Approve/Deny actions.
 
@@ -2269,18 +2438,13 @@ Native APNs delivery from the daemon is not implemented.
 
 ## iOS
 
-`make app-ios-init` (macOS with Xcode) adds the Rust iOS targets and generates
-the Xcode project. The configuration (`tauri.ios.conf.json`, `Info.ios.plist`
-with camera and Face ID usage strings, Keychain storage) exists, but this
-target has never been built or run. Limits:
+No native iOS release, TestFlight or App Store download is available. The iOS
+configuration exists but has never been built or run; there is no customer
+installation procedure to offer yet.
 
-- Without a paid Apple Developer account you can only run the app on your own
-  iPhone from Xcode on a Mac, with a free provisioning profile that expires
-  after 7 days. Then you have to rebuild and reinstall it.
-- No TestFlight and no App Store build.
-- The fallback on an iPhone is the daemon's web UI over Tailscale: pair from
-  Safari by scanning the `handup pair` QR code and add it to the Home Screen.
-  It lacks biometric confirmation and deep links, but it has the same inbox.
+The existing alternative is the daemon's web UI over Tailscale: pair from
+Safari using the `handup pair` QR code and add it to the Home Screen. It lacks
+native biometric confirmation and deep links, but has the same inbox.
 
 ---
 
@@ -2310,13 +2474,14 @@ does over the remote listener.
 
 ## Run a relay
 
-```bash
-make relay-build                     # bin/handup-relay
-bin/handup-relay --listen 127.0.0.1:8787 --db /var/lib/handup-relay/relay.db
-bin/handup-relay --help              # every flag and its environment variable
-```
+This requires the compiled `handup-relay` program. No customer relay binary
+is published in this local preview; see [downloads and releases](docs/public/downloads.md).
+The following commands apply once the relay binary is installed:
 
-`make relay-run ARGS='--listen 127.0.0.1:8787'` runs it from source.
+```bash
+handup-relay --listen 127.0.0.1:8787 --db /var/lib/handup-relay/relay.db
+handup-relay --help
+```
 
 Settings merge in this order: built-in defaults, then `--config relay.yaml`,
 then flags and `HANDUP_RELAY_*` environment variables.
@@ -2839,9 +3004,10 @@ management routes are available through the remote listener or relay tunnel.
 
 ## Web UI
 
-The remote listener serves the built `ui/` (from `remote.web_dir`,
-`$HANDUP_WEB_DIR`, `<prefix>/share/handup/web`, or the source tree's `ui/dist`;
-build it with `make ui-build`). A `view` device sees a read-only inbox.
+The remote listener serves installed web assets from `remote.web_dir`,
+`$HANDUP_WEB_DIR` or `<prefix>/share/handup/web`. Distribution must include
+these assets; customers should not compile a web UI from application source.
+A `view` device sees a read-only inbox.
 
 The browser UI never executes command requests, even on the same computer as
 the daemon. **Run** and **Run as admin** exist only in the local desktop app;

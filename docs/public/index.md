@@ -25,14 +25,14 @@ again. Phone and web clients only review and decide; see [Desktop](desktop.md).
 
 ## Install
 
-Build from source. You need stable Rust and Make; `mise install` selects the
-repository's tool versions.
+Install compiled handup software from [downloads and releases](downloads.md).
+You do not need Git, Rust, Make or application source access. The local preview
+does not publish customer installers yet; platform availability is listed in
+the downloads guide.
+
+After installing a supported release:
 
 ```sh
-git clone https://gitlab.com/ariel-frischer/handup.git
-cd handup
-make install
-make install-global  # ~/.local/bin/handup; add ~/.local/bin to PATH
 handup service install  # run the daemon as a user service
 handup doctor --json
 ```
@@ -57,8 +57,8 @@ paired phone. Every flag is described by `handup help COMMAND`.
   own agent loop, SDK app or framework over MCP, CLI or HTTP.
 - [Email drafts](agents/email.md): ask before sending, let the human edit the
   draft, then send it with your own mail tool.
-- [Agent skill](agents/skill.md): `npx skills add gethandup/handup` installation
-  with complete offline docs; supported agents and source-repository installs.
+- [Agent skill](agents/skill.md): print instructions with the installed CLI or
+  run `npx skills add gethandup/handup` for complete offline docs.
 - [Integrations](integrations/index.md): let other tools react to requests.
 - [Remote access](remote.md), the [relay](relay.md), the
   [mobile app](mobile.md) and the [desktop app](desktop.md): approve away from
@@ -71,3 +71,8 @@ paired phone. Every flag is described by `handup help COMMAND`.
 
 Agents can read these docs as plain Markdown: [/llms.txt](/llms.txt) indexes
 every page and [/llms-full.txt](/llms-full.txt) is the whole set in one file.
+
+## Support
+
+Email [support@gethandup.dev](mailto:support@gethandup.dev). The product site
+is [gethandup.dev](https://gethandup.dev).

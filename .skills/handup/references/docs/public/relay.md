@@ -22,13 +22,14 @@ does over the remote listener.
 
 ## Run a relay
 
-```bash
-make relay-build                     # bin/handup-relay
-bin/handup-relay --listen 127.0.0.1:8787 --db /var/lib/handup-relay/relay.db
-bin/handup-relay --help              # every flag and its environment variable
-```
+This requires the compiled `handup-relay` program. No customer relay binary
+is published in this local preview; see [downloads and releases](downloads.md).
+The following commands apply once the relay binary is installed:
 
-`make relay-run ARGS='--listen 127.0.0.1:8787'` runs it from source.
+```bash
+handup-relay --listen 127.0.0.1:8787 --db /var/lib/handup-relay/relay.db
+handup-relay --help
+```
 
 Settings merge in this order: built-in defaults, then `--config relay.yaml`,
 then flags and `HANDUP_RELAY_*` environment variables.

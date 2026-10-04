@@ -11,9 +11,10 @@ harness must consume without executing the command again.
 
 ## 1. Install the binary and daemon
 
+Install the compiled program from [downloads and releases](../downloads.md),
+then start the daemon:
+
 ```sh
-git clone https://gitlab.com/ariel-frischer/handup.git && cd handup
-make install && make install-global   # ~/.local/bin/handup; add it to PATH
 handup service install                 # user service; or: handup serve --foreground
 handup doctor --json                   # daemon reachable, versions match
 ```

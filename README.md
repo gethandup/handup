@@ -4,14 +4,15 @@
 
 # handup
 
-**Approve your AI agents from anywhere.**
+**The approval inbox for AI agents.**
 
 </div>
 
-Your agent wants to run a migration, push a release or send an email. Instead of
-a yes/no prompt buried in a terminal, it asks handup. You see exactly what it
-wants to do (the command, the diff, the file, the email), approve or deny with
-feedback from your terminal, desktop or phone, and the agent gets your answer.
+Your agents ask before risky actions like migrations, releases and emails. You
+see exactly what they want to do and approve or deny from your terminal, desktop
+or phone.
+
+https://github.com/user-attachments/assets/cc0aa659-68e8-47e8-8d35-bafb793d742c
 
 > **Pre-alpha.** Linux is the primary platform; macOS and iOS builds are untested.
 > Binaries are not published yet; releases will appear on this repository's

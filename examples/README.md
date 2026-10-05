@@ -15,6 +15,8 @@ The upload step is required for files, image, video, audio, file and pdf JSONs; 
 
 Flows (run with sh; jq required): deploy-gate.sh executes its supplied executable/arguments only after approval; pr-review.sh snapshots the current git diff without publishing; html-mockup/review.sh submits a self-contained HTML preview; voiceover-audio.sh uploads and asks about the sample audio. They all submit through `handup ask --request -`. On deny/expiry/cancellation/error they exit without executing the gated action. Never put credential values in previews.
 
+Cookbook flows in `cookbook/` (see the [Cookbook](../docs/public/cookbook/index.md)): email-canned-reply.sh, email-route.sh with email-rules.yaml, auto-decider.sh (exec hook) with spend-request.sh, refund-form.sh, publish-gate.sh and meeting-reply.sh, plus sample inputs (inbound-email.json, receipt-email.json, noreply-email.json, order.json, post.md, invite.json). Each prints the approved action as JSON and exits 0 only when approved or answered; none performs the action itself.
+
 For command approvals, desktop **Run** returns approval with `run_result` and
 CLI **exit 5**, even if execution failed. Consume its exit code/error/output
 and do not execute again. `deploy-gate.sh` skips its supplied command on exit 5

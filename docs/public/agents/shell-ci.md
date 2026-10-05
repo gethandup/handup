@@ -11,14 +11,16 @@ Exit codes of blocking `ask --wait` and `wait`. Nonblocking `ask`, `status` and
 
 | Exit | Meaning |
 | --- | --- |
-| 0 | approved/answered |
+| 0 | approved/answered/dismissed |
 | 1 | denied |
 | 2 | expired/timeout |
 | 3 | cancelled |
 | 4 | error |
 | 5 | ran in the desktop app |
+| 6 | license required |
 
 Exit 0 permits the reviewed action; it is not the command's own exit status.
+`dismissed` applies only to info notices (`--kind info`), which gate nothing.
 Desktop **Run** returns an approved decision with `run_result` and CLI exit
 **5**, even on failure (`ask --wait`, `wait`, `status` and `show`). Consume its
 `exit_code`, `error` and output tails and **do not run again**. Wait JSON puts

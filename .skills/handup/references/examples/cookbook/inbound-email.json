@@ -1,0 +1,8 @@
+{
+  "message_id": "<CAF-q3-invoice@example.org>",
+  "from": "Dana Lee <dana@example.org>",
+  "to": "ari@example.com",
+  "subject": "Q3 invoice",
+  "date": "Tue, 30 Sep 2026 09:12:00 +0000",
+  "body": "Hi Ari,\n\nCould you send the signed Q3 invoice when you get a chance?\n\nThanks,\nDana"
+}

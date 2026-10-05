@@ -5,10 +5,20 @@ handup ships as compiled binaries and packages from its public release host,
 Downloads are public; you never need the application source, Git, Rust, Make or
 an Android SDK.
 
-A handup Personal license is $30 USD one-time, sold through Polar (merchant of
+A handup Personal license is $30 USD one-time plus tax where applicable, sold through Polar (merchant of
 record): one person on their own machines, perpetual use and all future released
-updates. The license key arrives by email after checkout. No hosted service,
-unlimited personal support or indefinite development is promised.
+updates. Polar emails the order confirmation; the license key is in Polar's
+customer portal. Refunds are available within 30 days of purchase; see the
+[Terms](https://gethandup.dev/terms) and [Privacy Policy](https://gethandup.dev/privacy).
+No hosted service, unlimited personal support or indefinite development is promised.
+
+Every release works fully for a 14-day trial; then activate your key with
+`handup license activate KEY` or **Settings → License**. Activation contacts
+gethandup.dev once, after which the license works offline. See
+[License and trial](license.md).
+
+If checkout reports too many attempts, wait about a minute before trying again.
+The server rejects the attempt before contacting Polar; nothing was charged.
 
 > **No public release has been published yet.** The commands below work once
 > the first release is out; until then the release page has no files.
@@ -17,12 +27,13 @@ unlimited personal support or indefinite development is promised.
 
 | Platform | Package | Status |
 | --- | --- | --- |
-| Linux x86-64 / ARM64 | install script, AUR, .deb, .rpm, Alpine .apk, tar.gz | Primary platform. ARM64 builds are not runtime-tested. |
-| Linux desktop app, x86-64 | AppImage, .deb, .rpm | Pre-alpha; needs the CLI daemon installed too. |
-| macOS Intel / Apple Silicon | Homebrew cask, tar.gz | Built but **untested**; not notarized. |
-| Android | APK (sideload) | Pre-alpha companion app for the daemon on your computer. |
+| Linux x86-64 / ARM64 | install script, Arch package, .deb, .rpm, Alpine .apk, tar.gz | Primary platform. |
+| Linux desktop app, x86-64 | AppImage, .deb, .rpm | Beta; needs the CLI daemon installed too. |
+| macOS Intel / Apple Silicon | Homebrew cask, tar.gz | Beta; not notarized. |
+| macOS desktop app (universal) | .dmg | Beta; not notarized; needs the CLI daemon installed too. |
+| Android | APK (sideload) | Beta companion app for the daemon on your computer. |
 | iPhone / iPad | — | No native app. Use the daemon's web inbox over Tailscale. |
-| Windows | — | Not available. The Linux build in WSL is untested. |
+| Windows | — | Not available. Use the Linux build in WSL. |
 
 ## Linux
 
@@ -42,13 +53,15 @@ uses sudo and refuses to install if the checksum is missing or wrong.
 | `HANDUP_INSTALL_DIR` | `~/.local/bin` | Install directory (must be writable). |
 | `HANDUP_VERSION` | latest | Release tag to install, e.g. `v0.1.0`. |
 
-### Arch Linux (AUR)
+### Arch Linux
+
+Download `handup-<version>-1-x86_64.pkg.tar.zst` (or `-aarch64`), then:
 
 ```sh
-yay -S handup-bin
+sudo pacman -U ./handup-*.pkg.tar.zst
 ```
 
-`handup-bin` repackages the released x86-64/ARM64 binary into `/usr/bin/handup`.
+It installs the released binary as `/usr/bin/handup`. There is no AUR package.
 
 ### Debian and Ubuntu
 
@@ -87,15 +100,29 @@ chmod +x ./handup-desktop_*.AppImage && ./handup-desktop_*.AppImage
 The desktop app is an inbox for the `handup` daemon; install the CLI with one
 of the methods above as well. See [desktop](desktop.md).
 
-## macOS (untested)
+## macOS
 
 ```sh
 brew install --cask gethandup/tap/handup
 ```
 
 The install script above also works on macOS. Builds exist for Intel and Apple
-Silicon but have not been tested, and the binary is not notarized: the cask
-removes the download quarantine flag for you.
+Silicon. The binary is not notarized: the cask removes the download quarantine
+flag for you.
+
+### Desktop app
+
+Download `handup-desktop_<version>_universal.dmg` (Intel and Apple Silicon),
+open it and drag **handup** to Applications. The app is not notarized, so macOS
+blocks the first open: remove the download quarantine flag once, then open it
+normally:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/handup.app
+```
+
+Install the CLI as well (above); daemon notification banners on macOS need the
+desktop app. See [desktop app on macOS](desktop.md#macos).
 
 ## Android
 
@@ -127,17 +154,17 @@ shasum -a 256 --ignore-missing -c checksums.txt      # macOS
 ```
 
 For an older release, replace `latest/download` with `download/<tag>`. The
-install script, AUR package and Homebrew cask verify checksums for you.
+install script and Homebrew cask verify checksums for you.
 
 ## After installing
 
 ```sh
 handup service install
 handup doctor --json
-handup integrate claude
+handup integrate all   # every detected agent: Claude Code, Codex, Cursor, omp
 ```
 
-See [agent setup](agents/mcp.md) for other agents.
+See [agent setup](agents/mcp.md) to configure one agent at a time.
 
 ## Updates
 
@@ -146,7 +173,8 @@ Every update is a new binary release; see the [changelog](https://github.com/get
 - Install script: re-run the same one-liner. It upgrades only when the release is
   newer, keeps the previous binary as `handup.backup.<date>` (newest three kept)
   and restores it if the new binary fails to start.
-- AUR: `yay -Syu`. Debian/Fedora/Alpine: install the newer package file the same way.
+- Debian/Fedora/Alpine/Arch: install the newer package file the same way.
+- Desktop app: install the newer AppImage, package or `.dmg` over the old one.
 - Homebrew: `brew upgrade --cask handup`.
 - Android: install the newer APK over the old one.
 
@@ -163,7 +191,7 @@ or, without a working binary,
 Both remove the binary from `~/.local/bin` (or `HANDUP_INSTALL_DIR`) plus
 installer backups. Configuration and data are kept.
 
-Packages: `yay -R handup-bin`, `sudo apt remove handup`, `sudo dnf remove handup`,
+Packages: `sudo pacman -R handup`, `sudo apt remove handup`, `sudo dnf remove handup`,
 `sudo apk del handup`, `brew uninstall --cask handup`. Run `handup service uninstall`
 first if you installed the user service.
 

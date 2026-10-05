@@ -22,11 +22,35 @@ management stay local-only.
 
 ## Tailscale (recommended)
 
-```sh
-handup config set remote.mode tailscale
-handup serve --foreground   # or restart the user service
-handup pair                 # scan the QR code with your phone
-```
+[Tailscale](https://tailscale.com) puts your computer and phone on a private
+network that only your devices can join, and it works from anywhere: home
+Wi-Fi, mobile data, a café. The free Personal plan is enough. You don't need
+to open ports, set up a router or learn any networking.
+
+First-time setup takes about five minutes:
+
+1. **Computer:** install Tailscale from
+   [tailscale.com/download](https://tailscale.com/download) and sign in. On
+   Linux, run `sudo tailscale up` and open the link it prints.
+2. **Phone:** install the Tailscale app (Play Store or App Store) and sign in
+   with the **same account**. Leave it connected.
+3. **Check:** `tailscale status` on the computer lists both devices.
+4. **Turn on remote access** and restart the daemon:
+
+   ```sh
+   handup config set remote.mode tailscale
+   systemctl --user restart handup.service                       # Linux
+   launchctl kickstart -k gui/$(id -u)/com.handup.daemon        # macOS
+   ```
+
+   If you run the daemon yourself instead of as a service, stop it and start
+   `handup serve --foreground` again.
+5. **Pair:** run `handup pair` (or **Pair a phone** in the desktop app) and
+   scan the QR code with the handup app; see [Mobile](mobile.md#pairing). On
+   iPhone, open the link in Safari instead ([downloads](downloads.md)).
+
+If the phone shows "Can't reach handup", check that the Tailscale app is
+connected and that `tailscale status` shows the computer online.
 
 The daemon discovers the tailnet IP with the read-only `tailscale ip -4` (or
 set `remote.bind` to it) and serves the web UI and API on `remote.port`
@@ -74,13 +98,23 @@ use.
 
 | Scope | Can |
 | --- | --- |
-| `view` | List and show requests, browse decision history and each request's audit trail, fetch blobs and previews, see YOLO mode, and receive live events. The web UI is read-only. The global audit log (`/v1/log`) stays local |
-| `decide` | Everything `view` can, plus approve, deny, answer, cancel, send server-built test requests/questions (`POST /v1/requests/test`), and change [YOLO mode](rules.md#yolo-mode) |
-| `submit` | Create requests and upload blobs; show, wait for, and cancel only requests created by that token. Never decide, list, send synthetic tests, or read/change YOLO mode. See [integration tokens](integrations/tokens.md) |
+| `view` | List and show requests, browse decision history and each request's audit trail, see storage usage, cleanup estimates and progress (`GET /v1/storage*`), see the [license](license.md) state (`GET /v1/license`), fetch blobs and previews, see YOLO mode, and receive live events. The web UI is read-only. The global audit log (`/v1/log`) stays local |
+| `decide` | Everything `view` can, plus approve, deny, answer, cancel, stop a command running in the desktop app (`POST /v1/requests/{id}/run/stop`), send server-built test requests/questions (`POST /v1/requests/test`), change [YOLO mode](rules.md#yolo-mode), replace [keyboard shortcut overrides](cli.md#shortcut-api) (`PUT /v1/keys`), activate, import or remove the computer's license (`PUT`/`DELETE /v1/license`), and clean up storage or change history retention (`POST /v1/storage/cleanup`, its cancel, `PUT /v1/storage/retention`; the daemon log names the device) |
+| `submit` | Create requests and upload blobs; show, wait for, and cancel only requests created by that token. Never decide, list, send synthetic tests, change shortcuts, or read/change YOLO mode. See [integration tokens](integrations/tokens.md) |
 
 Scoped allow (session, project, or always rules) writes local policy, so it is
 available only on the machine itself. Remote decisions are recorded in the audit log as
 `device:<id>`.
+
+`PUT /v1/keys` needs paired `decide` scope on remote HTTP and relay connections;
+`view` and submit tokens get 403. It saves the computer's `keys:` config and
+applies the complete override map live to all connected clients, not just the
+calling device. `GET /v1/ui-settings` supplies current overrides and
+`keys.changed` events update them; the daemon log names the device that changed
+them. View devices can read the keys, but cannot edit them. Every config save
+also emits `config.changed` (applied keys, restart-only keys, and any file
+error; see [live reload](cli.md#live-reload)), which the web UI shows as a
+header notice.
 
 `POST /v1/requests/test` is available on the remote HTTP listener and encrypted
 relay tunnel as well as locally. Only paired `decide` devices can call it
@@ -140,15 +174,35 @@ The browser UI never executes command requests, even on the same computer as
 the daemon. **Run** and **Run as admin** exist only in the local desktop app;
 phone/web/relay clients only review and decide. The daemon rejects
 `run_result` from paired-device credentials, including relay connections.
+While a desktop runs a command, the browser shows its elapsed time and limit,
+and a `decide` pairing can press **Stop** to ask that desktop to stop it
+(`POST /v1/requests/{id}/run/stop`, on the remote listener and relay tunnel;
+see [stop from another device](desktop.md#stop-from-another-device)).
 
-The header's **Settings** button opens collapsible **Appearance**, **Decisions**,
-**Read aloud**, and **Test** groups. **Decisions** contains the undo window,
+The header's **Settings** button opens collapsible **Appearance**, **Decisions**, **Sync**,
+**Read aloud**, **Storage**, [**License**](license.md), **Test**, **Keyboard shortcuts**,
+[**Help & feedback**](index.md#report-a-bug-or-request-a-feature), and **About** groups. **About** lists the
+web UI's version, commit, build date and platform, the daemon's version (a paired
+browser shows **see Settings › About on the computer**) and, when the daemon
+reports it, the license state; **Copy** puts it all on the clipboard for a bug
+report. **Decisions** contains the undo window,
 approve button side, and **Swipe cards** on narrow screens; window focus and
-**Show output after Run** are desktop-app-only. **Test** offers **Send test request** and **Send test question**
-to the connected daemon (requires `decide` scope).
+**Show output after Run** are desktop-app-only. **Sync** holds **Resync while
+open** (Off, 10s, 15s, 30s, 1m, 5m; default 15s, saved per browser): while the
+tab is visible the inbox quietly refetches its queue on that timer; it also
+resyncs when the tab regains focus or the network comes back. **Storage** shows the computer's
+disk use and retention; a `decide` pairing can also clean up and change
+retention, a `view` pairing points to the desktop app or `handup storage clean`. **Test** offers **Send test request** and **Send test question**
+to the connected daemon (requires `decide` scope). **Keyboard shortcuts** lists
+the keys this pairing can use (no decision keys on a `view` pairing, no rule
+or Run keys from a browser) and, on touch screens, the swipe and tap gestures.
+With a fine pointer and `decide` scope, select a key and press its replacement;
+conflicts are refused inline, and **Reset**/**Reset all** restore defaults.
+Touch/coarse-pointer and `view` devices keep a read-only list. Overrides save to
+the connected computer and update all clients live, not just this browser.
 **Settings → Appearance → Layout**, beside **Density**, opens a page with previews: **Split**
-(default) puts the list beside the request, or shows list then request on
-phones; **Stacked** puts the list above the request on any screen; **Focus**
+(default) puts the list beside the request in windows at least 56rem (896px)
+wide, or shows list then request on phones and narrower windows; **Stacked** puts the list above the request on any screen; **Focus**
 shows one request at a time; **Rail** uses an icon column with risk dots on
 desktop or a horizontal chip strip on phones. Focus and Rail offer **‹ ›**,
 **N of M**, and **Queue** to open the full list sheet; desktop Focus also shows
@@ -157,7 +211,8 @@ desktop or a horizontal chip strip on phones. Focus and Rail offer **‹ ›**,
 Drag the Split or Stacked divider with a mouse or touch to resize, including
 on phones. Arrow keys adjust a focused divider; double-click, double-tap, or
 Enter resets it. The Layout page offers **Reset sizes** after resizing.
-Split width is 240–640px (default 380px); Stacked height is 15–75% (default 38%).
+Split width is 240–640px (default 380px), narrowed so the request keeps at
+least 36rem; Stacked height is 15–75% (default 38%).
 Layout and pane sizes save per device in the browser's localStorage, not the
 daemon config; see the [desktop guide](desktop.md) for the other Settings controls.
 
@@ -266,7 +321,7 @@ for Firebase project and APK setup.
 the deep link `handup://r/<id>` as the message. When remote access is on, the
 click URL opens `<web UI>/#/r/<id>`. Priorities: 5 (urgent) for high risk, 4
 for medium, 3 for low. Preview content is never sent unless
-`include_content: true`, which adds the summary and inline preview text. If the
+`include_content: true`, which adds the summary, inline preview text and email previews. If the
 environment variable named by `token_env` is set, its value is sent as a bearer
 token. handup refuses to send that token over plaintext `http://` to anything
 other than loopback: the notification is skipped and a warning is logged. Use
@@ -294,6 +349,10 @@ removed; loading them reports a migration hint.
 | `remote.tls.enabled` | `false` | TLS on the remote listener (required for direct) |
 | `remote.tls.cert`, `remote.tls.key` | empty | Your PEM cert and key; empty generates a self-signed pair |
 | `remote.direct.accept_risk` | `false` | Required for direct mode |
+
+Every `remote.*` key (relay included) applies only after a daemon restart; the
+clients show **Restart daemon to apply** until then. Other settings, such as
+`notifications.*`, apply when the config is saved ([live reload](cli.md#live-reload)).
 
 The Android app is a native client of the same remote listener; see
 [mobile.md](mobile.md). Native FCM push and the end-to-end encrypted

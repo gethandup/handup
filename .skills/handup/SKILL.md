@@ -9,140 +9,91 @@ Ask before destructive/irreversible actions, external publication or messages, c
 
 ## Before using handup
 
-This skill supplies instructions and complete offline reference docs, not the
-handup binary, daemon, MCP server configuration or native hooks. Use MCP only
-when its tools are available; shell-capable agents can use an installed `handup`
-CLI. If neither is available, stop the consequential action and report the
-missing setup. Installing a skill alone does not intercept any tools.
-
-## Read on demand
-
-Paths below are relative to this installed skill directory. Load the matching
-reference only when needed; do not load the entire bundle for a routine approval.
-
-| Condition | Read |
-| --- | --- |
-| Installation, missing prerequisites, an unlisted topic or the complete guide/schema inventory | [Offline reference index](references/index.md), then the relevant guide |
-| Binary/daemon setup and first request | [Getting started](references/docs/public/index.md) |
-| GitHub/GitLab npx installation, supported agents or bundle regeneration | [Skill installation](references/docs/public/agents/skill.md) |
-| MCP setup, tool arguments, polling or client timeouts | [MCP](references/docs/public/agents/mcp.md) |
-| Adding handup to an agent or harness without a dedicated guide (own agent loop, SDK app, framework, remote HTTP) | [Any agent or custom harness](references/docs/public/agents/custom.md) |
-| Claude Code permission hooks and fail-closed fallback | [Claude Code](references/docs/public/agents/claude-code.md) |
-| Cursor MCP configuration | [Cursor](references/docs/public/agents/cursor.md) |
-| Shell/CI execution gates and nonzero decisions | [Shell and CI](references/docs/public/agents/shell-ci.md) |
-| Asking before sending an email draft, editable drafts and what to send after approval | [Email drafts](references/docs/public/agents/email.md) |
-| Scoped rules, presence, YOLO or terminal inbox | [Rules](references/docs/public/rules.md) |
-| Webhook/exec integrations or event payloads | [Integrations](references/docs/public/integrations/index.md), [event hooks](references/docs/public/integrations/hooks.md), [event schema](references/docs/public/schema/event.schema.json) |
-| Submit-only tokens, verified integration identity, GitHub Actions or n8n | [Submit tokens](references/docs/public/integrations/tokens.md) |
-| Per-request callback URLs, signing, allowlisting or delivery diagnostics | [Callbacks](references/docs/public/integrations/callbacks.md) |
-| Remote pairing, device scopes or notifications | [Remote access](references/docs/public/remote.md) |
-| Encrypted relay deployment or troubleshooting | [Relay](references/docs/public/relay.md) |
-| Desktop previews, inbox layouts (Split, Stacked, Focus, Rail), pane resizing, grouped Settings, test requests/questions, searchable read-aloud voices or pairing UI | [Desktop](references/docs/public/desktop.md) |
-| Android/iOS setup, grouped Settings, per-computer tests, voice search and Android read aloud (system default TTS engine), offline queued decisions, background delivery limits, biometric decisions or mobile notifications | [Mobile](references/docs/public/mobile.md) |
-| Constructing request JSON or interpreting decisions | [Request schema](references/docs/public/schema/request.schema.json), [decision schema](references/docs/public/schema/decision.schema.json) |
-| Exit codes, preview limits, timeouts, config keys, storage paths or notification behavior | [CLI and daemon reference](references/docs/public/cli.md) |
-| Direct daemon API calls, including `POST /v1/requests/test` (remote `decide` only, never `view`/`submit`) | [CLI API guide](references/docs/public/cli.md#test-requests), [OpenAPI](references/docs/public/openapi.json) |
-| Runnable request/preview recipes or approval-gated shell flows | [Examples](references/examples/README.md); run from `references/` |
-| A full offline human-readable reference is explicitly needed | [Full public guide text](references/llms-full.txt) |
-
-For Codex and omp native setup or limitations, read the matching guide under
-**Native adapters** below. The reference tree is generated from canonical user
-docs; do not hand-edit bundled copies.
-
-Android can deliver durable queued decisions while the app is backgrounded;
-its sending notification is not an approval result. A phone decision still
-waiting to send is pending at the daemon. Keep waiting on the same request id
-and act only on its returned approved/answered decision. For service limits,
-force-stop behavior and high-risk confirmation, read the Mobile guide.
+This skill supplies instructions and offline reference docs, not the handup
+binary, daemon, MCP server configuration or native hooks. Use MCP when its tools
+are available; shell-capable agents can use an installed `handup` CLI. If neither
+is available, stop the consequential action and report the missing setup.
+Installing a skill alone does not intercept any tools.
+`handup skill install` installs the offline, version-matched copy bundled with the CLI.
 
 ## Workflow
 
 1. Describe the exact action, scope, risk, rollback, and reason in title/summary. Remove secrets from previews.
-2. Snapshot relevant evidence; use the recipes below. Start with MCP or the shell command.
-3. Wait for the human, or save the id and poll. Do not execute while pending.
+2. Snapshot the evidence the human needs (diff, command, draft, file) as previews.
+3. Wait for the human, or save the id and keep waiting on it. Do not execute while pending.
 4. On deny, read feedback and stop. A revised request must materially address feedback and have a new content hash. Never resubmit unchanged.
-5. On approval, check `run_result` first: consume it and do not run again, even on failure. Otherwise apply returned fields and execute only the reviewed action. Report failures honestly.
+5. On approval, check `run_result` first: if present the desktop app already ran the command, so consume it and do not run again, even on failure. Otherwise apply returned `fields` (human edits) and execute only the reviewed action. Report failures honestly.
+
+## Never self-approve
+
+These are the human's controls. Never use them on your own requests, and never
+change them to make your requests pass, even when a command is available to you:
+`approve`, `deny`, `answer`, scoped allow (`--scope`), `yolo`, `rules`,
+`decide:`/`exec:` hooks in `config.yaml`, `pair`, `devices`, `tokens`,
+`storage clean`. Approval comes only from the returned decision.
 
 ## MCP
 
-MCP tools: `request_approval`, `ask_question`, `check_request`, `wait_requests`, `cancel_request`, `list_requests`.
-`request_approval` accepts title (required), summary, kind, risk, previews [{type, path OR content OR email, lang?}], input (editable object; edits return in `fields`), options [{id,label,outcome,style?}], timeout (duration or `"none"`), on_timeout (`deny`|`expire`|`approve`), dedupe_key, callback_url, session, session_title, and wait (default true). Relative paths use server cwd; files upload as immutable blobs. Pass your session id and title when known.
-Example: {"title":"Deploy staging","kind":"command","previews":[{"type":"command","content":"./deploy staging"}],"wait":false}.
-MCP decision JSON: `{id, status, option, feedback, content_hash}` plus `fields` (approvals) or `answers` (questions); it has no `expires_at`. Denials return isError=false; daemon/API failures return isError=true, never approval.
+Tools: `request_approval`, `ask_question`, `notify`, `check_request`, `wait_requests`, `cancel_request`, `list_requests`.
 
-Desktop Run adds `run_result` = `{exit_code?, stdout_tail, stderr_tail,
-duration_ms, truncated, elevated, error?}` to approval decisions. Output tails
-are redacted and capped at 64 KiB each; `exit_code` may be null/absent for launch
-failure or signal exit. A reported run is **approved regardless of exit or error**.
-If nothing starts, the claim is released and the request stays pending; agent
-cancellation leaves it cancelled.
-Consume the result and **do not run again**, even on failure. Hooks deny/block
-the original tool call with the run summary to prevent duplicate execution,
-not to reverse approval. Without a result, execute only the reviewed action.
-Run is desktop-only; phone/web/relay never execute or submit results.
-While running, the request stays pending with `run` metadata and phone/web show
-Running. Other decisions return 409 `running in the desktop app`; agent cancel
-stops the run. Expiry is paused during the 12-minute claim lease. See
-[Desktop](references/docs/public/desktop.md#run-a-command) for elevation/cancellation limits.
-Short client timeouts (omp 30s, Codex 60s): pass `"wait":false`, save the id, then call `wait_requests` {"ids":[…], "max_wait_seconds"?} (default 25, max 300) until `pending` is empty, before ending the turn. Result: `{"decided":[decision JSON], "pending":[ids], "message"}`. Blocking calls stop after 300s with `status: pending`. Pending is neither approval nor an answer; the same id recovers the decision after a reconnect, so never create a duplicate. `check_request` {"id"} reads status without waiting; `list_requests` {"status"?, "session"?, "agent"?, "limit"?} recovers ids after context loss; `cancel_request` {"id"} retracts a request you no longer need, never to dodge a decision.
-Requests wait for the human by default (`requests.default_timeout: none`); an explicit timeout opts into expiry and `on_timeout` (default deny) applies only then. A client tool timeout does not approve or expire anything.
-`ask_question`: {"question":"Which region?","choices":["eu","us"],"allow_free_text":true}; `question` and `allow_free_text` are required. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Submit returns `status: answered` and `answers.answer` = `{"selected":["eu"],"text":"…"}` (`text` only when typed). Decline returns `status: denied` with optional feedback and no answers. It accepts `wait`, `session` and `session_title` like `request_approval`.
-Structured questions (`handup ask --request -`): `kind: "question"`, `input.questions` = 1–10 of {id, question, header?, multi?, recommended? (option index), allow_free_text?, options: [{label, description?, preview? (markdown)}]}, plus options with one `approve` (Submit) and one `deny` (Decline). Submit returns `decision.fields.answers` = {QID: {selected: [labels], text?}}; every question is answered, single-choice questions select at most one label, and `text` appears only where free text is allowed.
+- `request_approval`: `title` (required), `summary`, `kind`, `risk`, `previews` [{type, path OR content OR email, lang?}], `input` (editable; edits return in `fields`), `options`, `timeout`, `on_timeout`, `run_timeout` (limit for a desktop Run of the command, e.g. `"30m"`; default 10m, capped by the daemon; 1ms to one year), `dedupe_key`, `session`, `session_title`, `wait`. Example: `{"title":"Deploy staging","kind":"command","previews":[{"type":"command","content":"./deploy staging"}],"wait":false}`.
+- `ask_question`: `{"question":"Which region?","choices":["eu","us"],"allow_free_text":true}`. Submit returns `status: answered` with `answers.answer` = `{"selected":[…],"text"?}`; Decline returns `denied`. Ask only when you need the answer; never offer a lone OK choice (a single choice is rejected) to report something. Choice labels must be distinct after trimming.
+- `notify`: `{"title":"Staging deploy finished","summary":"All checks passed."}` (`title` required; `summary`, `previews`, `session`, `session_title`, `timeout`, `dedupe_key`). Put the message text in `summary`, shown under the one-line title; there is no `body` or `message` field, and a notice without `summary` or `previews` shows only its title. Use it for status updates, finished results and heads-ups that need no reply. It returns at once; the human picks OK or Dismiss, both recorded as `dismissed`. Never wait for or poll it; `wait_requests` lists notice ids under `notices`, never as pending. The human may add an optional reply: it arrives by itself in later handup tool results (`notice_replies` plus a line `Reply from the human to your notice TITLE: FEEDBACK`), live in omp, or via Claude Code hooks, which wake an idle Claude (under Claude Code, `session` defaults to Claude's session; no need to pass it). Treat a reply as new instructions from the human.
+- Short client timeouts (omp, Codex): pass `"wait":false` and save the id; then obey the pending result: with the omp extension's push note, end the turn and the decision wakes you; otherwise call `wait_requests {"ids":[…]}` until `pending` is empty before ending the turn (Codex code mode: run it in `functions.exec` with `yield_time_ms: 1000` so the human can message between waits; see `references/docs/public/agents/codex.md`). Pending is neither approval nor an answer; the same id recovers the decision after a reconnect, so never create a duplicate.
+- `check_request` reads status without waiting; `list_requests` recovers ids after context loss; `cancel_request` retracts a request you no longer need, never to dodge a decision.
+- Decision JSON: `{id, status, option, feedback, content_hash}` plus `fields` or `answers`. Denials return isError=false; daemon/API failures return isError=true, never approval.
+- Requests wait for the human by default; a client tool timeout approves or expires nothing.
 
-## Commands
+## CLI
 
-| Command | Agent use |
-| --- | --- |
-| `ask` | Submit: `handup ask --title 'Deploy staging' --command './deploy staging' --wait --json`; full JSON: `handup ask --request - --wait --json` |
-| `wait` | `handup wait ID --json` blocks until terminal status; desktop execution returns top-level `run_result` |
-| `status` | `handup status ID --json` checks current status; desktop execution returns `decision.run_result` |
-| `cancel` | `handup cancel ID --json` cancels pending work |
-| `ls` | `handup ls --status pending --session ID --json` lists queue (`--agent`, `--limit`) |
-| `show` | `handup show ID --json` shows immutable previews |
-| `approve` | Human: `handup approve ID --json` |
-| `deny` | Human: `handup deny ID -m 'Use staging' --json` |
-| `answer` | Human: `handup answer ID --select eu --text 'eu-west-1' --json`; several questions: `--select QID=LABEL`, `--text QID=TEXT` |
-| `schema` | `handup schema request`, `decision`, `event`, or `openapi` |
-| `serve` | `handup serve --foreground` starts daemon |
-| `service` | `handup service install`, `uninstall`, or `status` (`--dry-run`) |
-| `demo` | `handup demo --json` seeds preview examples |
-| `doctor` | `handup doctor --json` diagnoses local environment |
-| `ui` | Human: `handup ui --next` opens or focuses the desktop app |
-| `inbox` | Human: `handup inbox` live terminal queue, requires TTY |
-| `rules` | Human: `handup rules list`, `test request.json` (or ID), `rm RULE_ID` |
-| `log` | `handup log --json` tails the append-only audit with rule IDs |
-| `pair` | Human only: `handup pair --scope decide` prints a one-time QR pairing link for a phone or browser (needs `remote.mode`); agents never pair devices |
-| `devices` | Human only: `handup devices list [--json]` shows enabled, push and scope; `handup devices disable DEVICE_ID` / `enable DEVICE_ID` pauses/resumes access and push without unpairing; `handup devices mute DEVICE_ID` / `unmute DEVICE_ID` stops/resumes push only; `handup devices scope DEVICE_ID view|decide` changes access; `handup devices revoke DEVICE_ID` unpairs immediately |
-| `tokens` | Human only: `handup tokens create NAME [--expires 90d]`, `tokens list`, `tokens revoke NAME`. Submit credentials create and access only their own requests; never decide. See [submit tokens](references/docs/public/integrations/tokens.md) |
-| `yolo` | Human only: `handup yolo on --for 1h` auto-approves new low/medium-risk requests (`hard`: every risk; `off`); bare `handup yolo --json` prints `{mode, until}`. Agents never turn it on |
-| `mcp` | `handup mcp` serves stdio; stdout is protocol only |
-| `hook` | `handup hook claude` reads PermissionRequest JSON |
-| `integrate` | `handup integrate mcp --client codex --dry-run`; `handup integrate claude`; `handup integrate --list`; `--uninstall` removes only handup entries |
-| `prompt` | `handup prompt --agent generic` prints project instructions |
-| `version` | `handup version --plain` reports version |
-| `completion` | `handup completion bash` generates completions |
-| `config` | `handup config init`, `show`, `path`, `edit`, `get`, `set`, `toggle`, `keys` |
-| `uninstall` | `handup uninstall --yes` removes binary, preserves config |
-| `help` | `handup help COMMAND` explains parameters |
+```sh
+handup ask --title "Deploy staging" --command './deploy staging' --risk medium --wait --json
+handup ask --title "Review changes" --kind edit --git-diff --wait --json
+printf '%s' "$REQUEST_JSON" | handup ask --request - --wait --json   # full request JSON
+handup wait ID --json      # or: status ID --json, cancel ID --json, show ID --json
+```
 
-## Preview recipes
+Previews: `--preview TYPE:PATH` (repeatable) for text, markdown, code, diff,
+files, json, html, image, video, audio, file, pdf, email; `--preview -` reads
+text from stdin; `--git-diff` and `--command` snapshot a diff or command.
+Submitting never executes a command.
 
-| Preview | Recipe |
-| --- | --- |
-| text | `--preview text:notes.txt` or `--preview -` |
-| markdown | `--preview markdown:plan.md` |
-| code | `--preview code:src/main.rs` (directory bundles supported) |
-| diff | `--git-diff` or `--preview diff:change.diff` |
-| files | `--preview files:output/` snapshots a directory; symlinks inside it are rejected |
-| command | `--command './deploy staging'` snapshots the command; submission does not execute it, but desktop Run can |
-| json | `--preview json:payload.json` requires valid JSON |
-| html | `--preview html:mockup/` bundles assets; include index.html; bundle is represented as files + entry |
-| image | `--preview image:mockup.png` |
-| video | `--preview video:demo.mp4` |
-| audio | `--preview audio:voiceover.wav` |
-| file | `--preview file:artifact.zip` |
-| pdf | `--preview pdf:contract.pdf` |
-| email | `--preview email:draft.json` previews a draft and makes it the editable `input`; read [email drafts](references/docs/public/agents/email.md) |
+Agent commands: `ask`, `wait`, `status`, `cancel`, `ls`, `show`, `schema`,
+`log`, `doctor`, `demo`, `version`, `help`. Setup (only when the human asks):
+`serve`, `service` (install, uninstall, status), `mcp`, `hook`, `hooks` (list,
+test), `integrate`, `skill` (install, uninstall), `prompt`, `completion`, `config` (init, show, path, edit,
+get, set, unset, toggle, keys, validate), `uninstall`. Human-only: `approve`, `deny`, `answer`,
+`stop` (a desktop Run), `ui`, `report`, `inbox`, `rules` (list, test, rm), `storage` (clean), `pair`, `devices`
+(list, disable, enable, mute, unmute, scope, revoke), `tokens` (create, list,
+revoke), `yolo`. Run `handup help COMMAND` or read the CLI reference for flags.
+For config, prefer `handup config get KEY --json`, `set` and `unset` (all
+validated; invalid writes nothing) over hand edits, and run `handup config
+validate` after any hand edit. `config show --effective --json` lists every
+setting with its source.
+
+When asked to set up handup:
+
+```sh
+handup integrate all   # every detected agent: Claude Code, Codex, Cursor, omp
+DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup
+handup prompt          # generic; --agent claude|codex|cursor|omp tailors it
+handup ask --title "Review action" --command "echo hello" --wait --json
+```
+
+The [agent skill guide](references/docs/public/agents/skill.md) explains the
+setup instructions, approval contract and offline docs provided by the skill.
+`integrate` targets are `all`, `claude`, `codex`, `omp`, and
+`mcp --client claude-code|codex|cursor|omp`. `all` uses the same agent-home
+detection as `--list` and creates missing configs. Claude Code and Codex get hooks plus MCP;
+Cursor and omp get MCP only. Existing omp extensions are upgraded (a customized
+one fails validation); add new
+tool gating explicitly with `handup integrate omp`. Every selected agent is
+validated before writes, with backups, diffs and per-agent summaries.
+`--dry-run` writes nothing and previews valid agents after validation failures;
+`--no-mcp` skips Cursor and MCP-only omp; `--uninstall` removes installed entries.
+Invalid config prevents real writes. Write failures name the file and continue
+with others; a single agent can be half-written, so fix the cause and reapply.
+Exit 4 means failure; no detected agents exits 0.
 
 ## Exit codes
 
@@ -150,39 +101,56 @@ Blocking `ask --wait` and `wait` exit codes. Nonblocking `ask`, `status` and `sh
 
 | Exit | Meaning |
 | --- | --- |
-| 0 | approved/answered |
+| 0 | approved/answered/dismissed |
 | 1 | denied |
 | 2 | expired/timeout |
 | 3 | cancelled |
 | 4 | error |
 | 5 | ran in the desktop app |
+| 6 | license required |
 
-`ask --wait`, `wait`, `status` and `show` exit 5 when `run_result` is present,
-regardless of command success. Inspect `run_result.exit_code` and `error`; do
-not execute again. Text `wait` prints the run summary, output tails and human
-feedback; text `status` does not—use `status --json`.
+Exit 5 means `run_result` is present, regardless of command success: inspect
+`run_result.exit_code` and `error`, and do not execute again.
+Exit 6 (MCP `code: license_required`) means handup refused a new request because
+its trial ended or the license was revoked. It is not a decision and never
+permission: tell the human to run `handup license activate KEY` or open
+Settings → License, and do not act until a request is approved. Other license
+commands: `handup license status|import FILE|deactivate`.
 
-## Shell examples
+## Read on demand
 
-```sh
-handup ask --title "Review changes" --kind edit --git-diff --wait --json
-handup ask --title "Publish voiceover" --preview audio:voiceover.wav --risk medium --wait --json
-```
+Paths are relative to this skill directory. Load the matching reference only
+when its condition applies; never load the whole bundle for a routine approval.
+The reference tree is generated from canonical docs; do not hand-edit it.
 
-For a client's configuration or timeout behavior, read its bundled guide above.
-For full request JSON, read the bundled request schema or `handup schema request`.
-
-## Rules and scoped allow
-
-Read [rules](references/docs/public/rules.md) when inspecting auto decisions, presence routing, or terminal triage. Humans may grant `handup approve ID --scope session|project|always`; agents must never grant themselves broader approval. Rules use first-match precedence and invalid files fail closed. Auto decisions carry `decided_by: rule` and `rule_id` (or `decided_by: yolo` when the human turned on YOLO mode) in decision metadata and the append-only audit. `presence.mode: away` retains Claude's native prompt while present; defaults are always routing and `presence.idle_after: 2m`. Terminal inbox keys: j/k, a/d, 1–9, s/p, u held undo, / filter, ? help, q quit.
-
-## Event integrations
-
-Top-level `hooks:` sends versioned lifecycle events to webhook receivers or exec
-commands; it is not an approval bypass. Use `handup hooks list` to validate/list
-configuration and `handup hooks test <name> --event request.decided` for synthetic
-delivery. Content is excluded by default; signing secrets are env variable names.
-See [event hooks](references/docs/public/integrations/hooks.md) for templates and recipes.
+| Condition | Read |
+| --- | --- |
+| Installation, missing prerequisites, an unlisted topic or the complete guide/schema inventory | [Offline reference index](references/index.md), then the relevant guide |
+| Binary/daemon setup and first request | [Getting started](references/docs/public/index.md) |
+| Installing compiled binaries/packages, platform availability, checksums, updates or uninstall | [Downloads](references/docs/public/downloads.md) |
+| Trial days left, activating/importing a license, exit 6 or `license_required` | [License and trial](references/docs/public/license.md) |
+| Printing agent instructions with the CLI, GitHub npx skill installation or supported agents | [Agent skill](references/docs/public/agents/skill.md) |
+| MCP setup, every tool argument, structured multi-question forms, polling or client timeouts | [MCP](references/docs/public/agents/mcp.md) |
+| Adding handup to an agent or harness without a dedicated guide (own agent loop, SDK app, framework, remote HTTP) | [Any agent or custom harness](references/docs/public/agents/custom.md) |
+| Claude Code permission hooks and fail-closed fallback | [Claude Code](references/docs/public/agents/claude-code.md) |
+| Cursor MCP configuration | [Cursor](references/docs/public/agents/cursor.md) |
+| Shell/CI execution gates and nonzero decisions | [Shell and CI](references/docs/public/agents/shell-ci.md) |
+| Asking before sending an email draft, editable drafts and what to send after approval | [Email drafts](references/docs/public/agents/email.md) |
+| Desktop Run, `run_result` fields, run limits (`run_timeout`), elevation, cancellation and stopping | [Desktop: run a command](references/docs/public/desktop.md#run-a-command) |
+| Auto decisions (`decided_by` rule, yolo, `hook:<name>`), scoped allow, presence or terminal inbox | [Rules](references/docs/public/rules.md) |
+| Webhook/exec event hooks, `decide:` policy hooks the human asked you to write, or event payloads | [Event hooks](references/docs/public/integrations/hooks.md), [integrations](references/docs/public/integrations/index.md), [event schema](references/docs/public/schema/event.schema.json) |
+| Advanced recipes: canned email replies, sender routing, policy auto-decider, forms, publish gate, meeting replies | [Cookbook](references/docs/public/cookbook/index.md); scripts in [examples/cookbook](references/examples/cookbook/) |
+| Submit-only tokens, verified integration identity, GitHub Actions or n8n | [Submit tokens](references/docs/public/integrations/tokens.md) |
+| Per-request callback URLs, signing, allowlisting or delivery diagnostics | [Callbacks](references/docs/public/integrations/callbacks.md) |
+| Remote pairing, device scopes or notifications | [Remote access](references/docs/public/remote.md) |
+| Encrypted relay deployment or troubleshooting | [Relay](references/docs/public/relay.md) |
+| Desktop previews, inbox layouts, Settings, configurable keyboard shortcuts, test requests or pairing UI | [Desktop](references/docs/public/desktop.md) |
+| Android/iOS setup, offline queued decisions (a queued phone decision is still pending at the daemon), background delivery or mobile notifications | [Mobile](references/docs/public/mobile.md) |
+| Constructing request JSON or interpreting decisions | [Request schema](references/docs/public/schema/request.schema.json), [decision schema](references/docs/public/schema/decision.schema.json) |
+| Flags, preview limits, timeouts, config keys (including `keys.<id>` shortcut syntax/conflicts), storage paths or notification behavior | [CLI and daemon reference](references/docs/public/cli.md) |
+| Direct daemon API calls, including `POST /v1/requests/test` or decide-scoped `PUT /v1/keys` | [CLI API guide](references/docs/public/cli.md), [OpenAPI](references/docs/public/openapi.json) |
+| Runnable request/preview recipes or approval-gated shell flows | [Examples](references/examples/README.md); run from `references/` |
+| A full offline human-readable reference is explicitly needed | [Full public guide text](references/llms-full.txt) |
 
 ## Native adapters
 

@@ -43,8 +43,9 @@ writes the entry for known clients; for others add the equivalent of:
 {"mcpServers":{"handup":{"command":"handup","args":["mcp"]}}}
 ```
 
-Tools: `request_approval`, `ask_question`, `check_request`, `wait_requests`,
-`cancel_request`, `list_requests`. Arguments and response shapes: [MCP](mcp.md).
+Tools: `request_approval`, `ask_question`, `notify`, `check_request`,
+`wait_requests`, `cancel_request`, `list_requests`. Arguments and response
+shapes: [MCP](mcp.md).
 
 **CLI.** `handup ask --request - --wait --json < request.json` takes full request
 JSON (`handup schema request`); flags cover common cases (`--title`, `--command`,
@@ -73,16 +74,29 @@ stored and shown on every paired device.
 
 | Field | Use |
 | --- | --- |
-| `kind`, `risk` | `command`, `edit`, `review`, `question`, `custom`; `low`/`medium`/`high` drives notification urgency and rules |
+| `kind`, `risk` | `command`, `edit`, `review`, `question`, `info`, `custom`; `low`/`medium`/`high` drives notification urgency and rules |
 | `source.agent`, `source.session`, `source.session_title`, `source.cwd` | Who is asking; self-declared, shown to the human and matched by rules |
 | `input` | Editable object; the human's edits come back in `decision.fields` |
 | `options` | Custom choices `{id,label,outcome}` (1–32); omit for Approve/Deny |
 | `timeout`, `on_timeout` | Default is no deadline; a duration opts into expiry (`deny` by default) |
+| `run_timeout` | Limit for a desktop [Run](../desktop.md#run-a-command) of the command (e.g. `30m`); default `run.timeout` (10m), capped at `run.max_timeout` (1h); 1ms to one year |
 | `dedupe_key` | Identical pending requests with the same key collapse into one id |
 | `callback_url` | Daemon POSTs the decision there ([callbacks](../integrations/callbacks.md)) |
 
 Questions instead of approvals: MCP `ask_question`, or `kind: "question"` with
 `input.questions` (see the [MCP guide](mcp.md)).
+
+Information that needs no reply (status, finished results, heads-ups): MCP
+`notify`, `handup ask --kind info`, or `kind: "info"`. A notice gets **OK** and
+**Dismiss** options (both record `status: dismissed`), never takes `input`, and
+is never decided by rules or YOLO. Put the message text in `summary` under a
+one-line `title`; there is no body or message field.
+Submit it and move on; do not wait for it, poll it, or ask a question with a
+lone OK choice instead. The human may add an optional reply; it arrives on its
+own (MCP: in later handup tool results; see [notice replies](mcp.md#notice-replies)).
+Other clients claim replies with `POST /v1/notice-replies` `{"id"}` or
+`{"session"}` (both may be given and must then match); each non-empty reply is
+returned once, to the first caller.
 
 ## 4. Persist the id, then wait
 
@@ -98,7 +112,8 @@ pending. Reattach with the same id:
   Local and paired-device clients can instead watch the `GET /v1/events` WebSocket.
 
 Never create a second request because a wait timed out. Keep the agent turn
-alive while answers you need are pending: an idle agent is not woken by them.
+alive while answers you need are pending unless your client pushes decisions
+(the omp extension marks watched ids with a `handup push active` note).
 
 ## 5. Gate execution on the decision
 
@@ -106,6 +121,7 @@ alive while answers you need are pending: an idle agent is not woken by them.
 | --- | --- | --- |
 | `approved` | Human approved | If `run_result` is present, consume it and do not run again; otherwise run exactly the reviewed action with `decision.fields` edits applied |
 | `answered` | Question submitted | Use `answers` (MCP) or `fields.answers` (CLI/HTTP decision) |
+| `dismissed` | Human read an info notice | Nothing; a notice gates no action |
 | `denied` | Human said no | Stop; show `decision.feedback`; revise only if feedback asks |
 | `expired`, `cancelled` | No decision | Stop; not permission |
 | `pending` | Undecided | Keep waiting; not permission |
@@ -126,7 +142,7 @@ Response shapes differ by transport:
   question answers are in `fields.answers`.
 - HTTP and other CLI `--json` commands: the full request, decision under `decision`.
 
-CLI `ask --wait`, `wait`, `status` and `show` return 0 approved/answered,
+CLI `ask --wait`, `wait`, `status` and `show` return 0 approved/answered/dismissed,
 1 denied, 2 expired, 3 cancelled, 4 error, or **5 ran in the desktop app**.
 Nonblocking `ask`, `status` and `show` also exit 0 while pending, so read
 `status` there.

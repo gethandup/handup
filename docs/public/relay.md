@@ -22,9 +22,9 @@ does over the remote listener.
 
 ## Run a relay
 
-This requires the compiled `handup-relay` program. No customer relay binary
-is published in this local preview; see [downloads and releases](downloads.md).
-The following commands apply once the relay binary is installed:
+This requires the compiled `handup-relay` program. handup releases do not
+include a relay binary yet; see [downloads and releases](downloads.md) for what
+is published. The following commands apply once the relay binary is installed:
 
 ```bash
 handup-relay --listen 127.0.0.1:8787 --db /var/lib/handup-relay/relay.db
@@ -65,6 +65,7 @@ limits:
   max_envelope: 65553                # bytes; the protocol maximum is the floor
   max_queue: 64                      # queued envelopes per offline channel end
   queue_ttl: 10m                     # older queued envelopes are dropped, unless being delivered
+  channel_ttl: 90d                   # channels idle this long are deleted
   max_connections: 512               # authenticated WebSockets
   tenant:                            # per-tenant defaults (tenant mode)
     channels: 1000                   # default: a quarter of max_channels
@@ -89,14 +90,21 @@ Other limits guard the relay against abuse:
   reading push or wake bodies. Timed-out or oversized bodies close the connection;
   creation accepts at most 4 KiB, registration and wake at most 16 KiB.
 
-Channels with a connected end are never swept as idle.
+Channels with a connected end are never swept as idle; others are deleted
+after `channel_ttl` (default 90 days) without a connection.
 
 Set `HANDUP_RELAY_REGISTRATION_TOKEN` so only your daemons can create
-channels. Give the daemon the same value in `HANDUP_RELAY_TOKEN`. You can
-rename that variable with `remote.relay.registration_token_env`. The relay
-refuses to start with `push` credentials unless it has a registration token or
-runs in tenant mode, because anyone could otherwise send wake-ups through your
-FCM/APNs account.
+channels. A non-empty token must be at least 32 characters or the relay refuses
+to start; generate a random value with `openssl rand -hex 32`. An empty value
+counts as unset. Give the daemon the same value in `HANDUP_RELAY_TOKEN`. You can
+rename that variable with `remote.relay.registration_token_env`.
+After an IP reaches `auth_failures_per_minute`, channel creation returns HTTP 429
+(`too many failed attempts; retry later`) even with the correct registration
+token until the current 60-second failure window expires. Rejected requests close
+the connection without reading the body.
+The relay refuses to start with `push` credentials unless it has a registration
+token or runs in tenant mode, because anyone could otherwise send wake-ups
+through your FCM/APNs account.
 
 The relay creates its database, SQLite sidecar files, and log with mode 0600.
 Clients only ever see `storage error` (HTTP 503) when the database fails; the
@@ -202,15 +210,15 @@ Manage tenants against the relay's database. The commands honor `--config`,
 relay is running:
 
 ```bash
-bin/handup-relay tenant add "Alice"     # prints id and token (hrt_…); the token is shown once
-bin/handup-relay tenant add "Alice" --token-file alice.token  # token to a new 0600 file, only the id on stdout
-bin/handup-relay tenant list [--json]   # id, name, enabled, push titles, last use, usage/limit per quota; never tokens
-bin/handup-relay tenant rotate <id> [--token-file <path>]  # a new token; the old one stops working at once
-bin/handup-relay tenant disable <id>
-bin/handup-relay tenant enable <id>
-bin/handup-relay tenant set-quota <id> channels 50   # or `default` to clear the override
-bin/handup-relay tenant set-push-titles <id> on      # or `off` (the default)
-bin/handup-relay tenant remove <id>     # deletes its channels, queued envelopes and push tokens
+handup-relay tenant add "Alice"     # prints id and token (hrt_…); the token is shown once
+handup-relay tenant add "Alice" --token-file alice.token  # token to a new 0600 file, only the id on stdout
+handup-relay tenant list [--json]   # id, name, enabled, push titles, last use, usage/limit per quota; never tokens
+handup-relay tenant rotate <id> [--token-file <path>]  # a new token; the old one stops working at once
+handup-relay tenant disable <id>
+handup-relay tenant enable <id>
+handup-relay tenant set-quota <id> channels 50   # or `default` to clear the override
+handup-relay tenant set-push-titles <id> on      # or `off` (the default)
+handup-relay tenant remove <id>     # deletes its channels, queued envelopes and push tokens
 ```
 
 `--token-file` keeps the credential out of terminal scrollback and logs. It
@@ -295,7 +303,7 @@ first start creates the schema and later releases upgrade it, so the serving
 role needs to own it. For a serving role with data access only, give the
 schema owner's URL as `HANDUP_RELAY_DATABASE_MIGRATE_URL` (or
 `database.migrate_url`, or `--database-migrate-url`) and run
-`bin/handup-relay migrate` before the first start and after each upgrade. With
+`handup-relay migrate` before the first start and after each upgrade. With
 a migration URL set, the relay and `tenant` commands run no DDL: they refuse
 to start until the schema is at the version they need, and tell you to run
 `handup-relay migrate`. Then grant the serving role data access:
@@ -311,12 +319,6 @@ GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO handup_relay;
 Re-run the grants after a `migrate` that adds tables. The serving role needs
 no `CREATE`, superuser, or replication rights. Tenant tokens are stored as
 SHA-256 digests; channel credentials as digests too.
-
-`make relay-test-pg` runs the multi-instance tests against a throwaway Postgres
-(downloaded once, checksum verified, into `~/.cache/handup`). The download is
-behind the `pg-tests` Cargo feature, so other builds never fetch it.
-`make deny` checks dependencies against `deny.toml` (advisories, licenses,
-crates.io only, no OpenSSL) with the `cargo-deny` version pinned in `mise.toml`.
 
 ### TLS
 

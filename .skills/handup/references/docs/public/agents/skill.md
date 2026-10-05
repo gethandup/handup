@@ -23,7 +23,26 @@ An agent with CLI access can call handup commands; an MCP client can call its
 configured tools. If neither is available, it must stop consequential work and
 report missing setup—not proceed without approval.
 
-## Install the skill from GitHub
+## Install the skill bundled with handup
+
+If handup is installed, prefer its bundled copy. It needs no Node.js, Git or
+network access, and always matches the installed program's version:
+
+```sh
+handup skill install                  # ~/.agents/skills/handup
+handup skill install --agent claude   # ~/.claude/skills/handup
+handup skill install --agent codex    # $CODEX_HOME/skills/handup (default ~/.codex)
+handup skill install --project        # ./.agents/skills/handup; combine with --agent
+handup skill install --dir PATH       # any other skill directory
+```
+
+`--dry-run` prints the planned change without writing. A `.handup-skill` marker
+records the installed version; rerun `handup skill install` after upgrading
+handup to refresh it. An existing directory without the marker is left alone
+unless you pass `--force`. `handup skill uninstall` (same location flags)
+removes only marked directories.
+
+## Or install the skill from GitHub
 
 The skill installs handup's approval workflow and complete offline user documentation into a supported agent's skill directory. It is published from [gethandup/handup](https://github.com/gethandup/handup), which holds handup's docs, this skill and examples (not the application source). You need Node.js 22.20 or newer and Git. No handup npm package is needed: npx runs the `skills` installer, which fetches the Git repository.
 
@@ -61,15 +80,15 @@ DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup --list
 
 The entire skill directory is installed, including:
 
-- `SKILL.md`: approval/denial workflow, preview recipes, exit codes and topic routing.
+- `SKILL.md`: a short router with the approval/denial workflow, what never to self-approve, MCP and CLI essentials, exit codes and a read-on-demand reference table.
 - `references/index.md`: inventory of every bundled public guide and machine contract.
 - `references/llms-full.txt`: full public guide text in one offline-readable file.
-- `references/docs/public/`: getting started, all agent integrations, desktop/mobile, remote access, relay, rules, lifecycle hooks, OpenAPI and request/decision/event JSON schemas.
+- `references/docs/public/`: getting started, all agent integrations, desktop/mobile, remote access, relay, rules, lifecycle hooks, cookbook, OpenAPI and request/decision/event JSON schemas. Pages are text only; website banner images are omitted.
 - `references/examples/`: runnable request examples and their preview assets.
 
 Load only the relevant reference for the current task. The full documentation is available offline; it does not have to be inserted into every agent prompt. Copying only `SKILL.md` loses the reference bundle.
 
-For an agent the skills CLI does not register, copy the **whole** `.skills/handup` directory into that agent's documented skill-loading directory, or provide its workflow/reference files as instructions. `omp` and `jcode` are not valid `--agent` IDs in skills 1.7.0. A shell-capable agent can use the installed handup CLI; an MCP-capable agent can call configured handup tools. Neither path implies native tool interception. Installing the skill alone does not install the binary or configure MCP or native adapters.
+For an agent the skills CLI does not register, run `handup skill install --dir PATH` with that agent's documented skill-loading directory, copy the **whole** skill directory there, or provide its workflow/reference files as instructions. `omp` and `jcode` are not valid `--agent` IDs in skills 1.7.0. A shell-capable agent can use the installed handup CLI; an MCP-capable agent can call configured handup tools. Neither path implies native tool interception. Installing the skill alone does not install the binary or configure MCP or native adapters.
 
 ## Public documentation, private application source
 

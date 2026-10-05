@@ -6,6 +6,10 @@ handup integrate mcp --client cursor
 handup prompt --agent cursor
 ```
 
+`handup integrate all` includes this MCP-only integration when
+`~/.cursor/` exists, creating `mcp.json` if absent. `--no-mcp` skips Cursor;
+`--uninstall` removes handup from every installed agent.
+
 The installer safely merges the handup stdio server (command handup, args ["mcp"]) into ~/.cursor/mcp.json, backing up before changes. Other servers and keys remain. Reapplying is idempotent; `handup integrate mcp --client cursor --uninstall` removes only handup. Existing conflicting handup entries are not overwritten.
 
 Restart Cursor and enable handup under Customize. Cursor may ask before MCP calls.

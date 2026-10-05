@@ -1,15 +1,41 @@
 # handup
 
-> Local human approval queue for AI agents. It snapshots previews and records decisions; the desktop app can explicitly run command requests and return their result.
+> The approval inbox for AI agents. It snapshots previews and records decisions; the desktop app can explicitly run command requests and return their result.
 
 Ask before destructive/irreversible actions, external publication or messages, costly resource use, credential changes/access, or ambiguous intent. Include the exact proposed action and its effects. Do not execute while pending. Only approved/answered permits the approved action; bind execution to content_hash and re-request if the action changes. A deny is a normal human answer, not a transport error. Read feedback, stop, and revise only when requested. Never retry the same request or treat expired, cancelled, or error as permission.
 
+## Setup quickstart
+
+```sh
+handup integrate all   # every detected agent: Claude Code, Codex, Cursor, omp
+DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup
+handup prompt          # paste into project instructions; --agent tailors them
+handup ask --title "Review action" --command "echo hello" --wait --json
+```
+
+The [agent skill](docs/public/agents/skill.md) gives the agent setup instructions,
+the approval contract and offline docs. Only one agent? Use
+[`handup integrate claude`](docs/public/agents/claude-code.md),
+[`handup integrate codex`](docs/public/agents/codex.md),
+[`handup integrate omp`](docs/public/agents/omp.md), or
+[`handup integrate mcp --client cursor`](docs/public/agents/cursor.md).
+`all` uses the same agent-home detection as `--list`, creating missing configs. Claude Code
+and Codex get hooks plus MCP; Cursor and omp get MCP only. Existing omp gating
+extensions are upgraded; add new gating explicitly with `handup integrate omp`.
+Every selected agent is validated before writes, with per-agent summaries.
+Invalid config prevents real writes; dry-run still previews valid agents.
+Write failures name the file and continue with other agents; a single agent
+can be half-written, so fix the cause and reapply. `--dry-run` writes nothing;
+`--no-mcp` skips Cursor and MCP-only omp; `--uninstall` removes installed handup
+entries. Exit 4 means failure; no detected agents exits 0.
+
 | Command | Agent use |
 | --- | --- |
-| `ask` | Submit: `handup ask --title 'Deploy staging' --command './deploy staging' --wait --json`; full JSON: `handup ask --request - --wait --json` |
+| `ask` | Submit: `handup ask --title 'Deploy staging' --command './deploy staging' --wait --json`; full JSON: `handup ask --request - --wait --json`; notice needing no reply: `--kind info` (do not wait) |
 | `wait` | `handup wait ID --json` blocks until terminal status; desktop execution returns top-level `run_result` |
 | `status` | `handup status ID --json` checks current status; desktop execution returns `decision.run_result` |
 | `cancel` | `handup cancel ID --json` cancels pending work |
+| `stop` | Human: `handup stop ID [--json]` asks the desktop app to stop the command it is running for that request (SIGTERM, SIGKILL after 5s) |
 | `ls` | `handup ls --status pending --session ID --json` lists queue (`--agent`, `--limit`) |
 | `show` | `handup show ID --json` shows immutable previews |
 | `approve` | Human: `handup approve ID --json` |
@@ -21,25 +47,28 @@ Ask before destructive/irreversible actions, external publication or messages, c
 | `demo` | `handup demo --json` seeds preview examples |
 | `doctor` | `handup doctor --json` diagnoses local environment |
 | `ui` | Human: `handup ui --next` opens or focuses the desktop app |
+| `report` | Human: `handup report` opens the prefilled support page (`--feature`, `--question`; `--print` prints the URL) |
 | `inbox` | Human: `handup inbox` live terminal queue, requires TTY |
 | `rules` | Human: `handup rules list`, `test request.json` (or ID), `rm RULE_ID` |
 | `log` | `handup log --json` tails the append-only audit with rule IDs |
+| `storage` | Human only: `handup storage [--json]` shows disk use by category, retention and the last cleanup; `handup storage clean history` (or `files`) `--older-than 30d` (or `--keep 100`, or `--all`) deletes resolved requests, or only their files, in the background. Pending requests are never touched. Agents never clean up |
 | `pair` | Human only: `handup pair --scope decide` prints a one-time QR pairing link for a phone or browser (needs `remote.mode`); agents never pair devices |
 | `devices` | Human only: `handup devices list [--json]` shows enabled, push and scope; `handup devices disable DEVICE_ID` / `enable DEVICE_ID` pauses/resumes access and push without unpairing; `handup devices mute DEVICE_ID` / `unmute DEVICE_ID` stops/resumes push only; `handup devices scope DEVICE_ID view|decide` changes access; `handup devices revoke DEVICE_ID` unpairs immediately |
 | `tokens` | Human only: `handup tokens create NAME [--expires 90d]`, `tokens list`, `tokens revoke NAME`. Submit credentials create and access only their own requests; never decide. See docs/public/integrations/tokens.md |
 | `yolo` | Human only: `handup yolo on --for 1h` auto-approves new low/medium-risk requests (`hard`: every risk; `off`); bare `handup yolo --json` prints `{mode, until}`. Agents never turn it on |
 | `mcp` | `handup mcp` serves stdio; stdout is protocol only |
 | `hook` | `handup hook claude` reads PermissionRequest JSON |
-| `integrate` | `handup integrate mcp --client codex --dry-run`; `handup integrate claude`; `handup integrate --list`; `--uninstall` removes only handup entries |
-| `prompt` | `handup prompt --agent generic` prints project instructions |
+| `integrate` | `handup integrate all [--dry-run] [--uninstall] [--no-mcp]` configures every detected agent; individual targets: `claude`, `codex`, `omp`, `mcp --client claude-code|codex|cursor|omp`; `--list` reports detection and installation |
+| `skill` | `handup skill install` writes the version-matched bundled skill to `~/.agents/skills/handup` (`--agent claude`/`codex`, `--project`, `--dir PATH`, `--dry-run`, `--force`); `handup skill uninstall` removes only handup-installed copies |
+| `prompt` | `handup prompt` prints generic project instructions; `--agent claude|codex|cursor|omp` tailors them |
 | `version` | `handup version --plain` reports version |
 | `completion` | `handup completion bash` generates completions |
-| `config` | `handup config init`, `show`, `path`, `edit`, `get`, `set`, `toggle`, `keys` |
+| `config` | `handup config init`, `show [--effective]`, `path`, `edit`, `get`, `set`, `unset`, `toggle`, `keys`, `validate`; agents prefer `set`/`unset`/`get --json` and run `validate` after hand edits |
 | `uninstall` | `handup uninstall --yes` removes binary, preserves config |
 | `help` | `handup help COMMAND` explains parameters |
 
-MCP tools: `request_approval`, `ask_question`, `check_request`, `wait_requests`, `cancel_request`, `list_requests`.
-`request_approval` accepts title (required), summary, kind, risk, previews [{type, path OR content OR email, lang?}], input (editable object; edits return in `fields`), options [{id,label,outcome,style?}], timeout (duration or `"none"`), on_timeout (`deny`|`expire`|`approve`), dedupe_key, callback_url, session, session_title, and wait (default true). Relative paths use server cwd; files upload as immutable blobs. Pass your session id and title when known.
+MCP tools: `request_approval`, `ask_question`, `notify`, `check_request`, `wait_requests`, `cancel_request`, `list_requests`.
+`request_approval` accepts title (required), summary, kind, risk, previews [{type, path OR content OR email, lang?}], input (editable object; edits return in `fields`), options [{id,label,outcome,style?}], timeout (duration or `"none"`), on_timeout (`deny`|`expire`|`approve`), run_timeout (desktop Run limit for the command, e.g. `"30m"`; default `run.timeout` 10m, capped at `run.max_timeout` 1h; 1ms to one year), dedupe_key, callback_url, session, session_title, and wait (default true). Relative paths use server cwd; files upload as immutable blobs. Pass your session id and title when known.
 Example: {"title":"Deploy staging","kind":"command","previews":[{"type":"command","content":"./deploy staging"}],"wait":false}.
 MCP decision JSON: `{id, status, option, feedback, content_hash}` plus `fields` (approvals) or `answers` (questions); it has no `expires_at`. Denials return isError=false; daemon/API failures return isError=true, never approval.
 
@@ -53,30 +82,43 @@ Consume the result and **do not run again**, even on failure. Hooks deny/block
 the original tool call with the run summary to prevent duplicate execution,
 not to reverse approval. Without a result, execute only the reviewed action.
 Run is desktop-only; phone/web/relay never execute or submit results.
-While running, the request stays pending with `run` metadata and phone/web show
-Running. Other decisions return 409 `running in the desktop app`; agent cancel
-stops the run. Expiry is paused during the 12-minute claim lease. See
+While running, the request stays pending with `run` metadata (including
+`timeout_ms`, the run limit) and other clients show elapsed time, the limit and
+Stop. Other decisions return 409 `running in the desktop app`; agent cancel
+stops the run. A stop sends SIGTERM, then SIGKILL after 5s; `error` reads e.g.
+`timed out; terminated` or `stopped from <device>; killed`. Expiry is paused
+while the claim lease (run limit plus 2 minutes) holds; if the desktop stops
+responding it lapses, `run_interrupted` is set, no result arrives and the
+request is decidable again. See
 [Desktop](docs/public/desktop.md#run-a-command) for elevation/cancellation limits.
-Short client timeouts (omp 30s, Codex 60s): pass `"wait":false`, save the id, then call `wait_requests` {"ids":[…], "max_wait_seconds"?} (default 25, max 300) until `pending` is empty, before ending the turn. Result: `{"decided":[decision JSON], "pending":[ids], "message"}`. Blocking calls stop after 300s with `status: pending`. Pending is neither approval nor an answer; the same id recovers the decision after a reconnect, so never create a duplicate. `check_request` {"id"} reads status without waiting; `list_requests` {"status"?, "session"?, "agent"?, "limit"?} recovers ids after context loss; `cancel_request` {"id"} retracts a request you no longer need, never to dodge a decision.
+Short client timeouts (omp, Codex): pass `"wait":false` and save the id; follow the pending result's message. With the omp extension's `handup push active` note, end the turn for the watched ids and the decision wakes you; do not also poll or start background CLI waiters for them. Otherwise call `wait_requests` {"ids":[…], "max_wait_seconds"?} (default 25, max 300) until `pending` is empty before ending the turn. Result: `{"decided":[decision JSON], "pending":[ids], "message"}`, plus `notices` {ids, message} for undismissed info notices, which are never pending. Blocking calls stop after 300s with `status: pending`. Pending is neither approval nor an answer; the same id recovers the decision after a reconnect, so never create a duplicate. `check_request` {"id"} reads status without waiting; `list_requests` {"status"?, "session"?, "agent"?, "limit"?} recovers ids after context loss; `cancel_request` {"id"} retracts a request you no longer need, never to dodge a decision.
 Requests wait for the human by default (`requests.default_timeout: none`); an explicit timeout opts into expiry and `on_timeout` (default deny) applies only then. A client tool timeout does not approve or expire anything.
-`ask_question`: {"question":"Which region?","choices":["eu","us"],"allow_free_text":true}; `question` and `allow_free_text` are required. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Submit returns `status: answered` and `answers.answer` = `{"selected":["eu"],"text":"…"}` (`text` only when typed). Decline returns `status: denied` with optional feedback and no answers. It accepts `wait`, `session` and `session_title` like `request_approval`.
+`ask_question`: {"question":"Which region?","choices":["eu","us"],"allow_free_text":true}; `question` and `allow_free_text` are required. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Submit returns `status: answered` and `answers.answer` = `{"selected":["eu"],"text":"…"}` (`text` only when typed). Decline returns `status: denied` with optional feedback and no answers. It accepts `wait`, `session` and `session_title` like `request_approval`. A single choice is rejected even with free text; choice labels must be distinct after trimming. Offer at least two choices, free text with no choices, or both. For status or results use `notify`; for permission use `request_approval`. These guards apply only to MCP `ask_question`, not approval question forms or omp's native question bridge.
+`notify`: {"title":"Staging deploy finished","summary":"All checks passed."}; `title` is required, plus optional summary, previews, session, session_title, timeout, dedupe_key. Put the message text in summary, shown under the one-line title; there is no body or message field, and a notice without summary or previews shows only its title. For status updates, finished results and heads-ups that need no reply. It creates a `kind: info` notice with OK (`ok`) and Dismiss (`dismiss`) options and `on_timeout: expire`, and returns `{id, status, message}` at once. Never wait for or poll it; either choice records `status: dismissed`. Rules and YOLO never decide notices. The human may add an optional reply: the MCP server appends unread replies to every later handup tool result (`notice_replies` [{id,title,feedback}] plus a line `Reply from the human to your notice TITLE: FEEDBACK`), the omp extension pushes them live, and Claude Code's prompt hook and background Stop waiter deliver them for Claude's `session_id`, waking an idle Claude (under Claude Code, `session` defaults to `CLAUDE_CODE_SESSION_ID`). Each reply is delivered once (`POST /v1/notice-replies`); treat it as new instructions from the human.
 Structured questions (`handup ask --request -`): `kind: "question"`, `input.questions` = 1–10 of {id, question, header?, multi?, recommended? (option index), allow_free_text?, options: [{label, description?, preview? (markdown)}]}, plus options with one `approve` (Submit) and one `deny` (Decline). Submit returns `decision.fields.answers` = {QID: {selected: [labels], text?}}; every question is answered, single-choice questions select at most one label, and `text` appears only where free text is allowed.
 
 Blocking `ask --wait` and `wait` exit codes. Nonblocking `ask`, `status` and `show` also exit 0 while pending, so read `status` there.
 
 | Exit | Meaning |
 | --- | --- |
-| 0 | approved/answered |
+| 0 | approved/answered/dismissed |
 | 1 | denied |
 | 2 | expired/timeout |
 | 3 | cancelled |
 | 4 | error |
 | 5 | ran in the desktop app |
+| 6 | license required |
 
 `ask --wait`, `wait`, `status` and `show` exit 5 when `run_result` is present,
 regardless of command success. Inspect `run_result.exit_code` and `error`; do
 not execute again. Text `wait` prints the run summary, output tails and human
 feedback; text `status` does not—use `status --json`.
+
+Exit 6 (HTTP 402, MCP `code: license_required`) means handup refused a new
+request because its 14-day trial ended or the license was revoked. It is never
+permission: ask the human to run `handup license activate KEY` or open Settings →
+License. Pending requests stay decidable. `handup license status|activate|import|deactivate`
+manage it. See [License](docs/public/license.md).
 
 Android queues offline decisions durably and delivers them from Rust in the
 background, with a silent sending notification while work waits. Swiping away
@@ -88,7 +130,9 @@ See [Mobile](docs/public/mobile.md#offline).
 
 ## Guides
 
-- [Claude Code](docs/public/agents/claude-code.md): PermissionRequest hook and MCP setup.
+- [Downloads](docs/public/downloads.md): Compiled binaries and packages per platform (install script, Arch pacman package, deb, rpm, Alpine, Homebrew, AppImage, macOS desktop dmg, APK), checksum verification, updates and uninstall; no source build needed.
+- [License and trial](docs/public/license.md): 14-day trial, then `handup license activate KEY` (exchanged once at gethandup.dev, then offline) or `license import FILE`; when locked new requests are refused (exit 6, HTTP 402 `license_required`, MCP same code), Claude/Codex hooks and the omp extension fall back to the agent's own prompt and never allow, pending requests stay decidable; `GET/PUT/DELETE /v1/license`.
+- [Claude Code](docs/public/agents/claude-code.md): PermissionRequest hook, UserPromptSubmit and background (asyncRewake) Stop notice-reply hooks and MCP setup.
 - [Codex](docs/public/agents/codex.md): TOML MCP setup and short-timeout polling.
 - [Cursor](docs/public/agents/cursor.md): Global MCP configuration.
 - [omp](docs/public/agents/omp.md): Native MCP setup and profiles.
@@ -97,17 +141,20 @@ See [Mobile](docs/public/mobile.md#offline).
 - [Shell and CI](docs/public/agents/shell-ci.md): Exit-code gating and feedback.
 - [Submit tokens](docs/public/integrations/tokens.md): Remote HTTP submission for CI, n8n and scripts.
 - [Email drafts](docs/public/agents/email.md): `email` preview plus input {to,cc,bcc,subject,body}; on approve send decision fields if present else the draft with your own mail tool; handup never sends.
-- [Agent skill](.skills/handup/SKILL.md): When to ask and preview recipes.
-- [Rules](docs/public/rules.md): First-match policy, human-only scoped allow, audit, presence, and terminal keys.
-- [Remote access](docs/public/remote.md): Pairing, device scopes (synthetic tests need `decide`, never `view`/`submit`), tailscale/direct modes, web UI, ntfy and FCM notifications.
-- [Mobile](docs/public/mobile.md): Grouped Settings, per-computer test requests/questions, searchable voices (Android system default TTS engine); durable decision outbox, background delivery limits, biometrics, permissions and notifications.
-- [Desktop](docs/public/desktop.md): Run / Run as admin, output, Cancel, 10-minute timeout and administrator prompts; inbox layouts, grouped Settings, test requests/questions and searchable read-aloud voices.
+- [Agent skill](.skills/handup/SKILL.md): When to ask, what never to self-approve, MCP/CLI essentials and which bundled reference to read.
+- [Rules](docs/public/rules.md): First-match policy under `rules:` in config.yaml (legacy rules.yaml migrated on start), human-only scoped allow, audit, presence, and terminal keys.
+- [Remote access](docs/public/remote.md): Pairing, device scopes (synthetic tests, storage cleanup/retention, `PUT /v1/keys` and stopping a desktop run need `decide`, never `view`/`submit`), tailscale/direct modes, web UI, ntfy and FCM notifications.
+- [Mobile](docs/public/mobile.md): Grouped Settings, per-computer test requests/questions, storage split into this phone's offline copy (Clear frees only the phone) and each computer's use and cleanup (needs `decide`), searchable voices (Android system default TTS engine); durable decision outbox, background delivery limits, biometrics, permissions and notifications.
+- [Desktop](docs/public/desktop.md): Run / Run as admin, output, Cancel, run limit (`run.timeout` 10m, per-request `run_timeout`, `run.max_timeout` 1h), Stop from other devices (`POST /v1/requests/{id}/run/stop`, `handup stop`) and administrator prompts; inbox layouts, configurable keyboard shortcuts (computer-wide, live Settings edits; touch/view-only read-only), header config notice (reloaded, restart needed, invalid file kept previous), grouped Settings (Storage: usage, keep-for retention, background cleanup), test requests/questions and searchable read-aloud voices; macOS daemon banners post as the desktop app (Allow its notifications prompt; CLI-only installs show none).
 - [Test request API](docs/public/cli.md#test-requests): `POST /v1/requests/test`, optional `kind: approval|question` (default approval), fixed server-built low-risk sample with 15m timeout; not permission for any real action.
+- [Config live reload](docs/public/cli.md#live-reload): every config.yaml save applies live (keys, rules, notifications, hooks, history …) except `daemon.listen`, `previews.max_file_bytes` and `remote.*` (restart required); invalid saves keep the previous config; `config.changed` event and `config_restart_required`/`config_error` in `GET /v1/ui-settings`; local-only `GET /v1/config/status` (watched path, SHA-256 of handled content) lets `handup config set` report "Applied live" only after the daemon handled the save.
+- [Shortcut configuration/API](docs/public/cli.md#keyboard-shortcut-configuration): `handup config keys`, `keys.<id>`, key syntax and per-view conflict rules; `GET /v1/ui-settings`, `PUT /v1/keys` and `keys.changed`.
 - [OpenAPI](docs/public/openapi.json): Generated daemon contract.
 - [Request schema](docs/public/schema/request.schema.json): Generated JSON Schema.
 - [Decision schema](docs/public/schema/decision.schema.json): Generated JSON Schema.
-- [Event hooks](docs/public/integrations/hooks.md): Top-level hooks for lifecycle webhooks and exec commands; `handup hooks list` / `handup hooks test <name>`.
+- [Event hooks](docs/public/integrations/hooks.md): Top-level hooks: lifecycle `webhook:`/`exec:` delivery and `decide:` policy programs that may decide new pending requests (`decided_by: hook:<name>`); `handup hooks list` / `handup hooks test <name>`.
 - [Event schema](docs/public/schema/event.schema.json): Versioned JSON envelope (content excluded by default).
+- [Cookbook](docs/public/cookbook/index.md): Advanced recipes (canned email replies, sender routing via `tool` + rules, policy auto-decider decide hook, form approvals, publish gate, meeting replies); runnable scripts in [examples/cookbook/](examples/cookbook/).
 
 ## Optional
 
@@ -127,6 +174,10 @@ handup integrate codex
 handup prompt --agent codex
 codex --sandbox workspace-write --ask-for-approval on-request
 ```
+
+`handup integrate all` uses this same full integration when `$CODEX_HOME/`
+(default `~/.codex/`) exists, creating missing configs. It also configures other
+detected agents; preview with `--dry-run` or remove all with `--uninstall`.
 
 The reversible installer merges `handup hook codex` into `$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`) and the handup MCP server into `$CODEX_HOME/config.toml` (below); `--no-mcp` installs only the hook. It preserves other handlers, shows the config diffs, checks every file before writing any, and backs up changed configuration. Reapply is idempotent. Remove both with `handup integrate codex --uninstall`. Codex requires hook trust review; approve the reviewed hook in Codex before use. Requests have no deadline by default. The installed host hook timeout is still 660 seconds: increase it for longer human waits. If Codex kills the hook, the request remains pending and no approval is returned.
 
@@ -149,7 +200,9 @@ handup integrate mcp --client codex --dry-run
 handup integrate mcp --client codex
 ```
 
-`handup integrate codex` already includes this; the commands above install the MCP server alone. It uses `$CODEX_HOME/config.toml`, preserving comments and other servers. Codex defaults to a 60-second MCP tool timeout: prefer `wait=false` then `wait_requests`, or configure `tool_timeout_sec`. Read [MCP](docs/public/agents/mcp.md) for arguments and polling. Preview paths resolve from the MCP server cwd.
+`handup integrate codex` already includes this; the commands above install the MCP server alone. It uses `$CODEX_HOME/config.toml`, preserving comments and other servers. The `[mcp_servers.handup]` entry sets `env_vars = ["XDG_RUNTIME_DIR"]`, since Codex scrubs the MCP server environment and handup needs it to find the daemon socket, and `default_tools_approval_mode = "approve"`, since handup tools only ask the human and `codex exec` otherwise fails with "MCP tool call requires approval". Reapplying adds these keys to an existing handup entry and keeps values you set. Codex defaults to a 60-second MCP tool timeout: prefer `wait=false` then `wait_requests`, or configure `tool_timeout_sec`. Read [MCP](docs/public/agents/mcp.md) for arguments and polling. Preview paths resolve from the MCP server cwd.
+
+In Codex code mode, call `wait_requests` inside `functions.exec` with `yield_time_ms: 1000`: an unanswered wait then yields to the background, so the human can message you between waits. Resume the yielded cell with `functions.wait`, keep the same request id, and keep the turn open until the request is decided.
 
 This adapter targets the Codex 0.159.2 `PermissionRequest` contract, not an app-server proxy. It gates only permission requests and does not enforce a separate pre-tool policy. In 0.159.2, `codex exec` forces approval policy `never`, even with `-c 'approval_policy="on-request"'`, so use the interactive CLI for native approval round-trips. A command must actually need escalation to invoke this hook. Native headless behavior depends on Codex's approval policy; a no-decision fallback is not permission.
 
@@ -165,23 +218,13 @@ handup integrate mcp --client omp --dry-run
 handup integrate mcp --client omp
 ```
 
-Then run `/mcp reload` in omp (or restart it). This adds `handup mcp` to the active agent directory's `mcp.json`, so the model can call `request_approval`, `ask_question`, `check_request` and `wait_requests`. No extension and no `--approval-mode yolo` are needed. For named profiles, set `PI_CODING_AGENT_DIR` to the profile's agent directory when installing. Read [MCP](docs/public/agents/mcp.md) for the tool arguments and the rules the model must follow.
+Then run `/mcp reload` in omp (or restart it). This adds `handup mcp` to the active agent directory's `mcp.json`, so the model can call `request_approval`, `ask_question`, `notify`, `check_request` and `wait_requests`. No extension and no `--approval-mode yolo` are needed. For named profiles, set `PI_CODING_AGENT_DIR` to the profile's agent directory when installing. Read [MCP](docs/public/agents/mcp.md) for the tool arguments and the rules the model must follow.
 
 MCP approvals are explicit: handup sees only what the model chooses to ask. It does not intercept omp's built-in ask dialog or its own tool approval prompts, which keep working as configured. For automatic forwarding of those, add the optional native bridge below.
 
 Questions from `ask_question` appear in the app as clickable cards: radio buttons for single choice, checkboxes for multi choice, plus free text when allowed. Raw JSON stays hidden until you open its toggle. handup renders only structured `input.questions`; it never infers a question form from arbitrary JSON.
 
-**Long waits.** A human may take minutes to decide, but omp's bash tool stops a command after its default timeout (300s). When an agent waits with the CLI (`handup ask --wait`, `handup wait <id>`), run it in the background with `timeout: 0`. If the waiter is killed anyway, the request is still pending in handup: reattach with `handup wait <id>` or read it with `handup status <id> --json`. MCP clients with short tool timeouts can call `request_approval` with `wait=false` and then call `wait_requests` with the pending ids, repeating until none are pending; each call returns at the first decision or after `max_wait_seconds` (default 25s, inside omp's 30s MCP tool timeout).
-
-**Background waiters wake the session.** Start one CLI waiter per request as an async bash job with `timeout: 0`. Its completion wakes an idle omp session, so the agent may end its turn and act on each decision when it arrives; no extension or new user message is needed. Never use one loop over several IDs, which reports nothing until the last answer. MCP alone does not wake an idle session; without a CLI waiter or the optional extension's decision push, keep the turn open and poll.
-
-To keep a waiter attached across daemon restarts, run this in its async job:
-
-```sh
-while :; do handup wait <id> --json; rc=$?; [ $rc -eq 4 ] || exit $rc; sleep 5; done
-```
-
-Exit 4 includes daemon-unreachable errors (and other CLI errors); pending requests survive restarts. The loop exits on a decision, preserving its exit code. Investigate persistent errors rather than treating them as a decision.
+**Long waits and turn end.** With the optional extension loaded, a pending `wait:false` result for a watched id carries a `handup push active` note: end the turn and the human's decision wakes you. Do not also start a background CLI waiter or poll those ids. Without that note, follow the pending result and call `wait_requests` with every pending id until none remain before ending the turn. Each call returns at the first decision or after `max_wait_seconds` (default 25s). A timeout is not an answer: save the id and recover it with `list_requests` after a reconnect, rather than creating a duplicate.
 
 ## Optional native bridge (extension)
 
@@ -191,6 +234,13 @@ handup integrate omp
 omp --approval-mode yolo                  # or a policy allowing the gated tools
 ```
 
+`handup integrate all` detects the active agent directory and installs MCP only
+by default. If `extensions/handup.ts` already exists, the same safety checks
+upgrade it; a customized file fails validation and blocks every agent's writes
+until moved aside. New tool gating is opt-in with `handup integrate omp`.
+`--no-mcp` keeps an existing extension only (MCP-only omp is skipped), and
+`--uninstall` removes installed handup entries from every agent.
+
 The installer embeds the reviewed repository source `integrations/omp/handup.ts` and installs it into `$PI_CODING_AGENT_DIR/extensions/handup.ts` (default `~/.omp/agent/extensions/handup.ts`). It also adds `handup mcp` to the same agent directory's `mcp.json`, exactly as the MCP quickstart does; pass `--no-mcp` to install the bridge alone, and `--uninstall` removes both (or only the bridge with `--no-mcp`). Every file is checked before any is written, so a refused step changes nothing. `--dry-run` prints the diffs and changes nothing. Reapply is idempotent. Restart omp after any install, upgrade or uninstall to load the changed bridge. For isolated or explicit loading, use `--no-extensions --extension /path/to/handup.ts --no-session`. Installing MCP alone does not install this gate.
 
 **Upgrades and custom files.** Never edit the installed file: configure it through handup instead (see the tool list below), so every upgrade applies cleanly. An existing file that exactly matches a previously shipped handup version (by SHA-256 of its full bytes) and is otherwise unmodified is upgraded automatically: the old bytes are kept in a unique backup beside it (`handup.handup.bak`, then `.bak.1`, …) and the new file is replaced atomically. Any other existing file, including a shipped version with local edits, is treated as yours: the installer shows the diff to the current source and leaves the file unchanged. There is no force flag. Move your copy aside, move its customizations into handup config, and run the installer again. `handup integrate omp --uninstall` removes only a recognized handup file, never a custom one.
@@ -199,12 +249,12 @@ The installer embeds the reviewed repository source `integrations/omp/handup.ts`
 
 ### Behavior and fallback
 
-The default filter gates `bash,python,edit,write,notebook,apply_patch,notebook_edit`. Choose the gated tool names (exact omp names) with `handup config set integrations.omp.tools '[bash, edit, write]'`; `[]` gates nothing, leaving only the question bridge, and removing the key (`handup config edit`) restores the default. The extension reads the setting through `handup config get` when omp loads it, so restart omp after changing it. A `HANDUP_OMP_TOOLS` environment variable (comma-separated) overrides the setting for one omp process. If handup is not on `PATH` or its config is unreadable, the default list applies. Read tools remain ungated by default. Include every write/exec tool you use, including custom tools. Bash shows an exact command preview; old/new text edits show a diff, and other edits show JSON. Requests carry agent `omp`, session ID, cwd and tool name. The extension never executes the proposed action itself.
+The default filter gates `bash,python,edit,write,notebook,apply_patch,notebook_edit`. Choose the gated tool names (exact omp names) with `handup config set integrations.omp.tools '[bash, edit, write]'`; `[]` gates nothing, leaving only the question bridge, and `handup config unset integrations.omp.tools` restores the default. The extension reads the setting through `handup config get` when omp loads it, so restart omp after changing it. A `HANDUP_OMP_TOOLS` environment variable (comma-separated) overrides the setting for one omp process. If handup is not on `PATH` or its config is unreadable, the default list applies. Read tools remain ungated by default. Include every write/exec tool you use, including custom tools. Bash shows an exact command preview; old/new text edits show a diff, and other edits show JSON. Requests carry agent `omp`, session ID, cwd and tool name. The extension never executes the proposed action itself.
 The bridge also sends the session manager's current display name
 (`getSessionName()`) as optional `source.session_title`. Titles are display-only;
 session-scoped allow rules continue to match the stable session ID.
 
-With a UI, handup races the native Approve/Deny select: the first answer wins, the losing native dialog is aborted or the pending handup request is cancelled. Approve returns no block. Deny, expiry, cancellation, or a handup error blocks with human feedback or a safe reason, visible to the model. With the daemon unreachable, or presence routing to the keyboard, only the native select is used; with no UI (including `-p`) the action blocks. No fallback ever automatically approves, and the extension does not auto-start the daemon.
+With a UI, handup races the native Approve/Deny select: the first answer wins, the losing native dialog is aborted or the pending handup request is cancelled. Approve returns no block. Deny, expiry, cancellation, or a handup error blocks with human feedback or a safe reason, visible to the model. With the daemon unreachable, a license required answer (HTTP 402), or presence routing to the keyboard, only the native select is used; with no UI (including `-p`) the action blocks. No fallback ever automatically approves, and the extension does not auto-start the daemon.
 
 Desktop **Run** is an exception to ordinary approval: `run_result` means the
 command was already attempted, so the extension blocks the original tool call
@@ -212,18 +262,21 @@ with its run summary and **do not run again** instruction, even for a failed
 run. The request itself remains approved. MCP-only agents must inspect
 `run_result` themselves; see [result fields](docs/public/agents/mcp.md#desktop-run-results).
 
-The extension also wraps `ctx.ui.askDialog` where available. Questions race the native dialog against a handup `question` request whose `input.questions` keep omp's ids, headers, single/multi choice, recommended option, option descriptions and previews; each question also permits free text. The app shows them as the same clickable radio/checkbox cards (keyboard: ↑/↓ or j/k between options, Space/Enter or 1–9 to choose, ⌘/Ctrl+Enter to submit), with Raw JSON hidden until requested. Submit returns `decision.fields.answers` (`{QID: {selected, text?}}`), mapped back to omp's submit-result shape (`selectedOptions`, `customInput`). A decline, expiry or daemon-side cancellation is also returned as an answer with no selection: `customInput` reads `Declined in handup: <feedback>` (or names the expiry or cancellation), so the agent sees the decline and continues instead of reporting "Ask tool was cancelled by the user". Answering the native dialog first, or aborting the agent turn, still cancels the handup request. From a terminal: `handup answer ID --select QID=LABEL --text QID=TEXT`.
+The extension also wraps `ctx.ui.askDialog` where available. Questions race the native dialog against a handup `question` request whose `input.questions` keep omp's ids, headers, single/multi choice, recommended option, option descriptions and previews; each question also permits free text. The app shows them as the same clickable radio/checkbox cards (keyboard: Enter submits once every question is answered, otherwise steps into the open question's answers, then ↑/↓ or j/k between options and Esc back to the list, Space/Enter or 1–9 to choose, `f` to type a reply, ⌘/Ctrl+Enter to submit), with Raw JSON hidden until requested. Submit returns `decision.fields.answers` (`{QID: {selected, text?}}`), mapped back to omp's submit-result shape (`selectedOptions`, `customInput`). A decline, expiry or daemon-side cancellation is also returned as an answer with no selection: `customInput` reads `Declined in handup: <feedback>` (or names the expiry or cancellation), so the agent sees the decline and continues instead of reporting "Ask tool was cancelled by the user". Answering the native dialog first, or aborting the agent turn, still cancels the handup request. From a terminal: `handup answer ID --select QID=LABEL --text QID=TEXT`.
 
 ### Decision push
 
 With the extension loaded, pending requests created by this session through MCP `request_approval` / `ask_question` (including `wait=false` and harness-mounted tools) or non-blocking `handup ask` CLI output are watched over the local socket. A human decision sends one visible `handup-decision` message containing the title, status, selected option, feedback and question answers. It wakes an idle agent or steers an active turn; there is no need for another human message.
+For ids it is actually watching, the extension adds a trusted `handup push active` instruction through omp's `additionalContext` channel, leaving the tool result unchanged. It names those ids and tells the agent to end its turn rather than call `wait_requests`, `check_request` or start a background `handup wait`. The note also marks `wait_requests` results whose pending ids already have watchers; unwatched ids get no push promise. After a session switch, follow the server's waiting guidance for recovered ids.
 For desktop Run decisions, the pushed message also includes the run summary
 and tells the agent not to run the command again.
+
+Info notices from MCP `notify` or `handup ask --kind info` are watched the same way, but push only a non-empty human reply: one visible `handup-notice-reply` message, `Reply from the human to your notice TITLE: FEEDBACK`, which wakes or steers the agent. An OK or Dismiss without a reply pushes nothing. Each reply is delivered once; if the [MCP server](docs/public/agents/mcp.md#notice-replies) already handed it to the agent in a later tool result, the extension stays silent.
 
 If a tool result already showed the final state (for example `check_request`, `wait_requests`, `handup wait`, `handup status`, or a blocking MCP call), the extension suppresses that push. Its own approval gates and question-dialog races remain inline and never push. Watchers stop on session switch/branch, shutdown or abort, retry daemon failures with backoff, and silently stop when a request is gone. Only requests observed in the current session are tracked; installing MCP alone does not enable push.
 
 ### Limitations
 
-The extension targets omp 18.4.4. It gates the configured names regardless of omp's approval tier; it is not a replacement for the entire omp policy engine. Because it races omp's native prompts, whichever side answers first decides; a native answer cancels the pending handup request. Native question chat/image answers remain native-only; remote answers support option labels and free text. It uses handup's local Unix socket (`HANDUP_SOCKET`, then the standard runtime/state location), not a remote relay.
+The extension uses omp's `additionalContext` tool-result channel (declared in 18.4.9; consumption verified in the installed 18.6.1 binary). It gates the configured names regardless of omp's approval tier; it is not a replacement for the entire omp policy engine. Because it races omp's native prompts, whichever side answers first decides; a native answer cancels the pending handup request. Native question chat/image answers remain native-only; remote answers support option labels and free text. It uses handup's local Unix socket (`HANDUP_SOCKET`, then the standard runtime/state location), not a remote relay.
 
-Sources: https://github.com/can1357/oh-my-pi/tree/v18.4.4/packages/coding-agent/src/extensibility/extensions and https://github.com/can1357/oh-my-pi/blob/v18.4.4/packages/coding-agent/src/extensibility/shared-events.ts
+Sources: https://github.com/can1357/oh-my-pi/tree/v18.4.9/packages/coding-agent/src/extensibility/extensions and https://github.com/can1357/oh-my-pi/blob/v18.4.9/packages/coding-agent/src/extensibility/shared-events.ts

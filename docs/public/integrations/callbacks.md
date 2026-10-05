@@ -6,7 +6,8 @@ its `request.decided`, `request.expired`, or `request.cancelled` transition.
 
 ## Enable permitted hosts
 
-Callbacks are disabled by default. Configure the daemon and restart it:
+Callbacks are disabled by default. Configure the daemon; saves apply live, but
+the secret environment variable must be set when the daemon starts:
 
 ```yaml
 callbacks:

@@ -10,6 +10,10 @@ handup prompt --agent codex
 codex --sandbox workspace-write --ask-for-approval on-request
 ```
 
+`handup integrate all` uses this same full integration when `$CODEX_HOME/`
+(default `~/.codex/`) exists, creating missing configs. It also configures other
+detected agents; preview with `--dry-run` or remove all with `--uninstall`.
+
 The reversible installer merges `handup hook codex` into `$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`) and the handup MCP server into `$CODEX_HOME/config.toml` (below); `--no-mcp` installs only the hook. It preserves other handlers, shows the config diffs, checks every file before writing any, and backs up changed configuration. Reapply is idempotent. Remove both with `handup integrate codex --uninstall`. Codex requires hook trust review; approve the reviewed hook in Codex before use. Requests have no deadline by default. The installed host hook timeout is still 660 seconds: increase it for longer human waits. If Codex kills the hook, the request remains pending and no approval is returned.
 
 ## Behavior and fallback
@@ -31,7 +35,9 @@ handup integrate mcp --client codex --dry-run
 handup integrate mcp --client codex
 ```
 
-`handup integrate codex` already includes this; the commands above install the MCP server alone. It uses `$CODEX_HOME/config.toml`, preserving comments and other servers. Codex defaults to a 60-second MCP tool timeout: prefer `wait=false` then `wait_requests`, or configure `tool_timeout_sec`. Read [MCP](mcp.md) for arguments and polling. Preview paths resolve from the MCP server cwd.
+`handup integrate codex` already includes this; the commands above install the MCP server alone. It uses `$CODEX_HOME/config.toml`, preserving comments and other servers. The `[mcp_servers.handup]` entry sets `env_vars = ["XDG_RUNTIME_DIR"]`, since Codex scrubs the MCP server environment and handup needs it to find the daemon socket, and `default_tools_approval_mode = "approve"`, since handup tools only ask the human and `codex exec` otherwise fails with "MCP tool call requires approval". Reapplying adds these keys to an existing handup entry and keeps values you set. Codex defaults to a 60-second MCP tool timeout: prefer `wait=false` then `wait_requests`, or configure `tool_timeout_sec`. Read [MCP](mcp.md) for arguments and polling. Preview paths resolve from the MCP server cwd.
+
+In Codex code mode, call `wait_requests` inside `functions.exec` with `yield_time_ms: 1000`: an unanswered wait then yields to the background, so the human can message you between waits. Resume the yielded cell with `functions.wait`, keep the same request id, and keep the turn open until the request is decided.
 
 This adapter targets the Codex 0.159.2 `PermissionRequest` contract, not an app-server proxy. It gates only permission requests and does not enforce a separate pre-tool policy. In 0.159.2, `codex exec` forces approval policy `never`, even with `-c 'approval_policy="on-request"'`, so use the interactive CLI for native approval round-trips. A command must actually need escalation to invoke this hook. Native headless behavior depends on Codex's approval policy; a no-decision fallback is not permission.
 

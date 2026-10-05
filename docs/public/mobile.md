@@ -2,26 +2,33 @@
 
 The handup mobile app is a companion to the daemon on your computer, not a
 daemon of its own. It connects through the [remote listener](remote.md), so
-turn on remote access first (`remote.mode: tailscale` is recommended).
+turn on remote access first: [Tailscale](remote.md#tailscale-recommended) is
+recommended and takes about five minutes to set up.
 
-Android has an internal CI-built, sideloaded pre-alpha APK. There is no
-customer APK, Play Store listing or native iOS release published by this local
-preview. See [downloads and releases](downloads.md) for availability.
+Android is a beta, sideloaded APK published with each handup release
+(`handup-android_<version>_arm64.apk`); there is no Play Store listing or
+native iOS app, and no public release has been published yet. See
+[downloads and releases](downloads.md) for availability.
 
 Phone clients never execute command requests and have no **Run** or **Run as
 admin** button. Approval grants permission to the agent; it does not start a
 desktop run. Paired devices cannot submit `run_result`. A command run locally
 in the desktop app can still be reviewed in History with its returned result.
-During a desktop run, the phone shows **Running** and decisions are blocked
-with 409 `running in the desktop app`. Agent cancellation can still stop the
-run; expiry is paused while its 12-minute claim lease is active.
+During a desktop run, the phone shows **Running in the desktop app** with the
+elapsed time and the run limit, and decisions are blocked with 409 `running in
+the desktop app`. With a **Can decide** pairing, **Stop** asks the desktop to
+stop the command ([stop from another device](desktop.md#stop-from-another-device));
+agent cancellation also stops it. Expiry is paused while the claim lease (the
+run limit plus 2 minutes) is active; if the desktop stops responding, the
+request shows **Run interrupted** and can be decided again.
 
 ## Install (Android)
 
-Use a published handup APK when a supported customer release is available.
-Download it on your phone, open it, and allow installation from that download
-source only if you trust the release. No Android SDK, Rust toolchain or
-application source is needed. The phone app then pairs with your computer.
+Download the APK from the release on your phone, open it, and allow your
+browser to install unknown apps when Android asks, only if you trust the
+release. Verify it against the release checksums first if you can (see
+[downloads](downloads.md#verify-a-download)). No Android SDK, Rust toolchain
+or application source is needed. The phone app then pairs with your computer.
 
 ## Pairing
 
@@ -29,8 +36,8 @@ application source is needed. The phone app then pairs with your computer.
    or open **Pair a phone** in the desktop app.
 2. In the app, tap **Scan QR code** and point the camera at the QR code. Or
    paste the printed link (`http://100.x.y.z:7466/pair#code=…`) into
-   **Pairing link** and tap **Pair with link**. Away from your tailnet, use
-   `handup pair --relay` instead: the app then talks to the daemon through
+   **Pairing link** and tap **Pair with link**. If the phone can't run
+   Tailscale, use `handup pair --relay` instead: the app then talks to the daemon through
    your [end-to-end encrypted relay](relay.md) (`…/pair#ch=…`).
 3. The code works once and expires after two minutes.
 
@@ -74,11 +81,17 @@ touch target and is separated from the decision row.
 
 Swipe the approval card—including its title and preview—right to approve or
 left to deny, like dealing a card. The card follows your finger, tilts, and
-shows an **Approve** or **Deny** stamp. A short drag (about a fifth of the
-card) or a quick flick sends it off; let go earlier and it springs back. There
-is no separate swipe strip. Cancelled, edge-started, and multi-finger gestures
-do nothing. Turn **Swipe cards** off under **Settings → Decisions** to use only the buttons.
-Swipe right always approves, also when the buttons are mirrored to the left.
+shows a stamp with the option it picks: **Approve** or **Deny**, **Submit** or
+**Decline** on a question, **OK** or **Dismiss** on an info notice, or an
+agent's own labels such as **Apply prod** or **Not now**. A short drag (about a
+fifth of the card) or a quick flick sends it off; let go earlier and it springs
+back. There is no separate swipe strip. Cancelled, edge-started, and
+multi-finger gestures do nothing. Turn **Swipe cards** off under
+**Settings → Decisions** to use only the buttons. Swipe right always picks the
+approve option, also when the buttons are mirrored to the left.
+An info notice has an optional **Reply to the agent** box under its summary;
+the text goes with **OK** or **Dismiss** (button or swipe), and an empty box
+tells the agent nothing.
 Vertical scrolling and pinch zoom remain native. A drag locks to an axis after
 a few pixels: mostly-vertical drags scroll, mostly-horizontal drags move the
 card from anywhere on it, including file lists, diffs and code previews. A
@@ -88,8 +101,12 @@ rows and checkboxes still work. Swipes starting on input fields, sliders,
 media controls or an existing text selection do not decide. Interactive HTML
 frames keep their own input. Buttons and tabs have 44px touch targets on
 narrow screens.
-The buttons remain available; swipes are not offered for custom choices,
-questions, multiple selected requests, or view-only devices. Both methods use
+On a question, a right swipe picks the only choice of any unanswered
+single-choice question (such as a lone **OK**) and submits; if a question is
+still unanswered, the card springs back and shows **Pick an answer**. A request
+with no deny option springs back on a left swipe. The buttons remain available;
+swipes are not offered for requests with several approve options or several
+deny options, multiple selected requests, or view-only devices. Both methods use
 the same validation, biometric gate, and held-send/Undo behavior.
 
 After the last decision, **All clear** replaces the card, but Undo remains in
@@ -110,7 +127,8 @@ retrying offline decisions in the background; see [Offline](#offline) for limits
 ## History
 
 The **History** tab above the request list shows resolved requests grouped by
-day, with search and outcome chips. Tap one for the read-only detail with the
+day, with search and outcome chips; swipe the chip rows sideways to see more.
+Tap one for the read-only detail with the
 decision summary and audit trail; **History** (or the back gesture) returns to
 the list. It uses the same API as the desktop app, so a view-only device sees
 it too.
@@ -124,8 +142,8 @@ it too.
   settings are sealed with AES-256-GCM under a non-exportable Android Keystore
   key (`SecureStorePlugin`, alias `handup-secure-store`). Only the ciphertext
   is written to the app-private `shared_prefs/handup.secure.xml`. App backup is
-  disabled (`allowBackup="false"`). On iOS the Keychain is used through the
-  `keyring` crate (untested).
+  disabled (`allowBackup="false"`). On iOS the Keychain would be used through
+  the `keyring` crate.
 - **TLS pinning.** When the pairing link carries a certificate fingerprint
   (`fp=`, e.g. `direct` mode with its self-signed certificate), the app accepts
   only a server certificate whose SHA-256 matches it. Without a fingerprint,
@@ -151,6 +169,10 @@ the setting off.
 Turning on **Hard YOLO** from the header switch ([YOLO mode](rules.md#yolo-mode))
 asks for the same confirmation, since it auto-approves high-risk requests.
 
+Rust enforces this gate on the same URI path the daemon routes, even when an
+API call includes query parameters. Fragments and malformed request targets
+are rejected before forwarding.
+
 The prompt appears when you tap **Approve** or swipe to approve, before the few-second undo window
 and before an offline approval is queued. The confirmation covers that request
 at that content only: if the request changes before the approval is sent, the
@@ -160,19 +182,48 @@ for the open app and prompts there; background delivery never bypasses the gate.
 
 ## Offline
 
+The header pill shows whether the phone is in sync with your computer:
+**Live** (changes arrive as they happen), **Syncing…** (catching up or
+reconnecting; you can keep browsing and deciding), or **Offline · synced
+14:03** (the time of the last sync). Every state shows a sync icon (green on
+**Live**, spinning while syncing and briefly after a tap); tap the pill to sync
+now. The app also resyncs the moment it returns to the foreground, the network
+comes back, its event stream reconnects, or a push notification arrives, and
+while it is on screen it quietly refetches the queue on the **Settings → Sync**
+timer (default every 15 seconds). In the background it does not poll: push
+notifications cover that, and opening the app resyncs. The daemon pings the event
+stream every 25 seconds (through a relay, the relay's own pings every 30
+seconds count); a stream that stays silent for 75 seconds (a network change,
+or Android dozing) is dropped and reconnected rather than left looking live.
+Waking the phone after it slept reconnects any stream not heard from in the
+last 35 seconds.
+
+Below the header, the app shows the same config notices as the desktop app
+when the computer's config file is saved: **Config reloaded**, **Restart daemon
+to apply: …**, or **config.yaml invalid (line N), kept previous** (see
+[live reload](cli.md#live-reload)).
+
+A request answered somewhere else (the laptop, the terminal, another phone)
+leaves the phone's inbox as soon as the event arrives. If it is the one open on
+screen, it stays for a moment with its controls dimmed and the footer saying
+how it ended, e.g. **Approved on laptop** or **Denied on another device**, then
+moves to the next pending request, or **All clear**. It is in History as usual.
+
 Once the inbox has loaded, losing the connection to your computer never hides
-it. The header shows **Live**, **Reconnecting…**, or **Offline since 14:03**;
-tap it to retry immediately. The app also retries as soon as it returns to the
-foreground or the network comes back. The last queue is kept on the phone, so
-opening the app while offline still shows it, marked with when it last synced.
+it. The last queue is kept on the phone, so opening the app while offline still
+shows it, marked with when it last synced.
 
 Approve, deny, and answers made while offline are queued in **Decisions waiting
 to send**, each marked *Sending when connected* with an **Undo** button. When
 the connection returns they are sent in the order you made them, bound to the
-content you saw. If the daemon refuses one (already decided elsewhere, expired,
-or changed since), that row says why and nothing else is sent for it. Nothing
-is ever sent that you did not tap. Each computer keeps its own cached queue
-and outbox: one being offline never holds back decisions for another.
+content you saw. The first decision to reach your computer wins. If one from the
+phone loses (the request was already answered elsewhere, expired, or changed
+since), it is dropped, never retried and never counted as a second decision,
+and its row says what happened, e.g. **Already handled on laptop · Approved**.
+The same line appears in the footer when a decision sent while online loses
+that race. Nothing is ever sent that you did not tap. Each computer keeps its
+own cached queue and outbox: one being offline never holds back decisions for
+another.
 On Android, queued decisions are also stored in a durable native outbox
 (`outbox.db`), separate from the disposable History/file cache. Rust delivers
 them without relying on the webview to keep running. Hiding the app ends any
@@ -194,12 +245,13 @@ Unpairing a computer forgets its cached queue and any unsent decisions for it.
 ### Offline copy and Downloads autosave
 
 The app keeps a copy of the History pages, request details, audit trails and
-files you read, per paired computer, in an app-private SQLite database. When
-that computer is unreachable, History serves the copy and shows **Offline copy
-from …** with its age; online, every read goes to the computer and refreshes
-the copy. Only these reads are kept: never the pending queue (it has its own
-store above), decisions or other writes, settings, pairing, devices, or any
-token. Files are checked against their SHA-256 before they are kept.
+files you read or that [auto-download](#auto-download-media) fetched, per paired
+computer, in an app-private SQLite database. When that computer is
+unreachable, History serves the copy and shows **Offline copy from …** with its
+age; online, every read goes to the computer and refreshes the copy. Only these
+reads are kept: never the pending queue (it has its own store above), decisions
+or other writes, settings, pairing, devices, or any token. Files are checked
+against their SHA-256 before they are kept.
 
 Each computer's card in **Settings** has its own controls:
 
@@ -207,9 +259,6 @@ Each computer's card in **Settings** has its own controls:
   **Everything read**, or **Off** (nothing is kept, files included).
 - **Space limit**: 256 MB by default (16–4096). Past it, the least recently
   used entries go first; lowering it trims at once.
-- **Files kept**: **Files I open** (default), or **Also new files on Wi-Fi**,
-  which downloads new requests' files up to a size (10 MB by default) only on an
-  unmetered network.
 - **Also save files to Downloads** (off by default, Android 10 and later): new
   requests' named files, and files you open, are copied to `Download/handup`
   once each, up to a per-file limit (25 MB by default). It uses Android's
@@ -222,6 +271,60 @@ The copy holds request content (titles, previews, files), so anyone who can
 unlock the phone and open the app can read it offline. Set History to **Off**
 on a computer whose requests should not stay on the phone.
 
+### Storage
+
+**Settings → Storage** (shown once a computer is paired) keeps two kinds of
+space apart, and never adds them together. The group summary shows both, for
+example `80 MB on phone · 162 MB on Laptop`.
+
+**On this phone** comes first: the size of this phone's
+[offline copy](#offline-copy-and-downloads-autosave), one row per computer.
+**Clear** asks for an inline confirmation (`Clear this phone only: 80 MB.
+History on Laptop stays …`), then deletes the copy on the phone only. Your
+history on the computer is not deleted; it downloads again when needed.
+
+**On _computer_** (for example **On Laptop**) follows for each paired computer: that computer's own disk
+use (a stacked bar and legend: request history, files and previews, audit log,
+free database space, database log and other), pending/resolved/file counts and
+the retention in force. With a **Can decide** pairing the phone has the same
+controls as the [desktop app](desktop.md#storage): **Keep request history**,
+**Keep files and previews** and **Clean up _computer_ now**. The confirmation
+says where data is deleted, for example `Delete on Laptop and this phone: 120
+requests …`: a cleanup on the computer also clears this phone's offline copy of
+that computer. A **View only** pairing shows usage and how to clean up on the
+computer (Settings › Storage in its desktop app, or
+`handup storage clean history --older-than 30d`). It needs a daemon with
+storage support; an older one shows an "update it" message.
+
+### Auto-download media
+
+**Settings → Previews** decides whether the files of new pending requests
+(images, video, audio, PDFs and other files) download in the background, so
+their previews open at once instead of loading while you wait:
+
+- **Auto-download media**: **Always**, **Wi-Fi only** (default; any network
+  Android reports as unmetered counts), or **Never** (files load when you open
+  them).
+- **Per request up to (MB)**: 50 MB by default (1–1024). A request's files
+  download in order while they fit; a file that does not fit is skipped and
+  loads when you open it.
+
+Downloads start when a request arrives, and again whenever the app reconnects
+to a computer (opening the app, network back, or a push notification waking
+it), so requests that arrived meanwhile are caught up. The setting applies to
+every paired computer and uses that computer's offline copy: with **History
+kept on this phone** set to **Off**, nothing downloads. Opening a preview while
+its file is still downloading waits for that download instead of starting
+another.
+
+Once a request is decided, expires or is cancelled, its downloaded files are
+deleted unless you opened them (opened files stay like any file you read) or
+another pending request still uses them. The computer's **Space limit** caps
+everything kept, oldest-used first.
+
+A download gives up only after 30 seconds without receiving anything, not after
+a fixed total time, so large files finish on a slow or relayed connection.
+
 ## Display and navigation
 
 **Settings** opens a full-screen page on Android, with a persistent **Back**
@@ -233,9 +336,23 @@ Back during a pending save waits for it to finish, then returns. If a save
 failed, Back keeps Settings open and offers **Retry** or **Discard and go
 back**; discarding keeps the settings that were actually stored.
 
-Settings has collapsible **Appearance**, **Decisions**, **Read aloud**, and
-**Test** groups alongside the paired-computer controls. **Decisions** contains
-the undo window, approve button side, and **Swipe cards**.
+Settings has collapsible **Appearance**, **Decisions**, **Sync**, **Previews**, **Read
+aloud**, [**Storage**](#storage), [**License**](license.md) (one row per paired computer), **Test**, **Keyboard shortcuts**,
+[**Help & feedback**](index.md#report-a-bug-or-request-a-feature), and **About** groups alongside the paired-computer controls.
+**About** lists the app version, commit, build date and platform, with **Copy**
+for a bug report; the daemon's version is shown in Settings › About on the computer.
+**Decisions** contains the undo window, approve button side, and **Swipe
+cards**; **Sync** holds **Resync while open** (Off, 10s, 15s, 30s, 1m, 5m;
+default 15s), how often the open app re-checks each reachable computer, saved
+per device; **Previews** holds [auto-download media](#auto-download-media).
+**Keyboard shortcuts** lists the gestures (swipe right or left to decide,
+**Undo**, tap a row, back, drag the divider) and the keys a hardware keyboard
+can use; when every paired computer is view-only it hides the deciding ones.
+The list is read-only on touch/coarse-pointer devices; it shows the connected
+computer's configured keys. Change them from that computer's desktop app or a
+fine-pointer browser with `decide` scope, or use its
+[`keys:` config](cli.md#keyboard-shortcut-configuration). Changes made in
+Settings apply live across connected clients; gestures are unchanged.
 **Settings → Appearance** sets the theme (System follows the phone's light/dark
 setting live, or Light, or Dark), color palette, density, and layout. The mobile
 header has no separate theme shortcut. **Density** opens its own page with a live preview of each
@@ -260,7 +377,9 @@ Split width is 240–640px (default 380px); Stacked height is 15–75% (default 
 Android Back closes an open dialog or settings, returns from a request
 (including one opened from a notification) to the list, and leaves the app
 only from the list.
-Command and text previews have a **Copy** button.
+Command and text previews have a **Copy** button. Fenced code blocks in
+Markdown previews, summaries and questions have a **Copy code** button in their
+top-right corner (shown on hover or focus with a mouse, always on touch).
 
 **Settings → Test** has one row per paired computer, each with **Send test
 request** and **Send test question**. Choose the row for the computer whose
@@ -293,7 +412,7 @@ Android uses native TTS through `tauri-plugin-tts`, not the System WebView's
 speech APIs. It always reads aloud with the system default text-to-speech
 engine. To change the engine or install voices (for example if none appear),
 use Android's own text-to-speech settings, then reopen Read aloud in handup.
-Online voices send the spoken text to the voice provider. iOS remains untested.
+Online voices send the spoken text to the voice provider.
 For a phone browser rather than the native app, see
 [Web UI read aloud](remote.md#read-aloud).
 
@@ -402,7 +521,7 @@ gcloud projects add-iam-policy-binding "$P" --member "serviceAccount:$SA" \
 For CI-built APKs, store `google-services.json` as a protected GitLab CI file
 variable named `GOOGLE_SERVICES_JSON`; the `android` job copies it into place.
 
-4. Configure the daemon and restart it:
+4. Configure the daemon (saves apply live):
 
    ```yaml
    notifications:
@@ -423,8 +542,9 @@ variable named `GOOGLE_SERVICES_JSON`; the `android` job copies it into place.
    Android 12 and earlier use the system setting
    without a runtime permission prompt.
 
-The app registers its FCM token using device authentication, over either the
-tailnet listener or the encrypted relay tunnel. Token refresh is synchronized
+After pairing, the app registers its FCM token with each paired daemon using
+device authentication, whether or not notification permission is granted,
+over either the tailnet listener or the encrypted relay tunnel. Token refresh is synchronized
 while the app is running, and on the next launch after an Android background
 refresh. Registration retries when the daemon is offline. Unpairing attempts to
 remove push registration; revoking the device always deletes it on the daemon.
@@ -469,9 +589,7 @@ Native APNs delivery from the daemon is not implemented.
 
 ## iOS
 
-No native iOS release, TestFlight or App Store download is available. The iOS
-configuration exists but has never been built or run; there is no customer
-installation procedure to offer yet.
+No native iOS app yet, and no TestFlight or App Store download.
 
 The existing alternative is the daemon's web UI over Tailscale: pair from
 Safari using the `handup pair` QR code and add it to the Home Screen. It lacks

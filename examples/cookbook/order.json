@@ -1,0 +1,9 @@
+{
+  "order": "A-1042",
+  "customer": "Sam Rivera <sam@example.org>",
+  "item": "Annual plan",
+  "total": "49.00",
+  "currency": "USD",
+  "paid": "2026-09-12",
+  "complaint": "Charged twice for the annual plan."
+}

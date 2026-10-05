@@ -21,6 +21,10 @@ access. After approval you send the message with your own tool (for example
 Without `input` the request is review-only: the human can approve or deny and
 leave feedback, but not edit.
 
+Recipes: [canned email replies](../cookbook/email-canned-replies.md) (pick a
+template, then review the draft) and [route email by
+sender](../cookbook/email-routing.md) (rules per sender class).
+
 **Open in mail app.** Email previews in the inbox and History have an "Open in
 mail app" button that hands the shown draft (the human's edit while editing)
 to their own mail client as a `mailto:` link with To, Cc, Bcc, subject and

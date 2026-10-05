@@ -81,6 +81,24 @@
         }
       }
     },
+    "/v1/config/status": {
+      "get": {
+        "tags": [],
+        "operationId": "config_status",
+        "responses": {
+          "200": {
+            "description": "Local only: the config file the daemon loads and watches, the SHA-256 of the content it last handled, pending restart-only keys and the file's current error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/devices": {
       "get": {
         "tags": [
@@ -234,7 +252,7 @@
         "operationId": "events",
         "responses": {
           "101": {
-            "description": "WebSocket events: {type, request} for request.created (carrying the final status, so auto-handled requests arrive already decided), request.decided, request.expired and request.cancelled; request.updated when a pending request's desktop run starts or its claim is released (`request.run`); {type: yolo.changed, yolo} when YOLO mode changes or its timer ends. Closed immediately when the calling device is revoked (4401) or disabled (4403)"
+            "description": "WebSocket events: {type, request} for request.created (carrying the final status, so auto-handled requests arrive already decided), request.decided, request.expired and request.cancelled; request.updated when a pending request's desktop run starts, a stop is requested, or its claim is released or interrupted (`request.run`); {type: yolo.changed, yolo} when YOLO mode changes or its timer ends; {type: keys.changed, keys} when the shortcut overrides change; {type: config.changed, config: ConfigChange} after every config save (file edit, `handup config set`, or a Settings save): `applied` keys are in force, `restart_required` keys wait for a daemon restart, and `error` (`path:line: message`) means the file is invalid and the previous config stays in force. Refetch `/v1/ui-settings` on it. Closed immediately when the calling device is revoked (4401) or disabled (4403). The daemon sends a WebSocket ping every 25 s, so a client that hears nothing for longer can treat the connection as dead"
           }
         }
       }
@@ -278,7 +296,7 @@
           {
             "name": "outcome",
             "in": "query",
-            "description": "approved, denied, expired, cancelled, or auto (rule or YOLO decision)",
+            "description": "approved, denied, expired, cancelled, auto (rule or YOLO decision), or dismissed (info notice)",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/HistoryOutcome"
@@ -313,7 +331,7 @@
           {
             "name": "kind",
             "in": "query",
-            "description": "Request kind: command, edit, review, question, or custom",
+            "description": "Request kind: command, edit, review, question, info, or custom",
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/Kind"
@@ -346,6 +364,116 @@
         }
       }
     },
+    "/v1/keys": {
+      "put": {
+        "tags": [],
+        "description": "Replace the keyboard shortcut overrides (`keys:` in the daemon config): validated, saved to the config file and applied without a restart. Emits `keys.changed` so every open client rebinds, then `config.changed`. Local, and decide scope on paired devices.",
+        "operationId": "keys_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeysSet"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The saved overrides, keys in canonical form",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeysSet"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown action, built-in key, unparseable key, conflict, invalid config file, or the daemon has no config file"
+          },
+          "403": {
+            "description": "Remote device without decide scope"
+          }
+        }
+      }
+    },
+    "/v1/license": {
+      "get": {
+        "tags": [],
+        "description": "Trial and license state. `locked` means new requests are refused with HTTP 402 (`code: license_required`); pending requests stay decidable. Development builds report `not_enforced`.",
+        "operationId": "license_get",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenseStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "description": "Activate a license: `key` is exchanged at gethandup.dev for a signed license (online); `license` installs signed license text (offline import). The license is verified with the embedded public key and stored (0600) in the data directory.",
+        "operationId": "license_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LicenseSet"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenseStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Key rejected, invalid license, or not exactly one of key and license"
+          },
+          "403": {
+            "description": "Remote device without decide scope"
+          },
+          "502": {
+            "description": "License server unreachable or unavailable"
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "description": "Remove the local license files. The trial start stays recorded.",
+        "operationId": "license_delete",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LicenseStatus"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Remote device without decide scope"
+          }
+        }
+      }
+    },
     "/v1/log": {
       "get": {
         "tags": [],
@@ -359,6 +487,38 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/AuditEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/notice-replies": {
+      "post": {
+        "tags": [],
+        "description": "Local only. Atomically fetch and mark delivered unread non-empty replies to info notices. Supply session, id, or both (both selectors must match). An id alone claims a notice without a session. First consumer wins; no selectors is invalid.",
+        "operationId": "notice_replies",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoticeRepliesQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NoticeReply"
                   }
                 }
               }
@@ -559,6 +719,9 @@
           },
           "400": {
             "description": "Invalid request"
+          },
+          "402": {
+            "description": "License required: the trial ended or the license was revoked (`code: license_required`; see `GET /v1/license`)"
           },
           "413": {
             "description": "Preview exceeds previews.max_file_bytes"
@@ -774,7 +937,7 @@
         },
         "responses": {
           "200": {
-            "description": "Claimed: `run` is set and no other decision, expiry, or timeout applies until the desktop app reports the result, the request is cancelled, or the lease lapses",
+            "description": "Claimed: `run` is set (with `run.timeout_ms`, the request's `run_timeout` or `run.timeout`, capped at `run.max_timeout`) and no other decision, expiry, or timeout applies until the desktop app reports the result, the request is cancelled, or the lease (limit plus 2 minutes) lapses",
             "content": {
               "application/json": {
                 "schema": {
@@ -823,6 +986,41 @@
         }
       }
     },
+    "/v1/requests/{id}/run/stop": {
+      "post": {
+        "tags": [],
+        "description": "Stop a desktop run from any client: local callers, and paired devices with decide scope. Audited as `run_stop_requested`.",
+        "operationId": "run_stop",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stop requested: `run.stop` names who asked and `request.updated` is emitted; the desktop app running the command stops it (TERM, then KILL after 5 s) and reports `stopped from <device>; terminated|killed`. Repeating it changes nothing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Request"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Remote device without decide scope, or disabled, downgraded or revoked by the time the stop commits"
+          },
+          "409": {
+            "description": "Not pending, or no desktop run holds the request"
+          }
+        }
+      }
+    },
     "/v1/requests/{id}/wait": {
       "get": {
         "tags": [],
@@ -866,7 +1064,7 @@
         "operationId": "rules_list",
         "responses": {
           "200": {
-            "description": "Ordered rules including session rules"
+            "description": "Ordered rules (`rules:` in the daemon config) followed by session rules"
           }
         }
       }
@@ -908,7 +1106,233 @@
         ],
         "responses": {
           "200": {
-            "description": "Rule removed"
+            "description": "Rule removed: a session rule, or one from `rules:` in the daemon config (rewritten and applied live; emits `config.changed`)"
+          },
+          "404": {
+            "description": "No such rule"
+          }
+        }
+      }
+    },
+    "/v1/storage": {
+      "get": {
+        "tags": [
+          "crate::storage"
+        ],
+        "description": "Disk usage by category (request history, audit log, files, free database pages, other), request counts, the history retention policy and the running or most recent cleanup. Local, and view scope on paired devices.",
+        "operationId": "usage",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/storage/cleanup": {
+      "post": {
+        "tags": [
+          "crate::storage"
+        ],
+        "description": "Start a background cleanup of resolved requests (never pending ones or files they reference). It runs in small batches, so requests and decisions keep working. Local, and decide scope on paired devices.",
+        "operationId": "cleanup_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanupScope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Started; poll GET /v1/storage/cleanup/{id}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupJob"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Remote device without decide scope"
+          },
+          "409": {
+            "description": "A cleanup is already running; `job` is that cleanup"
+          }
+        }
+      }
+    },
+    "/v1/storage/cleanup/{id}": {
+      "get": {
+        "tags": [
+          "crate::storage"
+        ],
+        "description": "Progress of a cleanup. Local, and view scope on paired devices.",
+        "operationId": "cleanup_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupJob"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not the running or most recent cleanup"
+          }
+        }
+      }
+    },
+    "/v1/storage/cleanup/{id}/cancel": {
+      "post": {
+        "tags": [
+          "crate::storage"
+        ],
+        "description": "Cancel a cleanup. Local, and decide scope on paired devices.",
+        "operationId": "cleanup_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stops after the current batch; what was already removed stays removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupJob"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Remote device without decide scope"
+          },
+          "404": {
+            "description": "Not the running or most recent cleanup"
+          }
+        }
+      }
+    },
+    "/v1/storage/estimate": {
+      "get": {
+        "tags": [
+          "crate::storage"
+        ],
+        "description": "What a cleanup would remove now, for the inline confirmation. Local, and view scope on paired devices.",
+        "operationId": "estimate",
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "description": "history (requests, audit, unshared files) or files (files only)",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/CleanupTarget"
+            }
+          },
+          {
+            "name": "older_than_days",
+            "in": "query",
+            "description": "Only requests resolved at least this many days ago; 0 or absent = every resolved request",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "keep_newest",
+            "in": "query",
+            "description": "Keep the newest this many resolved requests; 0 or absent = no count limit",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupEstimate"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid target"
+          }
+        }
+      }
+    },
+    "/v1/storage/retention": {
+      "put": {
+        "tags": [
+          "crate::storage"
+        ],
+        "description": "Set history.keep_days and/or history.files_keep_days: saved to the daemon's config file and applied without a restart. A shorter period starts a cleanup at once. Local, and decide scope on paired devices.",
+        "operationId": "retention_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionChange"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Out of range, or the daemon has no config file"
+          },
+          "403": {
+            "description": "Remote device without decide scope"
           }
         }
       }
@@ -986,7 +1410,7 @@
         "operationId": "ui_settings",
         "responses": {
           "200": {
-            "description": "UI policy: undo window, primary action side, HTML network access, remote mode/warning, relay pairing, calling device",
+            "description": "UI policy: undo window, primary action side, HTML network access, remote mode/warning, relay pairing, calling device, pending config restart and config error. Refetch on `config.changed`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1125,8 +1549,188 @@
               "null"
             ],
             "description": "Name of the paired device when `actor` is `device:<id>` and that device is still paired."
+          },
+          "device_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What that paired device is: `app` (the handup phone app) or `browser`\n(a paired web browser). Absent for other actors, revoked devices, and\ndevices paired before the daemon recorded it."
           }
         }
+      },
+      "BTreeMap": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        },
+        "propertyNames": {
+          "type": "string"
+        }
+      },
+      "CleanupEstimate": {
+        "type": "object",
+        "description": "What a cleanup would remove right now (an estimate: requests keep resolving).",
+        "required": [
+          "requests",
+          "files",
+          "bytes"
+        ],
+        "properties": {
+          "requests": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Resolved requests deleted (0 for a files-only cleanup).",
+            "minimum": 0
+          },
+          "files": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Files removed from disk.",
+            "minimum": 0
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Approximate bytes freed: file sizes plus, for history, request and audit rows.",
+            "minimum": 0
+          }
+        }
+      },
+      "CleanupJob": {
+        "type": "object",
+        "description": "A background cleanup. The daemon runs one at a time in small batches, so\nrequests and decisions keep working while it runs.",
+        "required": [
+          "id",
+          "target",
+          "older_than_days",
+          "state",
+          "total",
+          "done",
+          "requests_deleted",
+          "files_deleted",
+          "bytes_freed",
+          "compacting",
+          "started_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/CleanupTarget"
+          },
+          "older_than_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0 = every resolved request.",
+            "minimum": 0
+          },
+          "keep_newest": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Newest resolved requests kept; 0 = no count limit.",
+            "minimum": 0
+          },
+          "state": {
+            "$ref": "#/components/schemas/CleanupState"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Items to process, counted at the start: requests (history) or files (files).",
+            "minimum": 0
+          },
+          "done": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Items processed so far.",
+            "minimum": 0
+          },
+          "requests_deleted": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "files_deleted": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "bytes_freed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes freed: removed files plus database pages released by deleted rows.",
+            "minimum": 0
+          },
+          "compacting": {
+            "type": "boolean",
+            "description": "Returning freed database pages to the filesystem (incremental vacuum)."
+          },
+          "started_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix milliseconds.",
+            "minimum": 0
+          },
+          "finished_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set when `state` is `failed`."
+          }
+        }
+      },
+      "CleanupScope": {
+        "type": "object",
+        "description": "Which resolved requests a cleanup covers (`POST /v1/storage/cleanup` body,\n`GET /v1/storage/estimate` query). Both limits apply together.",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/CleanupTarget"
+          },
+          "older_than_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Only requests resolved at least this many days ago; 0 = every resolved request.",
+            "minimum": 0
+          },
+          "keep_newest": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Keep the newest this many resolved requests (requests resolved in the\nsame millisecond as the last one kept stay too); 0 = no count limit.",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "CleanupState": {
+        "type": "string",
+        "enum": [
+          "running",
+          "done",
+          "cancelled",
+          "failed"
+        ]
+      },
+      "CleanupTarget": {
+        "type": "string",
+        "description": "What a cleanup removes.",
+        "enum": [
+          "history",
+          "files"
+        ]
       },
       "Command": {
         "type": "object",
@@ -1164,6 +1768,72 @@
           }
         },
         "additionalProperties": false
+      },
+      "ConfigChange": {
+        "type": "object",
+        "description": "`config.changed` payload: what a config save did.",
+        "required": [
+          "applied",
+          "restart_required"
+        ],
+        "properties": {
+          "applied": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Dotted keys whose new value is in force now (`keys.approve`, `rules`, `notifications.enabled`)."
+          },
+          "restart_required": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Dotted keys whose saved value differs from the one the daemon started\nwith and that apply only at the next daemon start (listen addresses,\nremote access and relay, upload limit). Cumulative: empty again once\nthe file matches the running daemon."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`path:line: message` when the file failed to parse or validate; the\ndaemon kept the previous config."
+          }
+        }
+      },
+      "ConfigStatus": {
+        "type": "object",
+        "description": "`GET /v1/config/status` (local only): the daemon's config file and the\ncontent it last handled.",
+        "required": [
+          "sha256",
+          "restart_required"
+        ],
+        "properties": {
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The config file the daemon loads and watches; null without one."
+          },
+          "sha256": {
+            "type": "string",
+            "description": "SHA-256 (hex) of the file text the daemon last read or wrote."
+          },
+          "restart_required": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Restart-only keys saved since the daemon started."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The file's error (`path:line: message`) while the previous config stays in force."
+          }
+        }
       },
       "Decision": {
         "type": "object",
@@ -1550,13 +2220,14 @@
       },
       "HistoryOutcome": {
         "type": "string",
-        "description": "How a resolved request ended, as history shows it. `auto` is a rule or\nYOLO-mode decision; `expired` includes timeouts that auto-approved (`on_timeout: approve`).",
+        "description": "How a resolved request ended, as history shows it. `auto` is a rule or\nYOLO-mode decision; `expired` includes timeouts that auto-approved (`on_timeout: approve`);\n`dismissed` is an info notice a person dismissed.",
         "enum": [
           "approved",
           "denied",
           "expired",
           "cancelled",
-          "auto"
+          "auto",
+          "dismissed"
         ]
       },
       "IntegrationToken": {
@@ -1597,6 +2268,20 @@
           }
         }
       },
+      "KeysSet": {
+        "type": "object",
+        "description": "`PUT /v1/keys` body: the complete override set.",
+        "required": [
+          "keys"
+        ],
+        "properties": {
+          "keys": {
+            "$ref": "#/components/schemas/BTreeMap",
+            "description": "Action id → key; an omitted action uses its default, so `{}` resets all."
+          }
+        },
+        "additionalProperties": false
+      },
       "Kind": {
         "type": "string",
         "enum": [
@@ -1604,8 +2289,160 @@
           "edit",
           "review",
           "question",
+          "info",
           "custom"
         ]
+      },
+      "LicenseSet": {
+        "type": "object",
+        "description": "`PUT /v1/license` body: exactly one of `key` (exchanged online at\ngethandup.dev) or `license` (signed license text, for offline machines).",
+        "properties": {
+          "key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "license": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "LicenseState": {
+        "type": "string",
+        "enum": [
+          "not_enforced",
+          "trial",
+          "expired",
+          "licensed",
+          "revoked"
+        ]
+      },
+      "LicenseStatus": {
+        "type": "object",
+        "description": "`GET`/`PUT`/`DELETE /v1/license` response.",
+        "required": [
+          "state",
+          "locked",
+          "enforced",
+          "trial_ends_at",
+          "buy_url"
+        ],
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/LicenseState"
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "True when new requests are refused (`expired` or `revoked`)."
+          },
+          "enforced": {
+            "type": "boolean",
+            "description": "False in development builds; release builds always enforce."
+          },
+          "trial_days_left": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Whole days left in the trial (rounded up); null once licensed.",
+            "minimum": 0
+          },
+          "trial_ends_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix ms when the trial ends (ended).",
+            "minimum": 0
+          },
+          "display_key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Masked key, `****-XXXXXX`, from the installed license."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issued_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When gethandup.dev signed the license (RFC 3339)."
+          },
+          "checked_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix ms of the last successful online check with Polar.",
+            "minimum": 0
+          },
+          "revoked_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the license is revoked (`revoked`, `disabled`, `not found`, ...)."
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How to fix a locked daemon; null otherwise."
+          },
+          "buy_url": {
+            "type": "string"
+          }
+        }
+      },
+      "NoticeRepliesQuery": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "NoticeReply": {
+        "type": "object",
+        "description": "A human's optional reply to an info notice, delivered to the first consumer.",
+        "required": [
+          "id",
+          "title",
+          "feedback"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "feedback": {
+            "type": "string"
+          }
+        }
       },
       "OnTimeout": {
         "type": "string",
@@ -2117,6 +2954,13 @@
             ],
             "description": "Optional positive duration, at most one year. Absent uses config; null/`none` disables expiry."
           },
+          "run_timeout": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional limit for the desktop app's Run of this command (e.g. `30m`).\nAbsent uses the daemon's `run.timeout`; the daemon caps it at\n`run.max_timeout`. Not part of the request's decision timeout.\nMust be between 1ms and one year."
+          },
           "on_timeout": {
             "$ref": "#/components/schemas/OnTimeout"
           },
@@ -2165,6 +3009,15 @@
                 "description": "Present while the desktop app runs the command (daemon-managed)."
               }
             ]
+          },
+          "run_interrupted": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix milliseconds when a desktop run's lease lapsed without a result\n(the app crashed or stopped responding); the request is decidable\nagain. Cleared when it is run again (daemon-managed).",
+            "minimum": 0
           }
         },
         "additionalProperties": false
@@ -2200,6 +3053,51 @@
           }
         }
       },
+      "RetentionChange": {
+        "type": "object",
+        "required": [
+          "retention"
+        ],
+        "properties": {
+          "retention": {
+            "$ref": "#/components/schemas/History"
+          },
+          "job": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CleanupJob",
+                "description": "The cleanup that applies a shorter period now; null when nothing\nshrank or another cleanup is running (hourly retention then applies it)."
+              }
+            ]
+          }
+        }
+      },
+      "RetentionUpdate": {
+        "type": "object",
+        "description": "`PUT /v1/storage/retention`: the \"keep for\" control. Omitted fields keep\ntheir value; 0 keeps forever (files: as long as their request).",
+        "properties": {
+          "keep_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "files_keep_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
       "Risk": {
         "type": "string",
         "enum": [
@@ -2225,12 +3123,29 @@
           "lease_until": {
             "type": "integer",
             "format": "int64",
-            "description": "Unix milliseconds after which an unreported run no longer holds the\nrequest (the app crashed or lost the daemon).",
+            "description": "Unix milliseconds after which an unreported run no longer holds the\nrequest (the app crashed or lost the daemon): the run limit plus\n[`RunClaim::GRACE_MS`].",
             "minimum": 0
           },
           "elevated": {
             "type": "boolean",
             "description": "Running with administrator rights."
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The run limit in milliseconds: the request's `run_timeout`, else the\ndaemon's `run.timeout`, capped at `run.max_timeout`. The desktop app\nstops the command when it is reached.",
+            "minimum": 0
+          },
+          "stop": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunStop",
+                "description": "Someone asked to stop the run from another client (phone, browser,\nCLI, another desktop); the desktop app running it stops it."
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -2293,6 +3208,27 @@
           "elevated": {
             "type": "boolean",
             "description": "Running with administrator rights."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunStop": {
+        "type": "object",
+        "description": "A stop request for a running command (`POST /v1/requests/{id}/run/stop`).",
+        "required": [
+          "by",
+          "at"
+        ],
+        "properties": {
+          "by": {
+            "type": "string",
+            "description": "Who asked: the paired device's name, or `this computer`."
+          },
+          "at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix milliseconds.",
+            "minimum": 0
           }
         },
         "additionalProperties": false
@@ -2376,9 +3312,119 @@
           "approved",
           "denied",
           "answered",
+          "dismissed",
           "expired",
           "cancelled"
         ]
+      },
+      "StorageReport": {
+        "type": "object",
+        "description": "`GET /v1/storage`: usage by category, the retention policy, and the\nrunning or most recent cleanup.",
+        "required": [
+          "usage",
+          "retention"
+        ],
+        "properties": {
+          "usage": {
+            "$ref": "#/components/schemas/StorageUsage"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/History"
+          },
+          "job": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CleanupJob"
+              }
+            ]
+          }
+        }
+      },
+      "StorageUsage": {
+        "type": "object",
+        "description": "Disk space the daemon uses, by category. Categories add up to `total_bytes`.",
+        "required": [
+          "total_bytes",
+          "history_bytes",
+          "audit_bytes",
+          "files_bytes",
+          "free_bytes",
+          "other_bytes",
+          "files",
+          "pending",
+          "resolved",
+          "compacts"
+        ],
+        "properties": {
+          "total_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Database file, write-ahead log, and stored files on disk.",
+            "minimum": 0
+          },
+          "history_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Request rows (with their inline previews) and their indexes.",
+            "minimum": 0
+          },
+          "audit_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Audit events.",
+            "minimum": 0
+          },
+          "files_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Stored files (preview blobs) plus their metadata rows.",
+            "minimum": 0
+          },
+          "free_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Free database pages; new requests reuse them before the file grows.",
+            "minimum": 0
+          },
+          "other_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Everything else: devices, tokens, schema, and the write-ahead log.",
+            "minimum": 0
+          },
+          "files": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Stored files on disk.",
+            "minimum": 0
+          },
+          "pending": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "resolved": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "oldest_resolved_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Unix milliseconds of the oldest resolution still kept.",
+            "minimum": 0
+          },
+          "compacts": {
+            "type": "boolean",
+            "description": "The database returns freed pages to the filesystem after a history\ncleanup (`auto_vacuum=incremental`, set on databases created by this\nversion). Otherwise freed pages stay in the file as `free_bytes` and\nare reused."
+          }
+        }
       },
       "TestRequest": {
         "type": "object",
@@ -2420,8 +3466,10 @@
           "undo_window_ms",
           "primary_side",
           "html_allow_network",
+          "keys",
           "remote_mode",
-          "pair_relay"
+          "pair_relay",
+          "config_restart_required"
         ],
         "properties": {
           "undo_window_ms": {
@@ -2437,6 +3485,10 @@
           "html_allow_network": {
             "type": "boolean",
             "description": "`previews.html.allow_network`."
+          },
+          "keys": {
+            "$ref": "#/components/schemas/BTreeMap",
+            "description": "`keys:` keyboard shortcut overrides (action id → key, e.g. `shift+a`,\n`mod+enter`); absent actions use their defaults. Changes arrive live\nas `keys.changed` events."
           },
           "remote_mode": {
             "type": "string",
@@ -2463,6 +3515,20 @@
                 "description": "The calling paired device on the remote listener; null for local callers."
               }
             ]
+          },
+          "config_restart_required": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Config keys saved since the daemon started that apply only after a\nrestart (`config.changed` `restart_required`); empty when none."
+          },
+          "config_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The config file's parse/validation error (`path:line: message`) while\nthe daemon keeps the previous config; null when the file is valid."
           }
         }
       },

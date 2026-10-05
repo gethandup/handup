@@ -1,0 +1,8 @@
+{
+  "message_id": "<rcpt-2026-09@billing.example.net>",
+  "from": "Example Cloud Billing <billing@example.net>",
+  "to": "ari@example.com",
+  "subject": "Your receipt for September",
+  "date": "Wed, 01 Oct 2026 02:00:00 +0000",
+  "body": "Receipt #4821\n\nAmount paid: $24.00\nPaid with Visa ending 4242."
+}

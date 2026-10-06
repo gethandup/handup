@@ -1,0 +1,226 @@
+# Builds the Windows x86-64 CLI zip and desktop NSIS installer on this public
+# repo's free Windows runners, then smoke-tests both on that real Windows
+# machine: CLI + daemon over the token-gated loopback listener, silent install,
+# desktop launch (screenshot artifact) and silent uninstall.
+# The private source is checked out only inside the job (read-only deploy key)
+# and removed right after the build; nothing from it is committed, cached or
+# logged. Build output goes to a file that is never uploaded; a failure prints
+# only error headline lines. Started only by maintainers (workflow_dispatch).
+name: windows-build
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag (v0.1.2) or commit in the private build repo
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: windows-build-${{ inputs.ref }}
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 100
+    environment: release-build
+    steps:
+      - name: Check ref
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          [[ $REF =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$ ]] || { echo "::error::ref must be a branch, tag or commit"; exit 1; }
+          # Embedded skill and demo files must keep their LF bytes.
+          git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: gethandup/handup-build
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.HANDUP_BUILD_DEPLOY_KEY }}
+          persist-credentials: false
+          path: src
+      - name: Read pinned tool versions
+        working-directory: src
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          for k in NODE_VERSION PNPM_VERSION GO_VERSION TAURI_CLI_VERSION CARGO_BINSTALL_VERSION; do
+            v=$(sed -nE "s/^  $k: *\"?([^\"]+)\"?$/\1/p" .github/workflows/release.yml)
+            [[ -n $v ]] || { echo "::error::$k missing from release.yml"; exit 1; }
+            echo "$k=$v" >> "$GITHUB_ENV"
+          done
+          if [[ $REF =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "BARE=${REF#v}" >> "$GITHUB_ENV"
+          else
+            echo "BARE=$(sed -nE 's/^version = "([^"]+)"$/\1/p' Cargo.toml | head -1)" >> "$GITHUB_ENV"
+          fi
+          echo "OUT=$(cygpath -m "$GITHUB_WORKSPACE/out")" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Install toolchain
+        timeout-minutes: 15
+        run: |
+          corepack enable && corepack prepare "pnpm@$PNPM_VERSION" --activate
+          rustup update stable --no-self-update && rustup default stable
+          mkdir -p "$RUNNER_TEMP/bin" && echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          command -v make > /dev/null || choco install make -y --no-progress > /dev/null
+          curl -fsSL -o "$RUNNER_TEMP/binstall.zip" "https://github.com/cargo-bins/cargo-binstall/releases/download/v$CARGO_BINSTALL_VERSION/cargo-binstall-x86_64-pc-windows-msvc.zip"
+          unzip -q -d "$RUNNER_TEMP/bin" "$RUNNER_TEMP/binstall.zip" cargo-binstall.exe
+          "$RUNNER_TEMP/bin/cargo-binstall.exe" -y --force --locked "tauri-cli@$TAURI_CLI_VERSION" > /dev/null
+          command -v make 7z
+      - name: Build
+        timeout-minutes: 75
+        working-directory: src
+        env:
+          CARGO_TERM_COLOR: never
+        run: |
+          log="$RUNNER_TEMP/build.log"
+          if ! make release-windows BUILD_VERSION="$BARE" RELEASE_DIR="$OUT" > "$log" 2>&1; then
+            # Error headlines only: no source snippets or file contents.
+            grep -E '^(error(\[E[0-9]+\])?: |make(\[[0-9]+\])?: \*\*\*|\s*Error |ERR_PNPM|expected exactly one)' "$log" | cut -c1-200 | head -20
+            exit 1
+          fi
+          ls -l "$OUT"
+      - name: Remove source
+        if: always()
+        run: rm -rf src
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-windows
+          path: out/
+          if-no-files-found: error
+          retention-days: 1
+      - name: Smoke CLI and daemon
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cliDir = Join-Path $env:RUNNER_TEMP 'cli'
+          Expand-Archive -Path out\handup-windows-amd64.zip -DestinationPath $cliDir
+          $exe = Join-Path $cliDir 'handup.exe'
+          $root = Join-Path $env:RUNNER_TEMP 'handup-smoke'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          $env:HANDUP_DATA_DIR = "$root\data"
+          $env:HANDUP_STATE_DIR = "$root\state"
+          $env:HANDUP_CONFIG = "$root\config.yaml"
+          Set-Content -Path $env:HANDUP_CONFIG -Value "notifications:`n  enabled: false"
+          & $exe version
+          if ($LASTEXITCODE) { throw 'handup version failed' }
+          $daemon = Start-Process -FilePath $exe -ArgumentList 'serve' -PassThru -NoNewWindow -RedirectStandardError "$root\serve.log"
+          try {
+            # Wait for the listener without any CLI call that could autostart a second daemon.
+            $addr = $null
+            for ($i = 0; $i -lt 150 -and -not $addr; $i++) {
+              Start-Sleep -Milliseconds 200
+              if ($daemon.HasExited) { break }
+              if (Test-Path "$root\state\daemon.addr") {
+                $candidate = (Get-Content "$root\state\daemon.addr" -Raw).Trim()
+                $code = & curl.exe -s -o NUL -w '%{http_code}' "http://$candidate/v1/health"
+                if ($code -ne '000') { $addr = $candidate }
+              }
+            }
+            if (-not $addr) { throw 'daemon did not start' }
+            # The loopback listener must refuse requests without the per-user bearer token.
+            $code = & curl.exe -s -o NUL -w '%{http_code}' "http://$addr/v1/requests"
+            if ($code -eq '200') { throw 'unauthenticated loopback request succeeded' }
+            "unauthenticated /v1/requests -> $code"
+            $request = (& $exe ask --title 'windows smoke' --json) | ConvertFrom-Json
+            if ($LASTEXITCODE) { throw 'handup ask failed' }
+            $status = (& $exe status $request.id --json) | ConvertFrom-Json
+            if ($status.status -ne 'pending') { throw "unexpected status $($status.status)" }
+            & $exe ls
+            if ($LASTEXITCODE) { throw 'handup ls failed' }
+            & $exe cancel $request.id
+            # Exit 3 is the documented "cancelled" result.
+            if ($LASTEXITCODE -ne 3) { throw "handup cancel exited $LASTEXITCODE, expected 3" }
+            $status = (& $exe status $request.id --json) | ConvertFrom-Json
+            if ($status.status -ne 'cancelled') { throw "unexpected status after cancel $($status.status)" }
+            & $exe service install
+            if ($LASTEXITCODE -eq 0) { throw 'handup service install must be unsupported on Windows' }
+            $global:LASTEXITCODE = 0
+            'CLI smoke PASSED (native Windows)'
+          } finally {
+            if (-not $daemon.HasExited) { Stop-Process -Id $daemon.Id -Force }
+            Get-Content "$root\serve.log" -ErrorAction SilentlyContinue
+          }
+      - name: Smoke installer and desktop app
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $shots = Join-Path $env:RUNNER_TEMP 'windows-smoke'
+          New-Item -ItemType Directory -Force $shots | Out-Null
+          $installer = Get-ChildItem out\*-setup.exe | Select-Object -First 1
+          $p = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode) { throw "installer exited $($p.ExitCode)" }
+          $app = Get-ChildItem "$env:LOCALAPPDATA\handup", "$env:ProgramFiles\handup" -Filter handup-app.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $app) { throw 'handup-app.exe not installed' }
+          $installDir = $app.DirectoryName
+          "installed: $($app.FullName)"
+          $cli = Join-Path $installDir 'handup.exe'
+          if (-not (Test-Path $cli)) { throw 'bundled handup.exe missing next to the app' }
+          # Isolated daemon state, inherited by the app and the daemon it autostarts.
+          $root = Join-Path $env:RUNNER_TEMP 'handup-desktop'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          $env:HANDUP_DATA_DIR = "$root\data"
+          $env:HANDUP_STATE_DIR = "$root\state"
+          $env:HANDUP_CONFIG = "$root\config.yaml"
+          Set-Content -Path $env:HANDUP_CONFIG -Value "notifications:`n  enabled: false"
+          $proc = Start-Process -FilePath $app.FullName -PassThru -RedirectStandardError "$shots\app-stderr.log" -RedirectStandardOutput "$shots\app-stdout.log"
+          try {
+            # The app autostarts the daemon through the bundled CLI.
+            $addr = $null
+            for ($i = 0; $i -lt 120 -and -not $addr; $i++) {
+              Start-Sleep -Milliseconds 500
+              if (Test-Path "$root\state\daemon.addr") {
+                $candidate = (Get-Content "$root\state\daemon.addr" -Raw).Trim()
+                $code = & curl.exe -s -o NUL -w '%{http_code}' "http://$candidate/v1/health"
+                if ($code -eq '200') { $addr = $candidate }
+              }
+            }
+            if (-not $addr) { throw 'daemon did not start from the app' }
+            "app started daemon at $addr"
+            $request = (& $cli ask --title 'Windows desktop smoke' --json) | ConvertFrom-Json
+            if ($LASTEXITCODE) { throw 'handup ask against the app daemon failed' }
+            Start-Sleep -Seconds 15
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+            $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+            $bitmap.Save("$shots\desktop.png", [System.Drawing.Imaging.ImageFormat]::Png)
+            $graphics.Dispose(); $bitmap.Dispose()
+            if ($proc.HasExited) { throw "handup-app exited early with code $($proc.ExitCode)" }
+            'desktop app alive after 15s'
+            & $cli cancel $request.id | Out-Null
+            $global:LASTEXITCODE = 0
+          } finally {
+            Stop-Process -Name handup-app, handup -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+          }
+          $uninstaller = Join-Path $installDir 'uninstall.exe'
+          if (-not (Test-Path $uninstaller)) { throw 'uninstall.exe missing' }
+          Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait
+          # NSIS uninstallers re-launch from a temp copy; wait for the files to go.
+          for ($i = 0; $i -lt 60 -and (Test-Path $app.FullName); $i++) { Start-Sleep -Milliseconds 500 }
+          if (Test-Path $app.FullName) { throw 'handup-app.exe still present after uninstall' }
+          if (Test-Path $cli) { throw 'handup.exe still present after uninstall' }
+          $keys = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |
+            Where-Object { (Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue).DisplayName -eq 'handup' }
+          if ($keys) { throw 'uninstall registry entry still present' }
+          'uninstall clean'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: windows-smoke
+          path: ${{ runner.temp }}/windows-smoke/
+          if-no-files-found: warn
+          retention-days: 7

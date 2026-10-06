@@ -117,9 +117,10 @@ provider.
 | `approve` | Human: `handup approve ID --json` |
 | `deny` | Human: `handup deny ID -m 'Use staging' --json` |
 | `answer` | Human: `handup answer ID --select eu --text 'eu-west-1' --json`; several questions: `--select QID=LABEL`, `--text QID=TEXT` |
-| `schema` | `handup schema request`, `decision`, or `openapi` |
+| `schema` | `handup schema request`, `decision`, `event`, or `openapi` |
 | `serve` | `handup serve --foreground` starts daemon |
 | `service` | `handup service install`, `uninstall`, or `status` (`--dry-run`) |
+| `setup` | `handup setup [--dry-run]` first run: installs and starts the user service (skipped without a systemd/launchd user session), runs `integrate all`, installs the generic skill plus Claude/Codex skills when detected (skips a non-handup skill directory), then waits up to 5s for the daemon. Safe to rerun; `--dry-run` writes nothing and starts nothing. Exit 4 if any step failed |
 | `demo` | `handup demo --json` seeds preview examples |
 | `doctor` | `handup doctor --json` diagnoses local environment |
 | `ui` | Human: `handup ui --next` opens or focuses the desktop app |
@@ -129,7 +130,7 @@ provider.
 | `log` | `handup log --json` tails the append-only audit with rule IDs |
 | `storage` | Human only: `handup storage [--json]` shows disk use by category, retention and the last cleanup; `handup storage clean history` (or `files`) `--older-than 30d` (or `--keep 100`, or `--all`) deletes resolved requests, or only their files, in the background. Pending requests are never touched. Agents never clean up |
 | `pair` | Human only: `handup pair --scope decide` prints a one-time QR pairing link for a phone or browser (direct/Tailscale needs `remote.mode` enabled; `handup pair --relay` works with mode `off` when a relay is configured); agents never pair devices |
-| `devices` | Human only: `handup devices list [--json]` shows enabled state; `handup devices disable DEVICE_ID` / `enable DEVICE_ID` pauses/resumes access and push without unpairing; `handup devices revoke DEVICE_ID` unpairs immediately |
+| `devices` | Human only: `handup devices list [--json]` shows enabled, push and scope; `handup devices disable DEVICE_ID` / `enable DEVICE_ID` pauses/resumes access and push without unpairing; `handup devices mute DEVICE_ID` / `unmute DEVICE_ID` stops/resumes push only; `handup devices scope DEVICE_ID view|decide` changes access; `handup devices revoke DEVICE_ID` unpairs immediately |
 | `tokens` | Human only: `handup tokens create NAME [--expires 90d]`, `tokens list`, `tokens revoke NAME`. Submit credentials create and access only their own requests; never decide. See docs/public/integrations/tokens.md |
 | `yolo` | Human only: `handup yolo on --for 1h` auto-approves new low/medium-risk requests (`hard`: every risk; `off`); bare `handup yolo --json` prints `{mode, until}`. Agents never turn it on |
 | `mcp` | `handup mcp` serves stdio; stdout is protocol only |
@@ -146,7 +147,8 @@ provider.
 ## Setup quickstart
 
 ```sh
-handup integrate all   # every detected agent: Claude Code, Codex, Cursor, omp
+handup setup          # first run: service, every detected agent, agent skill (--dry-run previews)
+handup integrate all   # or connect agents only: Claude Code, Codex, Cursor, omp
 DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup
 handup prompt          # generic; --agent claude|codex|cursor|omp tailors it
 handup ask --title "Review action" --command "echo hello" --wait --json

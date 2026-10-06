@@ -60,7 +60,7 @@ Submitting never executes a command.
 
 Agent commands: `ask`, `wait`, `status`, `cancel`, `ls`, `show`, `schema`,
 `log`, `doctor`, `demo`, `version`, `help`. Setup (only when the human asks):
-`serve`, `service` (install, uninstall, status), `mcp`, `hook`, `hooks` (list,
+`serve`, `service` (install, uninstall, status), `setup` (`--dry-run`), `mcp`, `hook`, `hooks` (list,
 test), `integrate`, `skill` (install, uninstall), `prompt`, `completion`, `config` (init, show, path, edit,
 get, set, unset, toggle, keys, validate), `uninstall`. Human-only: `approve`, `deny`, `answer`,
 `stop` (a desktop Run), `ui`, `report`, `inbox`, `rules` (list, test, rm), `storage` (clean), `pair`, `devices`
@@ -74,7 +74,8 @@ setting with its source.
 When asked to set up handup:
 
 ```sh
-handup integrate all   # every detected agent: Claude Code, Codex, Cursor, omp
+handup setup           # service, every detected agent, agent skill; --dry-run previews
+handup integrate all   # or agents only: Claude Code, Codex, Cursor, omp
 DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup
 handup prompt          # generic; --agent claude|codex|cursor|omp tailors it
 handup ask --title "Review action" --command "echo hello" --wait --json
@@ -82,7 +83,10 @@ handup ask --title "Review action" --command "echo hello" --wait --json
 
 The [agent skill guide](references/docs/public/agents/skill.md) explains the
 setup instructions, approval contract and offline docs provided by the skill.
-`integrate` targets are `all`, `claude`, `codex`, `omp`, and
+`setup` installs and starts the user service (skipped without a user session),
+runs `integrate all`, installs the generic skill plus Claude/Codex skills when
+detected, and waits up to 5s for the daemon; it is safe to rerun and exits 4 if
+any step failed. `integrate` targets are `all`, `claude`, `codex`, `omp`, and
 `mcp --client claude-code|codex|cursor|omp`. `all` uses the same agent-home
 detection as `--list` and creates missing configs. Claude Code and Codex get hooks plus MCP;
 Cursor and omp get MCP only. Existing omp extensions are upgraded (a customized

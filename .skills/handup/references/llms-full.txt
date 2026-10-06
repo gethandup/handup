@@ -883,6 +883,7 @@ handup config set output_format json
 handup config unset output_format  # back to the default
 handup config toggle no_color
 handup config validate      # check the active config, or a given path
+handup setup                 # first run: service, every detected agent, agent skill; --dry-run
 handup integrate all         # every detected agent: Claude Code, Codex, Cursor, omp
 handup integrate --list      # detected agent homes and installed handup entries
 handup prompt               # generic instructions; --agent claude|codex|cursor|omp tailors them
@@ -894,6 +895,27 @@ handup uninstall             # --yes skips confirmation
 
 `ask` starts the daemon automatically when its socket is absent unless
 `daemon.autostart` is false.
+
+## First-run setup
+
+`handup setup [--dry-run]` runs the first-run steps in order and prints one
+line per step:
+
+1. `handup service install`: installs and starts the user service. Without a
+   systemd or launchd user session it is skipped; run `handup serve`, or rely
+   on `handup ask` autostarting the daemon. An active service is left as is,
+   and the step is skipped when a daemon already runs outside the service.
+   `handup service install` itself keeps a changed service file as `.bak`.
+2. `handup integrate all`: connects every detected agent, as described below.
+3. `handup skill install`: installs the generic skill and, when Claude Code or
+   Codex is detected, their agent-specific copies. An existing skill directory
+   that handup did not install is left alone and reported as skipped.
+4. Waits up to 5 seconds for the daemon to answer.
+
+It is safe to run again: the service, connected agents and handup-owned skills
+are refreshed in place. `--dry-run` previews every step without writing files
+or starting the service. Exit 0 means every step succeeded or was skipped;
+exit 4 means a step failed, and its line names the command to fix it.
 
 ## Agent integration
 
@@ -2564,8 +2586,9 @@ an Android SDK.
 
 A handup Personal license is $30 USD one-time plus tax where applicable, sold through Polar (merchant of
 record): one person on their own machines, perpetual use and all future released
-updates. Polar emails the order confirmation; the license key is in Polar's
-customer portal. Refunds are available within 30 days of purchase; see the
+updates. Polar emails the order confirmation; click **handup license key** under
+**Included benefits** to open the key in Polar's customer portal
+([Find your key](docs/public/license.md#find-your-key)). Refunds are available within 30 days of purchase; see the
 [Terms](https://gethandup.dev/terms) and [Privacy Policy](https://gethandup.dev/privacy).
 No hosted service, unlimited personal support or indefinite development is promised.
 
@@ -2577,8 +2600,8 @@ gethandup.dev once, after which the license works offline. See
 If checkout reports too many attempts, wait about a minute before trying again.
 The server rejects the attempt before contacting Polar; nothing was charged.
 
-> **No public release has been published yet.** The commands below work once
-> the first release is out; until then the release page has no files.
+**After installing, run `handup setup`.** It starts handup and connects your
+agents; see the [quick start](docs/public/index.md#quick-start).
 
 ## Platforms
 
@@ -2589,8 +2612,8 @@ The server rejects the attempt before contacting Polar; nothing was charged.
 | macOS Intel / Apple Silicon | Homebrew cask, tar.gz | Beta; not notarized. |
 | macOS desktop app (universal) | .dmg | Beta; not notarized; needs the CLI daemon installed too. |
 | Android | APK (sideload) | Beta companion app for the daemon on your computer. |
-| iPhone / iPad | — | No native app. Use the daemon's web inbox over Tailscale. |
-| Windows | — | Not available. Use the Linux build in WSL. |
+
+There is no Windows or iPhone app yet. On Windows, use the Linux build in WSL.
 
 ## Linux
 
@@ -2688,19 +2711,8 @@ desktop app. See [desktop app on macOS](docs/public/desktop.md#macos).
 
 Download `handup-android_<version>_arm64.apk` on the phone, allow your browser
 to install unknown apps when Android asks, and open it. Pair it with
-`handup pair` on the computer. See [mobile](docs/public/mobile.md).
-
-## iPhone and iPad
-
-There is no native iOS app. Enable Tailscale mode and pair; then open the
-pairing link in Safari and add it to the Home Screen:
-
-```sh
-handup config set remote.mode tailscale
-handup pair
-```
-
-See [remote access](docs/public/remote.md).
+`handup pair` on the computer. See [mobile](docs/public/mobile.md), which also links an
+[Obtainium](https://obtainium.imranr.dev) setup for automatic APK updates.
 
 ## Verify a download
 
@@ -2723,12 +2735,13 @@ install script and Homebrew cask verify checksums for you.
 ## After installing
 
 ```sh
-handup service install
+handup setup           # service, every detected agent, agent skill; --dry-run previews
 handup doctor --json
-handup integrate all   # every detected agent: Claude Code, Codex, Cursor, omp
 ```
 
-See [agent setup](docs/public/agents/mcp.md) to configure one agent at a time.
+`handup setup` runs `handup service install`, `handup integrate all` and
+`handup skill install`; see [first-run setup](docs/public/cli.md#first-run-setup). See
+[agent setup](docs/public/agents/mcp.md) to configure one agent at a time.
 
 ## Updates
 
@@ -2741,7 +2754,7 @@ Every update is a new binary release; see the [changelog](https://github.com/get
 - Debian/Fedora/Alpine/Arch: install the newer package file the same way.
 - Desktop app: install the newer AppImage, package or `.dmg` over the old one.
 - Homebrew: `brew upgrade --cask handup`.
-- Android: install the newer APK over the old one.
+- Android: install the newer APK over the old one, or let Obtainium do it.
 
 After updating the binary:
 
@@ -2805,50 +2818,58 @@ or **Run as admin**. The agent receives `run_result` and must not run the comman
 again. Phone and web clients never run commands: they review, decide, and can
 ask the desktop to stop a running one; see [Desktop](docs/public/desktop.md).
 
-## Install
+## Quick start
 
-Install compiled handup software from [downloads and releases](docs/public/downloads.md).
-You do not need Git, Rust, Make or application source access. No public release
-has been published yet; platform availability is listed in the downloads guide.
-
-After installing a supported release:
+handup runs on Linux and macOS computers, with an Android app for your phone.
+No Windows or iPhone app yet.
 
 ```sh
-handup service install  # run the daemon as a user service
-handup doctor --json
+curl -fsSL https://github.com/gethandup/handup/releases/latest/download/install.sh | sh
+handup setup
 ```
 
-Releases work fully for a 14-day trial, then need a license:
-`handup license status` shows the days left. See [License and trial](docs/public/license.md).
+On a Mac, `brew install --cask gethandup/tap/handup` works too. Packages and
+the desktop and Android apps are in [downloads](docs/public/downloads.md). You never need
+Git, Rust or the source.
 
-## Set up an agent in 60 seconds
+`handup setup` starts handup in the background, connects every agent it finds
+(Claude Code, Codex, Cursor, omp) and installs the handup
+[agent skill](docs/public/agents/skill.md). It is safe to run again, and `--dry-run` shows
+what it would change. Restart your agents, then try it:
 
 ```sh
-handup integrate all   # every detected agent: Claude Code, Codex, Cursor, omp
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup
-handup prompt          # paste into your project instructions
-handup ask --title "Review action" --command "echo hello" --wait --json
+handup ask --title "Hello from handup" --wait
 ```
 
-The [agent skill](docs/public/agents/skill.md) gives your agent setup instructions, the
-approval contract and offline reference docs. `handup prompt` uses generic
-instructions; `--agent claude|codex|cursor|omp` tailors them.
+Approve it in `handup inbox`, in the desktop app (`handup ui`), or on your
+phone after [pairing it over Tailscale](docs/public/remote.md#tailscale-recommended).
+Releases work fully for a 14-day trial; `handup license status` shows the days
+left. See [License and trial](docs/public/license.md).
 
-`all` detects agent homes (see [`--list`](docs/public/cli.md#agent-integration)), so it can
-create missing configs. Claude Code and Codex get hooks plus MCP; Cursor and
-omp get MCP only. An existing omp tool-gating extension is upgraded, but a
-new one is opt-in with `handup integrate omp`.
+### Set up by hand
 
-Only one agent?
+`handup setup` runs these steps; run them yourself to pick and choose:
+
+```sh
+handup service install   # start handup in the background
+handup integrate all     # connect every detected agent (--list shows what it found)
+handup skill install     # teach agents when and how to ask
+```
+
+`integrate all` creates missing agent configs (with backups). Claude Code and
+Codex get hooks plus MCP; Cursor and omp get MCP only. An existing omp
+tool-gating extension is upgraded, but a new one is opt-in with
+`handup integrate omp`. Only one agent?
 
 - [`handup integrate claude`](docs/public/agents/claude-code.md)
 - [`handup integrate codex`](docs/public/agents/codex.md)
 - [`handup integrate omp`](docs/public/agents/omp.md)
 - [`handup integrate mcp --client cursor`](docs/public/agents/cursor.md)
 
-Decide from another terminal with `handup approve ID` or
-`handup deny ID -m "feedback"`, from the desktop inbox (`handup ui`), or from a
-paired phone. Every flag is described by `handup help COMMAND`.
+Agents that don't load skills can use `handup prompt`, which prints
+instructions to paste into `AGENTS.md` or `CLAUDE.md`
+(`--agent claude|codex|cursor|omp` tailors them). Run `handup doctor` if
+something doesn't work, and `handup help COMMAND` for every flag.
 
 ## Where to go next
 
@@ -3389,9 +3410,18 @@ Source: [docs/public/license.md](docs/public/license.md)
 
 Downloads are public. A new install works fully for **14 days**; after that the
 daemon needs a handup Personal license (one person, their own machines,
-perpetual). [Buy a license](https://gethandup.dev/#pricing); Polar emails the
-order confirmation, and the license key is in Polar's customer portal (linked
-from that email).
+perpetual). [Buy a license](https://gethandup.dev/#pricing).
+
+## Find your key
+
+1. After checkout, Polar emails "Thank you for your purchase!" with your invoice
+   attached. Under **Included benefits** it lists **handup license key**.
+2. Click **handup license key** in that email. It opens Polar's customer portal
+   at **Benefit Grants**, where the key is shown under **License keys**.
+3. Copy the key and activate it as below.
+
+Lost the email? Open the [customer portal](https://polar.sh/handup/portal) and
+sign in with your purchase email; Polar sends a one-time code.
 
 ## Activate
 
@@ -3482,8 +3512,7 @@ recommended and takes about five minutes to set up.
 
 Android is a beta, sideloaded APK published with each handup release
 (`handup-android_<version>_arm64.apk`); there is no Play Store listing or
-native iOS app, and no public release has been published yet. See
-[downloads and releases](docs/public/downloads.md) for availability.
+native iOS app. See [downloads and releases](docs/public/downloads.md) for availability.
 
 Phone clients never execute command requests and have no **Run** or **Run as
 admin** button. Approval grants permission to the agent; it does not start a
@@ -3504,6 +3533,12 @@ browser to install unknown apps when Android asks, only if you trust the
 release. Verify it against the release checksums first if you can (see
 [downloads](docs/public/downloads.md#verify-a-download)). No Android SDK, Rust toolchain
 or application source is needed. The phone app then pairs with your computer.
+
+For automatic updates, install [Obtainium](https://obtainium.imranr.dev) and
+open [this link](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22dev.handup.app%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fgethandup%2Fhandup%22%2C%22author%22%3A%22gethandup%22%2C%22name%22%3A%22handup%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Ehandup-android_%5C%22%2C%5C%22includePrereleases%5C%22%3Afalse%7D%22%7D)
+on the phone. Obtainium tracks the GitHub releases, installs only the
+`handup-android_` APK (not the Alpine Linux `.apk` packages in the same
+release), skips prereleases, and notifies you when a new version is out.
 
 ## Pairing
 
@@ -4570,8 +4605,7 @@ First-time setup takes about five minutes:
    If you run the daemon yourself instead of as a service, stop it and start
    `handup serve --foreground` again.
 5. **Pair:** run `handup pair` (or **Pair a phone** in the desktop app) and
-   scan the QR code with the handup app; see [Mobile](docs/public/mobile.md#pairing). On
-   iPhone, open the link in Safari instead ([downloads](docs/public/downloads.md)).
+   scan the QR code with the handup app; see [Mobile](docs/public/mobile.md#pairing).
 
 If the phone shows "Can't reach handup", check that the Tailscale app is
 connected and that `tailscale status` shows the computer online.

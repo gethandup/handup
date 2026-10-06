@@ -2,9 +2,18 @@
 
 Downloads are public. A new install works fully for **14 days**; after that the
 daemon needs a handup Personal license (one person, their own machines,
-perpetual). [Buy a license](https://gethandup.dev/#pricing); Polar emails the
-order confirmation, and the license key is in Polar's customer portal (linked
-from that email).
+perpetual). [Buy a license](https://gethandup.dev/#pricing).
+
+## Find your key
+
+1. After checkout, Polar emails "Thank you for your purchase!" with your invoice
+   attached. Under **Included benefits** it lists **handup license key**.
+2. Click **handup license key** in that email. It opens Polar's customer portal
+   at **Benefit Grants**, where the key is shown under **License keys**.
+3. Copy the key and activate it as below.
+
+Lost the email? Open the [customer portal](https://polar.sh/handup/portal) and
+sign in with your purchase email; Polar sends a one-time code.
 
 ## Activate
 

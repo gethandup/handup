@@ -7,8 +7,9 @@ an Android SDK.
 
 A handup Personal license is $30 USD one-time plus tax where applicable, sold through Polar (merchant of
 record): one person on their own machines, perpetual use and all future released
-updates. Polar emails the order confirmation; the license key is in Polar's
-customer portal. Refunds are available within 30 days of purchase; see the
+updates. Polar emails the order confirmation; click **handup license key** under
+**Included benefits** to open the key in Polar's customer portal
+([Find your key](license.md#find-your-key)). Refunds are available within 30 days of purchase; see the
 [Terms](https://gethandup.dev/terms) and [Privacy Policy](https://gethandup.dev/privacy).
 No hosted service, unlimited personal support or indefinite development is promised.
 
@@ -20,8 +21,8 @@ gethandup.dev once, after which the license works offline. See
 If checkout reports too many attempts, wait about a minute before trying again.
 The server rejects the attempt before contacting Polar; nothing was charged.
 
-> **No public release has been published yet.** The commands below work once
-> the first release is out; until then the release page has no files.
+**After installing, run `handup setup`.** It starts handup and connects your
+agents; see the [quick start](index.md#quick-start).
 
 ## Platforms
 
@@ -32,8 +33,8 @@ The server rejects the attempt before contacting Polar; nothing was charged.
 | macOS Intel / Apple Silicon | Homebrew cask, tar.gz | Beta; not notarized. |
 | macOS desktop app (universal) | .dmg | Beta; not notarized; needs the CLI daemon installed too. |
 | Android | APK (sideload) | Beta companion app for the daemon on your computer. |
-| iPhone / iPad | — | No native app. Use the daemon's web inbox over Tailscale. |
-| Windows | — | Not available. Use the Linux build in WSL. |
+
+There is no Windows or iPhone app yet. On Windows, use the Linux build in WSL.
 
 ## Linux
 
@@ -131,19 +132,8 @@ desktop app. See [desktop app on macOS](desktop.md#macos).
 
 Download `handup-android_<version>_arm64.apk` on the phone, allow your browser
 to install unknown apps when Android asks, and open it. Pair it with
-`handup pair` on the computer. See [mobile](mobile.md).
-
-## iPhone and iPad
-
-There is no native iOS app. Enable Tailscale mode and pair; then open the
-pairing link in Safari and add it to the Home Screen:
-
-```sh
-handup config set remote.mode tailscale
-handup pair
-```
-
-See [remote access](remote.md).
+`handup pair` on the computer. See [mobile](mobile.md), which also links an
+[Obtainium](https://obtainium.imranr.dev) setup for automatic APK updates.
 
 ## Verify a download
 
@@ -166,12 +156,13 @@ install script and Homebrew cask verify checksums for you.
 ## After installing
 
 ```sh
-handup service install
+handup setup           # service, every detected agent, agent skill; --dry-run previews
 handup doctor --json
-handup integrate all   # every detected agent: Claude Code, Codex, Cursor, omp
 ```
 
-See [agent setup](agents/mcp.md) to configure one agent at a time.
+`handup setup` runs `handup service install`, `handup integrate all` and
+`handup skill install`; see [first-run setup](cli.md#first-run-setup). See
+[agent setup](agents/mcp.md) to configure one agent at a time.
 
 ## Updates
 
@@ -184,7 +175,7 @@ Every update is a new binary release; see the [changelog](https://github.com/get
 - Debian/Fedora/Alpine/Arch: install the newer package file the same way.
 - Desktop app: install the newer AppImage, package or `.dmg` over the old one.
 - Homebrew: `brew upgrade --cask handup`.
-- Android: install the newer APK over the old one.
+- Android: install the newer APK over the old one, or let Obtainium do it.
 
 After updating the binary:
 

@@ -58,6 +58,7 @@ handup config set output_format json
 handup config unset output_format  # back to the default
 handup config toggle no_color
 handup config validate      # check the active config, or a given path
+handup setup                 # first run: service, every detected agent, agent skill; --dry-run
 handup integrate all         # every detected agent: Claude Code, Codex, Cursor, omp
 handup integrate --list      # detected agent homes and installed handup entries
 handup prompt               # generic instructions; --agent claude|codex|cursor|omp tailors them
@@ -69,6 +70,27 @@ handup uninstall             # --yes skips confirmation
 
 `ask` starts the daemon automatically when its socket is absent unless
 `daemon.autostart` is false.
+
+## First-run setup
+
+`handup setup [--dry-run]` runs the first-run steps in order and prints one
+line per step:
+
+1. `handup service install`: installs and starts the user service. Without a
+   systemd or launchd user session it is skipped; run `handup serve`, or rely
+   on `handup ask` autostarting the daemon. An active service is left as is,
+   and the step is skipped when a daemon already runs outside the service.
+   `handup service install` itself keeps a changed service file as `.bak`.
+2. `handup integrate all`: connects every detected agent, as described below.
+3. `handup skill install`: installs the generic skill and, when Claude Code or
+   Codex is detected, their agent-specific copies. An existing skill directory
+   that handup did not install is left alone and reported as skipped.
+4. Waits up to 5 seconds for the daemon to answer.
+
+It is safe to run again: the service, connected agents and handup-owned skills
+are refreshed in place. `--dry-run` previews every step without writing files
+or starting the service. Exit 0 means every step succeeded or was skipped;
+exit 4 means a step failed, and its line names the command to fix it.
 
 ## Agent integration
 

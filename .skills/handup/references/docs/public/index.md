@@ -10,50 +10,58 @@ or **Run as admin**. The agent receives `run_result` and must not run the comman
 again. Phone and web clients never run commands: they review, decide, and can
 ask the desktop to stop a running one; see [Desktop](desktop.md).
 
-## Install
+## Quick start
 
-Install compiled handup software from [downloads and releases](downloads.md).
-You do not need Git, Rust, Make or application source access. No public release
-has been published yet; platform availability is listed in the downloads guide.
-
-After installing a supported release:
+handup runs on Linux and macOS computers, with an Android app for your phone.
+No Windows or iPhone app yet.
 
 ```sh
-handup service install  # run the daemon as a user service
-handup doctor --json
+curl -fsSL https://github.com/gethandup/handup/releases/latest/download/install.sh | sh
+handup setup
 ```
 
-Releases work fully for a 14-day trial, then need a license:
-`handup license status` shows the days left. See [License and trial](license.md).
+On a Mac, `brew install --cask gethandup/tap/handup` works too. Packages and
+the desktop and Android apps are in [downloads](downloads.md). You never need
+Git, Rust or the source.
 
-## Set up an agent in 60 seconds
+`handup setup` starts handup in the background, connects every agent it finds
+(Claude Code, Codex, Cursor, omp) and installs the handup
+[agent skill](agents/skill.md). It is safe to run again, and `--dry-run` shows
+what it would change. Restart your agents, then try it:
 
 ```sh
-handup integrate all   # every detected agent: Claude Code, Codex, Cursor, omp
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup
-handup prompt          # paste into your project instructions
-handup ask --title "Review action" --command "echo hello" --wait --json
+handup ask --title "Hello from handup" --wait
 ```
 
-The [agent skill](agents/skill.md) gives your agent setup instructions, the
-approval contract and offline reference docs. `handup prompt` uses generic
-instructions; `--agent claude|codex|cursor|omp` tailors them.
+Approve it in `handup inbox`, in the desktop app (`handup ui`), or on your
+phone after [pairing it over Tailscale](remote.md#tailscale-recommended).
+Releases work fully for a 14-day trial; `handup license status` shows the days
+left. See [License and trial](license.md).
 
-`all` detects agent homes (see [`--list`](cli.md#agent-integration)), so it can
-create missing configs. Claude Code and Codex get hooks plus MCP; Cursor and
-omp get MCP only. An existing omp tool-gating extension is upgraded, but a
-new one is opt-in with `handup integrate omp`.
+### Set up by hand
 
-Only one agent?
+`handup setup` runs these steps; run them yourself to pick and choose:
+
+```sh
+handup service install   # start handup in the background
+handup integrate all     # connect every detected agent (--list shows what it found)
+handup skill install     # teach agents when and how to ask
+```
+
+`integrate all` creates missing agent configs (with backups). Claude Code and
+Codex get hooks plus MCP; Cursor and omp get MCP only. An existing omp
+tool-gating extension is upgraded, but a new one is opt-in with
+`handup integrate omp`. Only one agent?
 
 - [`handup integrate claude`](agents/claude-code.md)
 - [`handup integrate codex`](agents/codex.md)
 - [`handup integrate omp`](agents/omp.md)
 - [`handup integrate mcp --client cursor`](agents/cursor.md)
 
-Decide from another terminal with `handup approve ID` or
-`handup deny ID -m "feedback"`, from the desktop inbox (`handup ui`), or from a
-paired phone. Every flag is described by `handup help COMMAND`.
+Agents that don't load skills can use `handup prompt`, which prints
+instructions to paste into `AGENTS.md` or `CLAUDE.md`
+(`--agent claude|codex|cursor|omp` tailors them). Run `handup doctor` if
+something doesn't work, and `handup help COMMAND` for every flag.
 
 ## Where to go next
 

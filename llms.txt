@@ -7,7 +7,8 @@ Ask before destructive/irreversible actions, external publication or messages, c
 ## Setup quickstart
 
 ```sh
-handup integrate all   # every detected agent: Claude Code, Codex, Cursor, omp
+handup setup          # first run: service, every detected agent, agent skill (--dry-run previews)
+handup integrate all   # or connect agents only: Claude Code, Codex, Cursor, omp
 DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup
 handup prompt          # paste into project instructions; --agent tailors them
 handup ask --title "Review action" --command "echo hello" --wait --json
@@ -44,6 +45,7 @@ entries. Exit 4 means failure; no detected agents exits 0.
 | `schema` | `handup schema request`, `decision`, `event`, or `openapi` |
 | `serve` | `handup serve --foreground` starts daemon |
 | `service` | `handup service install`, `uninstall`, or `status` (`--dry-run`) |
+| `setup` | `handup setup [--dry-run]` first run: installs and starts the user service (skipped without a systemd/launchd user session), runs `integrate all`, installs the generic skill plus Claude/Codex skills when detected (skips a non-handup skill directory), then waits up to 5s for the daemon. Safe to rerun; `--dry-run` writes nothing and starts nothing. Exit 4 if any step failed |
 | `demo` | `handup demo --json` seeds preview examples |
 | `doctor` | `handup doctor --json` diagnoses local environment |
 | `ui` | Human: `handup ui --next` opens or focuses the desktop app |

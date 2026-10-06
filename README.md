@@ -6,6 +6,10 @@
 
 **The approval inbox for AI agents.**
 
+[![Linux: x86-64 and ARM64](https://img.shields.io/badge/Linux-x86--64%20%7C%20ARM64-2b2b2b?logo=linux&logoColor=white)](docs/public/downloads.md#linux)
+[![macOS: Intel and Apple Silicon](https://img.shields.io/badge/macOS-Intel%20%7C%20Apple%20Silicon-2b2b2b?logo=apple&logoColor=white)](docs/public/downloads.md#macos)
+[![Android app](https://img.shields.io/badge/Android-app-2b2b2b?logo=android&logoColor=white)](docs/public/mobile.md)
+
 </div>
 
 Your agents ask before risky actions like migrations, releases and emails. You
@@ -14,12 +18,33 @@ or phone.
 
 https://github.com/user-attachments/assets/cc0aa659-68e8-47e8-8d35-bafb793d742c
 
-> **Beta.** Runs on Linux and macOS (Intel and Apple Silicon), with an
-> Android companion app; no native iOS app yet. Get it from this repository's
-> [Releases](https://github.com/gethandup/handup/releases) page or see
-> [downloads](docs/public/downloads.md).
-> Releases work fully for a 14-day trial, then need a paid license; see
-> [License and trial](docs/public/license.md).
+> **Beta.** handup runs on your Linux or Mac computer; the Android app lets you
+> decide from your phone. No Windows or iPhone app yet. Releases work fully for
+> a 14-day trial, then need a [license](docs/public/license.md).
+
+## Quick start
+
+```sh
+curl -fsSL https://github.com/gethandup/handup/releases/latest/download/install.sh | sh
+handup setup
+```
+
+On a Mac you can use Homebrew instead of the script:
+`brew install --cask gethandup/tap/handup`. Other packages (deb, rpm, Arch,
+Alpine, desktop app, Android) are on the [Releases](https://github.com/gethandup/handup/releases)
+page; see [downloads](docs/public/downloads.md).
+
+`handup setup` starts handup in the background, connects every agent it finds
+(Claude Code, Codex, Cursor, omp) and installs the handup skill. Restart your
+agents, then try it:
+
+```sh
+handup ask --title "Hello from handup" --wait
+```
+
+Approve it in `handup inbox`, the desktop app, or your phone. To use your
+phone, install the Android app and pair it over
+[Tailscale](docs/public/remote.md#tailscale-recommended) (about five minutes).
 
 This repository holds handup's documentation, agent skill and examples. The
 application source is not here.
@@ -44,44 +69,26 @@ application source is not here.
   their own machines, no subscription. [Buy on gethandup.dev](https://gethandup.dev/#pricing),
   then run `handup license activate <key>` ([License and trial](docs/public/license.md)).
 
-## Connect an agent
+## Set up by hand
+
+`handup setup` runs these steps for you; run them yourself to pick and choose:
 
 ```sh
-handup service install                  # run the daemon as a user service
-handup integrate all   # every detected agent: Claude Code, Codex, Cursor, omp
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup
-handup prompt          # generic instructions; --agent claude|codex|cursor|omp tailors them
-handup ask --title "Review action" --command "echo hello" --wait --json
+handup service install   # start handup in the background
+handup integrate all     # connect every detected agent (--list shows what it found)
+handup skill install     # teach agents when and how to ask (--agent claude|codex, --project)
 ```
 
-The [agent skill](docs/public/agents/skill.md) gives the agent setup instructions,
-the approval contract and offline docs. Only one agent? Use
+Only one agent? Use
 [`handup integrate claude`](docs/public/agents/claude-code.md),
 [`handup integrate codex`](docs/public/agents/codex.md),
 [`handup integrate omp`](docs/public/agents/omp.md), or
 [`handup integrate mcp --client cursor`](docs/public/agents/cursor.md).
+Agents that don't load skills can use `handup prompt` instead: it prints
+instructions to paste into `AGENTS.md` or `CLAUDE.md`.
 
-`all` detects agent home directories and creates missing configs. omp gets MCP
-only unless its tool-gating extension is already installed; add that optional
-gate explicitly with `handup integrate omp`.
-
-## Agent skill
-
-Teach your agent when and how to ask. With handup installed, use the
-version-matched copy bundled with it:
-
-```sh
-handup skill install                    # or --agent claude, --agent codex, --project
-```
-
-Without handup, install from this repository:
-
-```sh
-DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup
-```
-
-See [docs/public/agents/skill.md](docs/public/agents/skill.md) for agent targets
-and global installs.
+To install just the [agent skill](docs/public/agents/skill.md) without
+handup: `DO_NOT_TRACK=1 npx --yes skills@1.7.0 add gethandup/handup --skill handup`.
 
 ## Docs
 

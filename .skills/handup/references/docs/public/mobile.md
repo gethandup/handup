@@ -7,8 +7,7 @@ recommended and takes about five minutes to set up.
 
 Android is a beta, sideloaded APK published with each handup release
 (`handup-android_<version>_arm64.apk`); there is no Play Store listing or
-native iOS app, and no public release has been published yet. See
-[downloads and releases](downloads.md) for availability.
+native iOS app. See [downloads and releases](downloads.md) for availability.
 
 Phone clients never execute command requests and have no **Run** or **Run as
 admin** button. Approval grants permission to the agent; it does not start a
@@ -29,6 +28,12 @@ browser to install unknown apps when Android asks, only if you trust the
 release. Verify it against the release checksums first if you can (see
 [downloads](downloads.md#verify-a-download)). No Android SDK, Rust toolchain
 or application source is needed. The phone app then pairs with your computer.
+
+For automatic updates, install [Obtainium](https://obtainium.imranr.dev) and
+open [this link](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22dev.handup.app%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fgethandup%2Fhandup%22%2C%22author%22%3A%22gethandup%22%2C%22name%22%3A%22handup%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Ehandup-android_%5C%22%2C%5C%22includePrereleases%5C%22%3Afalse%7D%22%7D)
+on the phone. Obtainium tracks the GitHub releases, installs only the
+`handup-android_` APK (not the Alpine Linux `.apk` packages in the same
+release), skips prereleases, and notifies you when a new version is out.
 
 ## Pairing
 

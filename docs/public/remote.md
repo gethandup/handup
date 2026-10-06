@@ -46,8 +46,7 @@ First-time setup takes about five minutes:
    If you run the daemon yourself instead of as a service, stop it and start
    `handup serve --foreground` again.
 5. **Pair:** run `handup pair` (or **Pair a phone** in the desktop app) and
-   scan the QR code with the handup app; see [Mobile](mobile.md#pairing). On
-   iPhone, open the link in Safari instead ([downloads](downloads.md)).
+   scan the QR code with the handup app; see [Mobile](mobile.md#pairing).
 
 If the phone shows "Can't reach handup", check that the Tailscale app is
 connected and that `tailscale status` shows the computer online.

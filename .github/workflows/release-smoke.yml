@@ -1,0 +1,264 @@
+# Installs a published handup release on clean GitHub runners and exercises it:
+# the install one-liner, the daemon, a full request round trip, the Linux .deb,
+# the Homebrew cask and the macOS .dmg. It only downloads public release files;
+# it needs no secrets and never builds anything.
+name: release-smoke
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to test (e.g. v0.1.0), or "latest"
+        default: latest
+        required: true
+  release:
+    types: [published]
+permissions:
+  contents: read
+concurrency:
+  group: release-smoke-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: true
+env:
+  REPO: gethandup/handup
+  MINISIGN_PUBKEY: RWRmxfwgJLzyYHvZKxoWSd44lp0rN3pUKD4HVPJIfwntmiIFFWDPW8V/
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      latest: ${{ steps.tag.outputs.latest }}
+    steps:
+      - id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WANT: ${{ github.event.release.tag_name || inputs.tag || 'latest' }}
+        run: |
+          set -euo pipefail
+          if [ "$WANT" = latest ]; then
+            tag=$(gh release view -R "$REPO" --json tagName -q .tagName)
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+          else
+            tag=$(gh release view "$WANT" -R "$REPO" --json tagName -q .tagName)
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Testing release $tag (requested: $WANT)" >> "$GITHUB_STEP_SUMMARY"
+          gh release view "$tag" -R "$REPO" --json assets -q '.assets[].name' | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    needs: resolve
+    name: smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: macos-15-intel
+            arch: amd64
+          - os: ubuntu-24.04
+            arch: amd64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAG: ${{ needs.resolve.outputs.tag }}
+      LATEST: ${{ needs.resolve.outputs.latest }}
+      GH_TOKEN: ${{ github.token }}
+      NO_COLOR: "1"
+    steps:
+      - name: Prepare
+        run: |
+          set -euo pipefail
+          logs="$RUNNER_TEMP/handup-logs"
+          dl="$RUNNER_TEMP/handup-dl"
+          mkdir -p "$logs" "$dl"
+          {
+            echo "LOGS=$logs"
+            echo "DL=$dl"
+            echo "VERSION=${TAG#v}"
+          } >> "$GITHUB_ENV"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uname -a | tee "$logs/uname.txt"
+
+      - name: Install with the one-liner
+        run: |
+          set -euo pipefail
+          if [ "$LATEST" = true ]; then
+            curl -fsSL "https://github.com/$REPO/releases/latest/download/install.sh" | sh 2>&1 | tee "$LOGS/install.txt"
+          else
+            curl -fsSL "https://github.com/$REPO/releases/download/$TAG/install.sh" | HANDUP_VERSION="$TAG" sh 2>&1 | tee "$LOGS/install.txt"
+          fi
+          test -x "$HOME/.local/bin/handup"
+
+      - name: handup version
+        run: |
+          set -euo pipefail
+          command -v handup
+          handup version --plain | tee "$LOGS/version.txt"
+          grep -q "^handup $VERSION\$" "$LOGS/version.txt" || { echo "::error::installed version is not $VERSION"; exit 1; }
+
+      - name: handup doctor (before daemon, non-fatal)
+        run: |
+          handup doctor > "$LOGS/doctor-before.txt" 2>&1 || echo "doctor exited $?" >> "$LOGS/doctor-before.txt"
+          cat "$LOGS/doctor-before.txt"
+
+      - name: Start the daemon
+        run: |
+          set -euo pipefail
+          wait_ready() {
+            for _ in $(seq 1 "$1"); do
+              handup ls > /dev/null 2>&1 && return 0
+              sleep 1
+            done
+            return 1
+          }
+          mode=serve
+          if [ "$RUNNER_OS" = macOS ]; then
+            handup service install --dry-run > "$LOGS/service-dry-run.txt" 2>&1 || true
+            # launchd needs a GUI (Aqua) session; fall back to `handup serve` without one.
+            if launchctl print "gui/$(id -u)" > /dev/null 2>&1 \
+              && perl -e 'alarm shift; exec @ARGV' 60 handup service install > "$LOGS/service-install.txt" 2>&1 \
+              && wait_ready 20; then
+              mode=launchd
+            else
+              echo "::warning::launchd service did not come up; falling back to handup serve"
+              handup service uninstall >> "$LOGS/service-install.txt" 2>&1 || true
+            fi
+          fi
+          if [ "$mode" = serve ]; then
+            nohup handup serve > "$LOGS/daemon.log" 2>&1 &
+            echo "DAEMON_PID=$!" >> "$GITHUB_ENV"
+            wait_ready 30 || { echo "::error::daemon did not become ready"; cat "$LOGS/daemon.log"; exit 1; }
+          fi
+          echo "DAEMON_MODE=$mode" >> "$GITHUB_ENV"
+          echo "daemon ready via $mode"
+
+      - name: handup doctor (daemon running, non-fatal)
+        run: |
+          handup doctor > "$LOGS/doctor.txt" 2>&1 || echo "doctor exited $?" >> "$LOGS/doctor.txt"
+          handup doctor --json > "$LOGS/doctor.json" 2>&1 || true
+          cat "$LOGS/doctor.txt"
+
+      - name: Request round trip (ask, approve, status)
+        run: |
+          set -euo pipefail
+          handup ask --title "release-smoke $TAG on ${{ matrix.os }}" --summary "CI round trip" \
+            --agent release-smoke --json > "$LOGS/ask.json"
+          id=$(jq -r .id "$LOGS/ask.json")
+          test "$(jq -r .status "$LOGS/ask.json")" = pending
+          echo "request $id is pending"
+          handup approve "$id" -m "approved by release-smoke" --json > "$LOGS/approve.json"
+          handup status "$id" --json > "$LOGS/status.json"
+          status=$(jq -r .status "$LOGS/status.json")
+          outcome=$(jq -r .decision.option "$LOGS/status.json")
+          echo "status=$status option=$outcome"
+          test "$status" = approved
+          test "$outcome" = approve
+          handup ls > "$LOGS/ls.txt" 2>&1
+
+      - name: Stop the daemon
+        if: always()
+        run: |
+          if [ "${DAEMON_MODE:-}" = launchd ]; then
+            handup service uninstall > "$LOGS/service-uninstall.txt" 2>&1 || true
+          elif [ -n "${DAEMON_PID:-}" ]; then
+            kill "$DAEMON_PID" 2> /dev/null || true
+          fi
+
+      - name: Verify checksums (and minisign signature when published)
+        run: |
+          set -euo pipefail
+          cd "$DL"
+          base="https://github.com/$REPO/releases/download/$TAG"
+          curl -fsSLO "$base/checksums.txt"
+          if curl -fsSLO "$base/checksums.txt.minisig"; then
+            if [ "$RUNNER_OS" = macOS ]; then brew install minisign; else sudo apt-get update -qq && sudo apt-get install -y -qq minisign; fi
+            minisign -Vm checksums.txt -P "$MINISIGN_PUBKEY" | tee "$LOGS/minisign.txt"
+          else
+            echo "::notice::$TAG has no checksums.txt.minisig; skipping signature check"
+          fi
+          if [ "$RUNNER_OS" = macOS ]; then
+            files=("handup_${VERSION}_darwin_${{ matrix.arch }}.tar.gz" "handup-desktop_${VERSION}_universal.dmg")
+          else
+            files=("handup_${VERSION}_linux_${{ matrix.arch }}.tar.gz" "handup_${VERSION}_${{ matrix.arch }}.deb")
+          fi
+          for f in "${files[@]}"; do curl -fsSLO "$base/$f"; done
+          if [ "$RUNNER_OS" = macOS ]; then
+            shasum -a 256 --ignore-missing -c checksums.txt | tee "$LOGS/checksums.txt"
+          else
+            sha256sum -c --ignore-missing checksums.txt | tee "$LOGS/checksums.txt"
+          fi
+          test "$(grep -c ': OK$' "$LOGS/checksums.txt")" -eq "${#files[@]}"
+
+      - name: Install the .deb with apt
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
+          sudo apt-get install -y "$DL/handup_${VERSION}_${{ matrix.arch }}.deb" 2>&1 | tee "$LOGS/apt.txt"
+          /usr/bin/handup version --plain | tee "$LOGS/deb-version.txt"
+          grep -q "^handup $VERSION\$" "$LOGS/deb-version.txt"
+          dpkg -L handup | tee -a "$LOGS/apt.txt"
+
+      - name: Install the Homebrew cask
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          if ! GIT_TERMINAL_PROMPT=0 git ls-remote https://github.com/gethandup/homebrew-tap > /dev/null 2>&1; then
+            echo "::warning::gethandup/homebrew-tap is not publicly readable; skipping the cask install"
+            echo "homebrew-tap not public: skipped" > "$LOGS/brew.txt"
+            exit 0
+          fi
+          brew install --cask gethandup/tap/handup 2>&1 | tee "$LOGS/brew.txt"
+          bin="$(brew --prefix)/bin/handup"
+          "$bin" version --plain | tee "$LOGS/brew-version.txt"
+          grep -q '^handup ' "$LOGS/brew-version.txt"
+
+      - name: Check the universal .dmg
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          mnt="$RUNNER_TEMP/handup-dmg"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$DL/handup-desktop_${VERSION}_universal.dmg"
+          trap 'hdiutil detach "$mnt" || true' EXIT
+          app=$(find "$mnt" -maxdepth 2 -name '*.app' -type d | head -n 1)
+          test -n "$app" || { echo "::error::no .app bundle in the dmg"; ls -la "$mnt"; exit 1; }
+          echo "app bundle: $app" | tee "$LOGS/dmg.txt"
+          for exe in "$app"/Contents/MacOS/*; do
+            file "$exe" | tee -a "$LOGS/dmg.txt"
+            archs=$(lipo -archs "$exe")
+            echo "$exe: $archs" | tee -a "$LOGS/dmg.txt"
+            case " $archs " in *" x86_64 "*) ;; *) echo "::error::$exe lacks x86_64"; exit 1 ;; esac
+            case " $archs " in *" arm64 "*) ;; *) echo "::error::$exe lacks arm64"; exit 1 ;; esac
+          done
+          codesign -dv "$app" 2>&1 | tee -a "$LOGS/dmg.txt"
+          codesign --verify --deep --strict "$app" 2>&1 | tee -a "$LOGS/dmg.txt"
+          if [ -x "$app/Contents/MacOS/handup" ]; then
+            "$app/Contents/MacOS/handup" version --plain | tee -a "$LOGS/dmg.txt"
+            "$app/Contents/MacOS/handup" version --plain | grep -q "^handup $VERSION\$"
+          fi
+
+      - name: Collect logs
+        if: always()
+        run: |
+          handup storage > "$LOGS/storage.txt" 2>&1 || true
+          for d in "$HOME/.local/state/handup" "$HOME/Library/Logs" "$HOME/Library/Application Support/handup"; do
+            [ -d "$d" ] && find "$d" -name '*.log' -exec cp {} "$LOGS/" \; 2> /dev/null || true
+          done
+          if [ "$RUNNER_OS" = macOS ]; then
+            log show --last 30m --style compact --predicate 'process BEGINSWITH "handup"' > "$LOGS/macos-unified.log" 2>&1 || true
+          fi
+          ls -la "$LOGS"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: handup-smoke-${{ matrix.os }}
+          path: ${{ env.LOGS }}
+          if-no-files-found: warn

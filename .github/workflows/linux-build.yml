@@ -1,0 +1,272 @@
+# Builds the Linux release files and the unsigned Android APK on this public
+# repo's free Linux runners: CLI archives and deb/rpm/pacman/Alpine packages
+# (GoReleaser + cargo-zigbuild), the x86_64 desktop AppImage/deb/rpm, and the
+# aarch64 APK (signed later on the maintainer's machine; no keystore here).
+# The private source is checked out only inside each job (read-only deploy key)
+# and removed right after the build; nothing from it is committed, cached or
+# logged. Build output goes to a file that is never uploaded; a failure prints
+# only rustc/make error lines. Started only by maintainers (workflow_dispatch);
+# no PR or fork trigger. Tool versions come from the checked-out
+# .github/workflows/release.yml, the single pin source.
+name: linux-build
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Release tag (v0.1.2), branch or commit in the private build repo
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: linux-build-${{ inputs.ref }}
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  # Linux CLI archives and packages. GoReleaser needs the full history and the
+  # release tag at HEAD.
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: release-build
+    steps:
+      - name: Check ref
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          [[ $REF =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$ ]] || { echo "::error::ref must be a branch, tag or commit"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: gethandup/handup-build
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.HANDUP_BUILD_DEPLOY_KEY }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: src
+      - name: Read pinned tool versions
+        working-directory: src
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          for k in NODE_VERSION PNPM_VERSION CARGO_BINSTALL_VERSION ZIG_VERSION CARGO_ZIGBUILD_VERSION GORELEASER_VERSION GORELEASER_SHA256; do
+            v=$(sed -nE "s/^ +$k: *\"?([^\"]+)\"?$/\1/p" .github/workflows/release.yml)
+            [[ -n $v && $v != *$'\n'* ]] || { echo "::error::$k must be defined exactly once in release.yml"; exit 1; }
+            echo "$k=$v" >> "$GITHUB_ENV"
+          done
+          if [[ $REF =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "BARE=${REF#v}" >> "$GITHUB_ENV"
+          else
+            echo "BARE=$(sed -nE 's/^version = "([^"]+)"$/\1/p' Cargo.toml | head -1)" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install toolchain
+        timeout-minutes: 10
+        run: |
+          corepack enable && corepack prepare "pnpm@$PNPM_VERSION" --activate
+          rustup update stable --no-self-update && rustup default stable
+          mkdir -p "$RUNNER_TEMP/bin" && echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          python3 -m venv "$RUNNER_TEMP/zig"
+          "$RUNNER_TEMP/zig/bin/pip" install --quiet "ziglang==$ZIG_VERSION"
+          ln -s "$(find "$RUNNER_TEMP/zig" -type f -name zig -print -quit)" "$RUNNER_TEMP/bin/zig"
+          curl -fsSL "https://github.com/cargo-bins/cargo-binstall/releases/download/v$CARGO_BINSTALL_VERSION/cargo-binstall-x86_64-unknown-linux-musl.tgz" | tar -xz -C "$RUNNER_TEMP/bin" cargo-binstall
+          "$RUNNER_TEMP/bin/cargo-binstall" -y --force --locked "cargo-zigbuild@$CARGO_ZIGBUILD_VERSION" > /dev/null
+          curl -fsSL -o "$RUNNER_TEMP/goreleaser.tgz" "https://github.com/goreleaser/goreleaser/releases/download/v$GORELEASER_VERSION/goreleaser_Linux_x86_64.tar.gz"
+          echo "$GORELEASER_SHA256  $RUNNER_TEMP/goreleaser.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/goreleaser.tgz" -C "$RUNNER_TEMP/bin" goreleaser
+      - name: Build
+        timeout-minutes: 75
+        working-directory: src
+        env:
+          CARGO_TERM_COLOR: never
+        run: |
+          log="$RUNNER_TEMP/build.log"
+          if ! make release-linux BUILD_VERSION="$BARE" RELEASE_DIR="$GITHUB_WORKSPACE/out" > "$log" 2>&1; then
+            # Error headlines only: no source snippets or file contents.
+            grep -E '^(error(\[E[0-9]+\])?: |make(\[[0-9]+\])?: \*\*\*)' "$log" | cut -c1-200 | head -20
+            exit 1
+          fi
+          ls -l "$GITHUB_WORKSPACE/out"
+      - name: Remove source
+        if: always()
+        run: rm -rf src
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-linux
+          path: out/
+          if-no-files-found: error
+          retention-days: 1
+
+  # Linux x86_64 desktop AppImage/deb/rpm. Ubuntu 22.04 keeps the AppImage's glibc floor low.
+  linux-desktop:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    environment: release-build
+    env:
+      # linuxdeploy is an AppImage too; do not depend on FUSE.
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - name: Check ref
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          [[ $REF =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$ ]] || { echo "::error::ref must be a branch, tag or commit"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: gethandup/handup-build
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.HANDUP_BUILD_DEPLOY_KEY }}
+          persist-credentials: false
+          path: src
+      - name: Read pinned tool versions
+        working-directory: src
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          for k in NODE_VERSION PNPM_VERSION GO_VERSION TAURI_CLI_VERSION CARGO_BINSTALL_VERSION; do
+            v=$(sed -nE "s/^ +$k: *\"?([^\"]+)\"?$/\1/p" .github/workflows/release.yml)
+            [[ -n $v && $v != *$'\n'* ]] || { echo "::error::$k must be defined exactly once in release.yml"; exit 1; }
+            echo "$k=$v" >> "$GITHUB_ENV"
+          done
+          if [[ $REF =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "BARE=${REF#v}" >> "$GITHUB_ENV"
+          else
+            echo "BARE=$(sed -nE 's/^version = "([^"]+)"$/\1/p' Cargo.toml | head -1)" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Install toolchain
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update
+          # libspeechd-dev + libclang-dev: read aloud (tauri-plugin-tts, speech-dispatcher-sys bindgen).
+          sudo apt-get install -y --no-install-recommends pkg-config file xdg-utils libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev librsvg2-dev libssl-dev libspeechd-dev libclang-dev
+          corepack enable && corepack prepare "pnpm@$PNPM_VERSION" --activate
+          rustup update stable --no-self-update && rustup default stable
+          mkdir -p "$RUNNER_TEMP/bin" && echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          curl -fsSL "https://github.com/cargo-bins/cargo-binstall/releases/download/v$CARGO_BINSTALL_VERSION/cargo-binstall-x86_64-unknown-linux-musl.tgz" | tar -xz -C "$RUNNER_TEMP/bin" cargo-binstall
+          "$RUNNER_TEMP/bin/cargo-binstall" -y --force --locked "tauri-cli@$TAURI_CLI_VERSION" > /dev/null
+      - name: Build
+        timeout-minutes: 60
+        working-directory: src
+        env:
+          CARGO_TERM_COLOR: never
+        run: |
+          log="$RUNNER_TEMP/build.log"
+          if ! make release-linux-desktop BUILD_VERSION="$BARE" RELEASE_DIR="$GITHUB_WORKSPACE/out" > "$log" 2>&1; then
+            # Error headlines only: no source snippets or file contents.
+            grep -E '^(error(\[E[0-9]+\])?: |make(\[[0-9]+\])?: \*\*\*)' "$log" | cut -c1-200 | head -20
+            exit 1
+          fi
+          ls -l "$GITHUB_WORKSPACE/out"
+      - name: Remove source
+        if: always()
+        run: rm -rf src
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-linux-desktop
+          path: out/
+          if-no-files-found: error
+          retention-days: 1
+
+  # Unsigned aarch64 APK; `make release` signs it locally. GOOGLE_SERVICES_JSON
+  # (optional, FCM push; a release-build environment secret) is baked into the
+  # APK, so it is the one secret this job sees. The signing keystore never is.
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    environment: release-build
+    steps:
+      - name: Check ref
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          [[ $REF =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$ ]] || { echo "::error::ref must be a branch, tag or commit"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: gethandup/handup-build
+          ref: ${{ inputs.ref }}
+          ssh-key: ${{ secrets.HANDUP_BUILD_DEPLOY_KEY }}
+          persist-credentials: false
+          path: src
+      - name: Read pinned tool versions
+        working-directory: src
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          for k in NODE_VERSION PNPM_VERSION GO_VERSION TAURI_CLI_VERSION CARGO_BINSTALL_VERSION NDK_VERSION; do
+            v=$(sed -nE "s/^ +$k: *\"?([^\"]+)\"?$/\1/p" .github/workflows/release.yml)
+            [[ -n $v && $v != *$'\n'* ]] || { echo "::error::$k must be defined exactly once in release.yml"; exit 1; }
+            echo "$k=$v" >> "$GITHUB_ENV"
+          done
+          if [[ $REF =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "BARE=${REF#v}" >> "$GITHUB_ENV"
+          else
+            echo "BARE=$(sed -nE 's/^version = "([^"]+)"$/\1/p' Cargo.toml | head -1)" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Install toolchain
+        timeout-minutes: 15
+        run: |
+          corepack enable && corepack prepare "pnpm@$PNPM_VERSION" --activate
+          rustup update stable --no-self-update && rustup default stable
+          rustup target add aarch64-linux-android
+          (yes || true) | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;37.0.0" "platform-tools" "ndk;$NDK_VERSION" > /dev/null
+          mkdir -p "$RUNNER_TEMP/bin" && echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          curl -fsSL "https://github.com/cargo-bins/cargo-binstall/releases/download/v$CARGO_BINSTALL_VERSION/cargo-binstall-x86_64-unknown-linux-musl.tgz" | tar -xz -C "$RUNNER_TEMP/bin" cargo-binstall
+          "$RUNNER_TEMP/bin/cargo-binstall" -y --force --locked "tauri-cli@$TAURI_CLI_VERSION" > /dev/null
+      - name: Add google-services.json (optional)
+        working-directory: src
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [[ -n $GOOGLE_SERVICES_JSON ]]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > apps/handup-app/gen/android/app/google-services.json
+            echo "FCM push: on"
+          else
+            echo "FCM push: off (no GOOGLE_SERVICES_JSON secret)"
+          fi
+      - name: Build
+        timeout-minutes: 45
+        working-directory: src
+        env:
+          CARGO_TERM_COLOR: never
+        run: |
+          log="$RUNNER_TEMP/build.log"
+          if ! make release-android BUILD_VERSION="$BARE" ANDROID_HOME="$ANDROID_HOME" NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" > "$log" 2>&1; then
+            # Error headlines only: no source snippets or file contents.
+            grep -E '^(error(\[E[0-9]+\])?: |make(\[[0-9]+\])?: \*\*\*)' "$log" | cut -c1-200 | head -20
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp bin/handup-unsigned.apk "$GITHUB_WORKSPACE/out/"
+          ls -l "$GITHUB_WORKSPACE/out"
+      - name: Remove source
+        if: always()
+        run: rm -rf src
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-unsigned
+          path: out/handup-unsigned.apk
+          if-no-files-found: error
+          retention-days: 1

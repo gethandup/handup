@@ -160,11 +160,13 @@ jobs:
           test "$status" = approved
           test "$outcome" = approve
           handup ls > "$LOGS/ls.txt" 2>&1
+          echo "- $TAG on ${{ matrix.os }}: daemon via $DAEMON_MODE; request $id approved" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stop the daemon
         if: always()
         run: |
           if [ "${DAEMON_MODE:-}" = launchd ]; then
+            launchctl print "gui/$(id -u)/com.handup.daemon" > "$LOGS/launchd.txt" 2>&1 || true
             handup service uninstall > "$LOGS/service-uninstall.txt" 2>&1 || true
           elif [ -n "${DAEMON_PID:-}" ]; then
             kill "$DAEMON_PID" 2> /dev/null || true
@@ -247,9 +249,10 @@ jobs:
         if: always()
         run: |
           handup storage > "$LOGS/storage.txt" 2>&1 || true
-          for d in "$HOME/.local/state/handup" "$HOME/Library/Logs" "$HOME/Library/Application Support/handup"; do
+          for d in "$HOME/.local/state/handup" "$HOME/Library/Application Support/handup"; do
             [ -d "$d" ] && find "$d" -name '*.log' -exec cp {} "$LOGS/" \; 2> /dev/null || true
           done
+          [ -d "$HOME/Library/Logs" ] && find "$HOME/Library/Logs" -iname '*handup*' -exec cp -R {} "$LOGS/" \; 2> /dev/null || true
           if [ "$RUNNER_OS" = macOS ]; then
             log show --last 30m --style compact --predicate 'process BEGINSWITH "handup"' > "$LOGS/macos-unified.log" 2>&1 || true
           fi
@@ -257,7 +260,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: handup-smoke-${{ matrix.os }}
           path: ${{ env.LOGS }}

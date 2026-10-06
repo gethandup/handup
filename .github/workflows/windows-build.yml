@@ -174,6 +174,16 @@ jobs:
           $env:HANDUP_STATE_DIR = "$root\state"
           $env:HANDUP_CONFIG = "$root\config.yaml"
           Set-Content -Path $env:HANDUP_CONFIG -Value "notifications:`n  enabled: false"
+          function Shot($name) {
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+            $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+            $bitmap.Save("$shots\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
+            $graphics.Dispose(); $bitmap.Dispose()
+          }
+          $started = Get-Date
           $proc = Start-Process -FilePath $app.FullName -PassThru -RedirectStandardError "$shots\app-stderr.log" -RedirectStandardOutput "$shots\app-stdout.log"
           try {
             # The app autostarts the daemon through the bundled CLI.
@@ -186,18 +196,28 @@ jobs:
                 if ($code -eq '200') { $addr = $candidate }
               }
             }
-            if (-not $addr) { throw 'daemon did not start from the app' }
-            "app started daemon at $addr"
+            Shot 'desktop-launch'
+            if (-not $addr) {
+              "app exited: $($proc.HasExited)"
+              Get-Process handup* -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, StartTime
+              Get-ChildItem -Recurse $root -ErrorAction SilentlyContinue | Select-Object FullName, Length
+              netstat -ano | Select-String ':7465'
+              # Same command the app runs, to see whether and how fast it starts here.
+              $t = Get-Date
+              $manual = Start-Process -FilePath $cli -ArgumentList '--config', $env:HANDUP_CONFIG, 'serve' -PassThru -NoNewWindow -RedirectStandardError "$shots\manual-serve.log"
+              for ($i = 0; $i -lt 60 -and -not (Test-Path "$root\state\daemon.addr"); $i++) { Start-Sleep -Milliseconds 500 }
+              "manual serve: addr after $(((Get-Date) - $t).TotalSeconds)s exists=$(Test-Path "$root\state\daemon.addr") exited=$($manual.HasExited)"
+              Get-Content "$shots\manual-serve.log" -ErrorAction SilentlyContinue
+              throw 'daemon did not start from the app'
+            }
+            "app started daemon at $addr after $(((Get-Date) - $started).TotalSeconds)s"
             $request = (& $cli ask --title 'Windows desktop smoke' --json) | ConvertFrom-Json
             if ($LASTEXITCODE) { throw 'handup ask against the app daemon failed' }
+            # The bundled CLI finds handup-app.exe beside it and focuses the running instance.
+            & $cli ui
+            if ($LASTEXITCODE) { throw 'handup ui failed' }
             Start-Sleep -Seconds 15
-            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-            $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-            $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
-            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-            $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-            $bitmap.Save("$shots\desktop.png", [System.Drawing.Imaging.ImageFormat]::Png)
-            $graphics.Dispose(); $bitmap.Dispose()
+            Shot 'desktop'
             if ($proc.HasExited) { throw "handup-app exited early with code $($proc.ExitCode)" }
             'desktop app alive after 15s'
             & $cli cancel $request.id | Out-Null

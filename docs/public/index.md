@@ -131,7 +131,8 @@ want a reply, your email.
 
 - Desktop app, phone app and web UI: Settings → **Help & feedback** →
   **Report a bug** or **Request a feature**. The keyboard shortcuts sheet
-  (<kbd>?</kbd>) also links **Report a bug**.
+  (<kbd>?</kbd>) also links **Report a bug**, and so does the **Something went
+  wrong** screen shown if a view fails to load.
 - Terminal: `handup report` (add `--feature` or `--question`). Over SSH, with
   `--print` or when output is not a terminal, it prints the URL instead of
   opening a browser.

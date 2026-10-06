@@ -65,6 +65,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - name: Install toolchain
         timeout-minutes: 10
+        env:
+          # Authenticated GitHub lookups: anonymous ones can fail on shared runners and binstall then compiles for 15+ minutes.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           corepack enable && corepack prepare "pnpm@$PNPM_VERSION" --activate
           rustup update stable --no-self-update && rustup default stable
@@ -73,7 +76,7 @@ jobs:
           "$RUNNER_TEMP/zig/bin/pip" install --quiet "ziglang==$ZIG_VERSION"
           ln -s "$(find "$RUNNER_TEMP/zig" -type f -name zig -print -quit)" "$RUNNER_TEMP/bin/zig"
           curl -fsSL "https://github.com/cargo-bins/cargo-binstall/releases/download/v$CARGO_BINSTALL_VERSION/cargo-binstall-x86_64-unknown-linux-musl.tgz" | tar -xz -C "$RUNNER_TEMP/bin" cargo-binstall
-          "$RUNNER_TEMP/bin/cargo-binstall" -y --force --locked "cargo-zigbuild@$CARGO_ZIGBUILD_VERSION" > /dev/null
+          "$RUNNER_TEMP/bin/cargo-binstall" -y --force --locked --disable-strategies compile "cargo-zigbuild@$CARGO_ZIGBUILD_VERSION" > /dev/null
           curl -fsSL -o "$RUNNER_TEMP/goreleaser.tgz" "https://github.com/goreleaser/goreleaser/releases/download/v$GORELEASER_VERSION/goreleaser_Linux_x86_64.tar.gz"
           echo "$GORELEASER_SHA256  $RUNNER_TEMP/goreleaser.tgz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/goreleaser.tgz" -C "$RUNNER_TEMP/bin" goreleaser
@@ -145,6 +148,8 @@ jobs:
           cache: false
       - name: Install toolchain
         timeout-minutes: 10
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           sudo apt-get update
           # libspeechd-dev + libclang-dev: read aloud (tauri-plugin-tts, speech-dispatcher-sys bindgen).
@@ -154,7 +159,7 @@ jobs:
           rustup update stable --no-self-update && rustup default stable
           mkdir -p "$RUNNER_TEMP/bin" && echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           curl -fsSL "https://github.com/cargo-bins/cargo-binstall/releases/download/v$CARGO_BINSTALL_VERSION/cargo-binstall-x86_64-unknown-linux-musl.tgz" | tar -xz -C "$RUNNER_TEMP/bin" cargo-binstall
-          "$RUNNER_TEMP/bin/cargo-binstall" -y --force --locked "tauri-cli@$TAURI_CLI_VERSION" > /dev/null
+          "$RUNNER_TEMP/bin/cargo-binstall" -y --force --locked --disable-strategies compile "tauri-cli@$TAURI_CLI_VERSION" > /dev/null
       - name: Build
         timeout-minutes: 60
         working-directory: src
@@ -226,6 +231,8 @@ jobs:
           cache: false
       - name: Install toolchain
         timeout-minutes: 15
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           corepack enable && corepack prepare "pnpm@$PNPM_VERSION" --activate
           rustup update stable --no-self-update && rustup default stable
@@ -234,7 +241,7 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;37.0.0" "platform-tools" "ndk;$NDK_VERSION" > /dev/null
           mkdir -p "$RUNNER_TEMP/bin" && echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           curl -fsSL "https://github.com/cargo-bins/cargo-binstall/releases/download/v$CARGO_BINSTALL_VERSION/cargo-binstall-x86_64-unknown-linux-musl.tgz" | tar -xz -C "$RUNNER_TEMP/bin" cargo-binstall
-          "$RUNNER_TEMP/bin/cargo-binstall" -y --force --locked "tauri-cli@$TAURI_CLI_VERSION" > /dev/null
+          "$RUNNER_TEMP/bin/cargo-binstall" -y --force --locked --disable-strategies compile "tauri-cli@$TAURI_CLI_VERSION" > /dev/null
       - name: Add google-services.json (optional)
         working-directory: src
         env:

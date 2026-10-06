@@ -55,13 +55,16 @@ jobs:
           cache: false
       - name: Install toolchain
         timeout-minutes: 15
+        env:
+          # Authenticated GitHub lookups: anonymous ones can fail on shared runners and binstall then compiles for 15+ minutes.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           corepack enable && corepack prepare "pnpm@$PNPM_VERSION" --activate
           rustup update stable --no-self-update && rustup default stable
           mkdir -p "$RUNNER_TEMP/bin" && echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           curl -fsSL -o "$RUNNER_TEMP/binstall.zip" "https://github.com/cargo-bins/cargo-binstall/releases/download/v$CARGO_BINSTALL_VERSION/cargo-binstall-aarch64-apple-darwin.zip"
           unzip -q -d "$RUNNER_TEMP/bin" "$RUNNER_TEMP/binstall.zip" cargo-binstall
-          "$RUNNER_TEMP/bin/cargo-binstall" -y --force --locked "tauri-cli@$TAURI_CLI_VERSION" > /dev/null
+          "$RUNNER_TEMP/bin/cargo-binstall" -y --force --locked --disable-strategies compile "tauri-cli@$TAURI_CLI_VERSION" > /dev/null
       - name: Build
         timeout-minutes: 45
         working-directory: src

@@ -2614,6 +2614,8 @@ agents; see the [quick start](docs/public/index.md#quick-start).
 | Android | APK (sideload) | Beta companion app for the daemon on your computer. |
 
 There is no Windows or iPhone app yet. On Windows, use the Linux build in WSL.
+Releases up to v0.1.1 also do not include the [web inbox](docs/public/web.md) that iPhone
+and other browsers use; it ships in the next release.
 
 ## Linux
 
@@ -2743,6 +2745,10 @@ handup doctor --json
 `handup skill install`; see [first-run setup](docs/public/cli.md#first-run-setup). See
 [agent setup](docs/public/agents/mcp.md) to configure one agent at a time.
 
+To decide from a phone, iPhone or another computer, pair it over Tailscale:
+see [remote access](docs/public/remote.md) for the Android app and
+[use handup in a browser](docs/public/web.md) for the web inbox (after v0.1.1).
+
 ## Updates
 
 Every update is a new binary release; see the [changelog](https://github.com/gethandup/handup/releases).
@@ -2808,20 +2814,12 @@ Source: [docs/public/index.md](docs/public/index.md)
 
 # The approval inbox for AI agents
 
-handup is in beta. Agents submit a request with previews (a command, diff,
-file, image, JSON and more), wait, and receive the human decision with the
-content hash they must bind execution to. A deny is a normal answer with
-feedback, never a transport error and never permission to retry unchanged.
-
-Command requests can also be run explicitly from the desktop app with **Run**
-or **Run as admin**. The agent receives `run_result` and must not run the command
-again. Phone and web clients never run commands: they review, decide, and can
-ask the desktop to stop a running one; see [Desktop](docs/public/desktop.md).
-
 ## Quick start
 
 handup runs on Linux and macOS computers, with an Android app for your phone.
-No Windows or iPhone app yet.
+No Windows or iPhone app yet; a [web inbox](docs/public/web.md) for iPhone and other
+browsers ships after v0.1.1. [Download it](https://gethandup.dev/downloads),
+or install it from a terminal:
 
 ```sh
 curl -fsSL https://github.com/gethandup/handup/releases/latest/download/install.sh | sh
@@ -2871,6 +2869,18 @@ instructions to paste into `AGENTS.md` or `CLAUDE.md`
 (`--agent claude|codex|cursor|omp` tailors them). Run `handup doctor` if
 something doesn't work, and `handup help COMMAND` for every flag.
 
+## How requests work
+
+handup is in beta. Agents submit a request with previews (a command, diff,
+file, image, JSON and more), wait, and receive the human decision with the
+content hash they must bind execution to. A deny is a normal answer with
+feedback, never a transport error and never permission to retry unchanged.
+
+Command requests can also be run explicitly from the desktop app with **Run**
+or **Run as admin**. The agent receives `run_result` and must not run the command
+again. Phone and web clients never run commands: they review, decide, and can
+ask the desktop to stop a running one; see [Desktop](docs/public/desktop.md).
+
 ## Where to go next
 
 - [Agents](docs/public/agents/mcp.md): Claude Code, Codex, cursor, omp, MCP and shell/CI
@@ -2884,8 +2894,8 @@ something doesn't work, and `handup help COMMAND` for every flag.
   offline docs.
 - [Integrations](docs/public/integrations/index.md): let other tools react to requests.
 - [Remote access](docs/public/remote.md), the [relay](docs/public/relay.md), the
-  [mobile app](docs/public/mobile.md) and the [desktop app](docs/public/desktop.md): approve away from
-  the terminal.
+  [mobile app](docs/public/mobile.md), the [desktop app](docs/public/desktop.md) and the
+  [web inbox](docs/public/web.md) (after v0.1.1): approve away from the terminal.
 - [Rules](docs/public/rules.md): scoped allow rules, presence routing and the terminal
   inbox.
 - [Cookbook](docs/public/cookbook/index.md): runnable recipes for canned email replies,
@@ -4093,17 +4103,21 @@ adb shell am start -a android.intent.action.VIEW -d handup://r/01M3S8C6H0CP6R88F
 The [ntfy backend](docs/public/remote.md#notification-backends) adds an **Open** action
 with this link to every notification, so tapping **Open** in the ntfy Android
 app opens the request in handup. When remote access is on, tapping the
-notification itself (`click`) opens the web UI (`<web UI>/#/r/<id>`) in the
-browser instead. ntfy remains an optional alternative; native FCM is Android-only.
+notification itself (`click`) opens the [web inbox](docs/public/web.md) (`<web UI>/#/r/<id>`)
+in the browser instead; releases up to v0.1.1 do not include the web inbox, so
+that page shows `handup web UI is not installed`. ntfy remains an optional
+alternative; native FCM is Android-only.
 Native APNs delivery from the daemon is not implemented.
 
 ## iOS
 
 No native iOS app yet, and no TestFlight or App Store download.
 
-The existing alternative is the daemon's web UI over Tailscale: pair from
-Safari using the `handup pair` QR code and add it to the Home Screen. It lacks
-native biometric confirmation and deep links, but has the same inbox.
+The planned alternative is the daemon's [web inbox](docs/public/web.md) over Tailscale:
+pair from Safari using the `handup pair` QR code and add it to the Home Screen.
+It lacks native biometric confirmation and deep links, but has the same inbox.
+Releases up to v0.1.1 do not include the web inbox; it ships in the next
+release, so an iPhone cannot approve requests with v0.1.1.
 
 ---
 
@@ -4570,7 +4584,9 @@ default: the daemon listens only on its unix socket and `127.0.0.1`.
 
 Phones that are not on your tailnet can use a self-hosted
 [end-to-end encrypted relay](docs/public/relay.md) instead (`remote.relay.url`, `handup
-pair --relay`). The relay works with any `remote.mode`, including `off`.
+pair --relay`). The relay works with any `remote.mode`, including `off`, but
+only the Android app pairs through it. To use a browser instead, see
+[Use handup in a browser](docs/public/web.md).
 
 A remote listener accepts paired device tokens and named
 [submit tokens](docs/public/integrations/tokens.md). The loopback bearer token in
@@ -4727,10 +4743,13 @@ management routes are available through the remote listener or relay tunnel.
 
 ## Web UI
 
-The remote listener serves installed web assets from `remote.web_dir`,
-`$HANDUP_WEB_DIR` or `<prefix>/share/handup/web`. Distribution must include
-these assets; customers should not compile a web UI from application source.
-A `view` device sees a read-only inbox.
+Step-by-step browser setups (Tailscale, same computer, direct mode on your
+network) are in [Use handup in a browser](docs/public/web.md).
+
+Releases up to v0.1.1 do not include the web inbox files: the listener answers
+`handup web UI is not installed` (HTTP 503) until the next release. The
+listener serves the installed files from `remote.web_dir`, `$HANDUP_WEB_DIR` or
+`<prefix>/share/handup/web`. A `view` device sees a read-only inbox.
 
 The browser UI never executes command requests, even on the same computer as
 the daemon. **Run** and **Run as admin** exist only in the local desktop app;
@@ -5006,5 +5025,190 @@ The Claude PermissionRequest hook consults presence before submitting. When the 
 `handup inbox` requires stdin and stdout TTYs (otherwise exit 4). It uses a split list/detail view, WebSocket updates, immutable text blob previews, colored diffs, and raw metadata fallbacks for binary/media/HTML previews. HTML is displayed as text, never executed. Long text previews are capped at 256 KiB.
 
 Keys: `j/k` or arrows move; `a` approves; `d` opens a feedback prompt; `1–9` selects a custom option; `s/p` grant session/project allow; `u` cancels a held decision; `/` filters titles; `?` toggles help; PageUp/PageDown scroll detail; `q` quits. On an info notice `a` picks **OK** and `d` picks **Dismiss**. Enter submits feedback/filter and Esc cancels the prompt. Decisions send the displayed content_hash after `decisions.undo_window` (default 5s); approvals with 0s are immediate, while denies retain 3s undo. Quit waits for a held decision or requires undo, preventing silent loss of a staged decision. A daemon disconnect exits with an error; restart inbox to reconnect.
+
+---
+
+Source: [docs/public/web.md](docs/public/web.md)
+
+# Use handup in a browser
+
+The web inbox lets you review and decide agent requests from a web browser on
+another computer, a phone or an iPhone, served by the handup daemon on your
+computer.
+
+> **Not in released packages yet.** Releases up to v0.1.1 do not include the
+> web inbox files. Opening the address shows `handup web UI is not installed`
+> (HTTP 503) and there is nothing to pair. The web inbox ships in the next
+> release. Until then, use the [desktop app](docs/public/desktop.md) on the computer and the
+> [Android app](docs/public/mobile.md) elsewhere.
+
+## What the web inbox does
+
+A paired browser shows the same inbox as the desktop app: pending requests with
+their previews, history, and Settings. With **decide** access it can approve,
+deny, edit and approve, answer questions, cancel, and stop a command that the
+desktop app is running. **View** access is read-only.
+
+A browser never runs commands. **Run** and **Run as admin** exist only in the
+desktop app. Scoped allow rules, pairing, device management and the audit log
+also stay on the computer itself. See [Web UI](docs/public/remote.md#web-ui) for every
+setting and the browser protections.
+
+There is no native iPhone app. On an iPhone, use the web inbox in Safari.
+
+## Choose a setup
+
+| Where the browser is | Setup | Notes |
+| --- | --- | --- |
+| Phone, iPhone or another computer, anywhere | [Tailscale](docs/public/web.md#tailscale-recommended) | **Recommended.** Only your own devices can connect |
+| The computer that runs handup | [Desktop app](docs/public/web.md#on-the-same-computer) | A browser here needs Tailscale or a self-signed certificate |
+| Another device on the same network, without Tailscale | [Direct mode](docs/public/web.md#on-your-network-without-tailscale) | **Not recommended.** Self-signed TLS and a permanent risk banner |
+| Anywhere, through the [relay](docs/public/relay.md) | Not supported | Relay pairing links pair only in the Android app |
+
+Every setup uses two ports on the computer: `remote.port` (default 7466) for
+the inbox and API, and `remote.preview_port` (default 7467) for HTML and file
+previews. `remote.*` changes apply when the daemon restarts:
+
+```sh
+systemctl --user restart handup.service                  # Linux
+launchctl kickstart -k gui/$(id -u)/com.handup.daemon   # macOS
+```
+
+If you run `handup serve --foreground` yourself, stop it and start it again.
+
+## Tailscale (recommended)
+
+Tailscale connects your computer and your other devices on a private network
+that only you can join. Set it up once by following
+[Tailscale setup](docs/public/remote.md#tailscale-recommended): install Tailscale on the
+computer and on the device with the browser, and sign in to the same account
+on both.
+
+1. Turn on remote access and restart the daemon:
+
+   ```sh
+   handup config set remote.mode tailscale
+   systemctl --user restart handup.service   # macOS: see above
+   ```
+
+   handup reads the computer's tailnet address with `tailscale ip -4` and
+   listens there. It never changes your Tailscale configuration.
+2. Pair the browser:
+
+   ```sh
+   handup pair                 # approve and deny
+   handup pair --scope view    # read-only
+   ```
+
+   It prints a QR code and a link like
+   `http://100.x.y.z:7466/pair#code=…&scope=decide`. Scan the code with the
+   phone's camera, or open the link on the other device. The link works once
+   and expires after 2 minutes.
+3. The **Pair this device** page shows the access you are granting and an
+   optional device name. Press **Pair**. The browser opens the inbox and stays
+   paired.
+
+Bookmark `http://100.x.y.z:7466/` (the address from your pairing link) to come
+back later. On an iPhone, Safari's **Share → Add to Home Screen** gives it an
+icon.
+
+Traffic between tailnet devices is encrypted by WireGuard, so the address uses
+plain `http://`. Use the IP address from the pairing link: handup refuses other
+host names, such as your MagicDNS name, with `host not allowed`. For an HTTPS
+name, run `tailscale serve` yourself and set `remote.public_url`; see
+[Tailscale](docs/public/remote.md#tailscale-recommended). Never use `tailscale funnel`.
+
+## On the same computer
+
+Use the [desktop app](docs/public/desktop.md) (`handup ui`) on the computer that runs
+handup. It is the only client that can run commands and create allow rules.
+
+The daemon's local API (`127.0.0.1:7465`) does not serve the web inbox. To use a
+browser on the same computer anyway:
+
+- **With Tailscale**, follow [Tailscale](docs/public/web.md#tailscale-recommended) and open the
+  pairing link in a browser on this computer.
+- **Without Tailscale**, run direct mode on `127.0.0.1`. handup requires TLS
+  and the risk acknowledgement even on loopback, so the browser warns about a
+  self-signed certificate and the inbox always shows a red risk banner:
+
+  ```sh
+  handup config set remote.direct.accept_risk true
+  handup config set remote.tls.enabled true
+  handup config set remote.bind 127.0.0.1
+  handup config set remote.mode direct
+  systemctl --user restart handup.service   # macOS: see above
+  handup pair
+  ```
+
+  Open the `https://127.0.0.1:7466/pair#code=…` link, check the certificate
+  fingerprint as described in [direct mode](docs/public/web.md#on-your-network-without-tailscale),
+  accept the browser's warning, and press **Pair**.
+
+## On your network without Tailscale
+
+Direct mode listens on a network address over TLS. Anyone who can reach the
+port and gets a device token can approve what your agents do, including
+running commands on your computer. Prefer [Tailscale](docs/public/web.md#tailscale-recommended).
+Never forward this port from your router to the internet.
+
+1. Find the computer's network address (for example `192.168.1.20`) and set
+   these keys in this order. handup rejects `remote.mode direct` before
+   `accept_risk` and TLS are on, and a network `remote.bind` before TLS is on:
+
+   ```sh
+   handup config set remote.direct.accept_risk true
+   handup config set remote.tls.enabled true
+   handup config set remote.bind 192.168.1.20
+   handup config set remote.mode direct
+   systemctl --user restart handup.service   # macOS: see above
+   ```
+
+   With no `remote.tls.cert` and `remote.tls.key`, handup creates a self-signed
+   certificate for `localhost`, `127.0.0.1` and the bind address, and reuses it
+   after restarts. At start the daemon prints the listening address, the
+   certificate's SHA-256 fingerprint and a risk warning; `handup doctor`
+   reports the same warning.
+2. Pair with `handup pair` (or `--scope view` for read-only). The link looks
+   like `https://192.168.1.20:7466/pair#code=…&fp=…`.
+3. Open the link on the other device. The browser warns that the certificate
+   is not trusted. Compare its SHA-256 fingerprint (in the browser's certificate
+   details) with **Expected certificate fingerprint** on the handup page and
+   with the fingerprint the daemon printed. Continue only if they match, then
+   press **Pair**.
+
+The other device must reach ports 7466 and 7467 on the computer; allow them in
+the computer's firewall for your local network only. Every handup screen shows
+the risk warning as a red banner while direct mode is on. To use your own
+certificate, set `remote.tls.cert` and `remote.tls.key`; see
+[Direct mode](docs/public/remote.md#direct-mode-not-recommended).
+
+## Relay
+
+The [relay](docs/public/relay.md) does not serve the web inbox. `handup pair --relay`
+links pair only in the Android app; a browser that opens one does not pair.
+
+## Manage paired browsers
+
+```sh
+handup devices list               # every paired browser and phone
+handup devices scope ID view      # make one read-only
+handup devices disable ID         # pause it without unpairing
+handup devices revoke ID          # unpair it now
+```
+
+A revoked browser shows **Device not paired** and needs a new `handup pair`.
+To stop serving the web inbox, run `handup config set remote.mode off` and
+restart the daemon. See [Managing devices](docs/public/remote.md#managing-devices).
+
+## Troubleshooting
+
+| You see | Fix |
+| --- | --- |
+| `handup web UI is not installed` | Your release does not include the web inbox yet; see the note at the top |
+| `host not allowed` | Open the address from the pairing link, or set `remote.public_url` for your own host name |
+| **Device not paired** | Run `handup pair` again: each link works once, for 2 minutes |
+| The page does not load | Check that Tailscale is connected on both devices (`tailscale status`), or that the firewall allows ports 7466 and 7467 in direct mode |
+| `handup pair` answers that remote access is off | Set `remote.mode` and restart the daemon |
 
 ---

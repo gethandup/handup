@@ -39,6 +39,7 @@ human-readable guide text in one file, read [llms-full.txt](llms-full.txt).
 - [End-to-end encrypted relay](docs/public/relay.md)
 - [Remote access](docs/public/remote.md)
 - [Rules, scoped allow, presence, and terminal inbox](docs/public/rules.md)
+- [Use handup in a browser](docs/public/web.md)
 
 ## Machine contracts
 

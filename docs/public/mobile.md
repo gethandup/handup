@@ -588,14 +588,18 @@ adb shell am start -a android.intent.action.VIEW -d handup://r/01M3S8C6H0CP6R88F
 The [ntfy backend](remote.md#notification-backends) adds an **Open** action
 with this link to every notification, so tapping **Open** in the ntfy Android
 app opens the request in handup. When remote access is on, tapping the
-notification itself (`click`) opens the web UI (`<web UI>/#/r/<id>`) in the
-browser instead. ntfy remains an optional alternative; native FCM is Android-only.
+notification itself (`click`) opens the [web inbox](web.md) (`<web UI>/#/r/<id>`)
+in the browser instead; releases up to v0.1.1 do not include the web inbox, so
+that page shows `handup web UI is not installed`. ntfy remains an optional
+alternative; native FCM is Android-only.
 Native APNs delivery from the daemon is not implemented.
 
 ## iOS
 
 No native iOS app yet, and no TestFlight or App Store download.
 
-The existing alternative is the daemon's web UI over Tailscale: pair from
-Safari using the `handup pair` QR code and add it to the Home Screen. It lacks
-native biometric confirmation and deep links, but has the same inbox.
+The planned alternative is the daemon's [web inbox](web.md) over Tailscale:
+pair from Safari using the `handup pair` QR code and add it to the Home Screen.
+It lacks native biometric confirmation and deep links, but has the same inbox.
+Releases up to v0.1.1 do not include the web inbox; it ships in the next
+release, so an iPhone cannot approve requests with v0.1.1.

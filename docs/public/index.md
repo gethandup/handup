@@ -5,28 +5,24 @@ hero:
   title: handup
   tagline: The approval inbox for AI agents. Your agents ask before risky actions like migrations, releases and emails. You see exactly what they want to do and approve or deny from your terminal, desktop or phone.
   actions:
+    - text: Download
+      link: https://gethandup.dev/downloads
+      icon: external
     - text: Quick start
       link: '#quick-start'
       icon: right-arrow
+      variant: secondary
     - text: MCP reference
       link: /agents/mcp/
       variant: minimal
 ---
 
-handup is in beta. Agents submit a request with previews (a command, diff,
-file, image, JSON and more), wait, and receive the human decision with the
-content hash they must bind execution to. A deny is a normal answer with
-feedback, never a transport error and never permission to retry unchanged.
-
-Command requests can also be run explicitly from the desktop app with **Run**
-or **Run as admin**. The agent receives `run_result` and must not run the command
-again. Phone and web clients never run commands: they review, decide, and can
-ask the desktop to stop a running one; see [Desktop](desktop.md).
-
 ## Quick start
 
 handup runs on Linux and macOS computers, with an Android app for your phone.
-No Windows or iPhone app yet.
+No Windows or iPhone app yet; a [web inbox](web.md) for iPhone and other
+browsers ships after v0.1.1. [Download it](https://gethandup.dev/downloads),
+or install it from a terminal:
 
 ```sh
 curl -fsSL https://github.com/gethandup/handup/releases/latest/download/install.sh | sh
@@ -76,6 +72,18 @@ instructions to paste into `AGENTS.md` or `CLAUDE.md`
 (`--agent claude|codex|cursor|omp` tailors them). Run `handup doctor` if
 something doesn't work, and `handup help COMMAND` for every flag.
 
+## How requests work
+
+handup is in beta. Agents submit a request with previews (a command, diff,
+file, image, JSON and more), wait, and receive the human decision with the
+content hash they must bind execution to. A deny is a normal answer with
+feedback, never a transport error and never permission to retry unchanged.
+
+Command requests can also be run explicitly from the desktop app with **Run**
+or **Run as admin**. The agent receives `run_result` and must not run the command
+again. Phone and web clients never run commands: they review, decide, and can
+ask the desktop to stop a running one; see [Desktop](desktop.md).
+
 ## Where to go next
 
 - [Agents](agents/mcp.md): Claude Code, Codex, cursor, omp, MCP and shell/CI
@@ -89,8 +97,8 @@ something doesn't work, and `handup help COMMAND` for every flag.
   offline docs.
 - [Integrations](integrations/index.md): let other tools react to requests.
 - [Remote access](remote.md), the [relay](relay.md), the
-  [mobile app](mobile.md) and the [desktop app](desktop.md): approve away from
-  the terminal.
+  [mobile app](mobile.md), the [desktop app](desktop.md) and the
+  [web inbox](web.md) (after v0.1.1): approve away from the terminal.
 - [Rules](rules.md): scoped allow rules, presence routing and the terminal
   inbox.
 - [Cookbook](cookbook/index.md): runnable recipes for canned email replies,

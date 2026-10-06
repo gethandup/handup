@@ -35,6 +35,8 @@ agents; see the [quick start](index.md#quick-start).
 | Android | APK (sideload) | Beta companion app for the daemon on your computer. |
 
 There is no Windows or iPhone app yet. On Windows, use the Linux build in WSL.
+Releases up to v0.1.1 also do not include the [web inbox](web.md) that iPhone
+and other browsers use; it ships in the next release.
 
 ## Linux
 
@@ -163,6 +165,10 @@ handup doctor --json
 `handup setup` runs `handup service install`, `handup integrate all` and
 `handup skill install`; see [first-run setup](cli.md#first-run-setup). See
 [agent setup](agents/mcp.md) to configure one agent at a time.
+
+To decide from a phone, iPhone or another computer, pair it over Tailscale:
+see [remote access](remote.md) for the Android app and
+[use handup in a browser](web.md) for the web inbox (after v0.1.1).
 
 ## Updates
 

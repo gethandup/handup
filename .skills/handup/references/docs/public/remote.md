@@ -11,7 +11,9 @@ default: the daemon listens only on its unix socket and `127.0.0.1`.
 
 Phones that are not on your tailnet can use a self-hosted
 [end-to-end encrypted relay](relay.md) instead (`remote.relay.url`, `handup
-pair --relay`). The relay works with any `remote.mode`, including `off`.
+pair --relay`). The relay works with any `remote.mode`, including `off`, but
+only the Android app pairs through it. To use a browser instead, see
+[Use handup in a browser](web.md).
 
 A remote listener accepts paired device tokens and named
 [submit tokens](integrations/tokens.md). The loopback bearer token in
@@ -168,10 +170,13 @@ management routes are available through the remote listener or relay tunnel.
 
 ## Web UI
 
-The remote listener serves installed web assets from `remote.web_dir`,
-`$HANDUP_WEB_DIR` or `<prefix>/share/handup/web`. Distribution must include
-these assets; customers should not compile a web UI from application source.
-A `view` device sees a read-only inbox.
+Step-by-step browser setups (Tailscale, same computer, direct mode on your
+network) are in [Use handup in a browser](web.md).
+
+Releases up to v0.1.1 do not include the web inbox files: the listener answers
+`handup web UI is not installed` (HTTP 503) until the next release. The
+listener serves the installed files from `remote.web_dir`, `$HANDUP_WEB_DIR` or
+`<prefix>/share/handup/web`. A `view` device sees a read-only inbox.
 
 The browser UI never executes command requests, even on the same computer as
 the daemon. **Run** and **Run as admin** exist only in the local desktop app;

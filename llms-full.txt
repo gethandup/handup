@@ -19,7 +19,8 @@ it. The Layout page offers **Reset sizes** after resizing. Split width is
 Layout and pane sizes save per device in localStorage (`handup.layout`,
 `handup.listWidth`, `handup.listHeight`), not daemon config.
 See [Desktop](docs/public/desktop.md), [Mobile](docs/public/mobile.md#display-and-navigation)
-and [Web UI](docs/public/remote.md#web-ui).
+and [Web UI](docs/public/remote.md#web-ui); browser setup is in
+[Use handup in a browser](docs/public/web.md) (not in releases up to v0.1.1).
 
 ## Settings, test requests and read aloud
 

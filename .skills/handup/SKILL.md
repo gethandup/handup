@@ -147,6 +147,7 @@ The reference tree is generated from canonical docs; do not hand-edit it.
 | Submit-only tokens, verified integration identity, GitHub Actions or n8n | [Submit tokens](references/docs/public/integrations/tokens.md) |
 | Per-request callback URLs, signing, allowlisting or delivery diagnostics | [Callbacks](references/docs/public/integrations/callbacks.md) |
 | Remote pairing, device scopes or notifications | [Remote access](references/docs/public/remote.md) |
+| Using the web inbox in a browser or on an iPhone (not in releases up to v0.1.1) | [Use handup in a browser](references/docs/public/web.md) |
 | Encrypted relay deployment or troubleshooting | [Relay](references/docs/public/relay.md) |
 | Desktop previews, inbox layouts, Settings, configurable keyboard shortcuts, test requests or pairing UI | [Desktop](references/docs/public/desktop.md) |
 | Android/iOS setup, offline queued decisions (a queued phone decision is still pending at the daemon), background delivery or mobile notifications | [Mobile](references/docs/public/mobile.md) |

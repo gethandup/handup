@@ -44,8 +44,8 @@ entries. Exit 4 means failure; no detected agents exits 0.
 | `answer` | Human: `handup answer ID --select eu --text 'eu-west-1' --json`; several questions: `--select QID=LABEL`, `--text QID=TEXT` |
 | `schema` | `handup schema request`, `decision`, `event`, or `openapi` |
 | `serve` | `handup serve --foreground` starts daemon |
-| `service` | `handup service install`, `uninstall`, or `status` (`--dry-run`) |
-| `setup` | `handup setup [--dry-run]` first run: installs and starts the user service (skipped without a systemd/launchd user session), runs `integrate all`, installs the generic skill plus Claude/Codex skills when detected (skips a non-handup skill directory), then waits up to 5s for the daemon. Safe to rerun; `--dry-run` writes nothing and starts nothing. Exit 4 if any step failed |
+| `service` | `handup service install`, `uninstall`, or `status` (`--dry-run`); not supported on Windows (run `handup serve`) |
+| `setup` | `handup setup [--dry-run]` first run: installs and starts the user service (skipped without a systemd/launchd user session and on Windows), runs `integrate all`, installs the generic skill plus Claude/Codex skills when detected (skips a non-handup skill directory), then waits up to 5s for the daemon. Safe to rerun; `--dry-run` writes nothing and starts nothing. Exit 4 if any step failed |
 | `demo` | `handup demo --json` seeds preview examples |
 | `doctor` | `handup doctor --json` diagnoses local environment |
 | `ui` | Human: `handup ui --next` opens or focuses the desktop app |
@@ -132,7 +132,7 @@ See [Mobile](docs/public/mobile.md#offline).
 
 ## Guides
 
-- [Downloads](docs/public/downloads.md): Compiled binaries and packages per platform (install script, Arch pacman package, deb, rpm, Alpine, Homebrew, AppImage, macOS desktop dmg, APK), checksum verification, updates and uninstall; no source build needed.
+- [Downloads](docs/public/downloads.md): Compiled binaries and packages per platform (install script, Arch pacman package, deb, rpm, Alpine, Homebrew, AppImage, macOS desktop dmg, Windows x86-64 beta CLI zip and NSIS desktop installer, APK), checksum verification, updates and uninstall; no source build needed.
 - [License and trial](docs/public/license.md): 14-day trial, then `handup license activate KEY` (exchanged once at gethandup.dev, then offline) or `license import FILE`; when locked new requests are refused (exit 6, HTTP 402 `license_required`, MCP same code), Claude/Codex hooks and the omp extension fall back to the agent's own prompt and never allow, pending requests stay decidable; `GET/PUT/DELETE /v1/license`.
 - [Claude Code](docs/public/agents/claude-code.md): PermissionRequest hook, UserPromptSubmit and background (asyncRewake) Stop notice-reply hooks and MCP setup.
 - [Codex](docs/public/agents/codex.md): TOML MCP setup and short-timeout polling.

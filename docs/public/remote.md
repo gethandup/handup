@@ -1,7 +1,8 @@
 # Remote access
 
 Approve requests from a phone or another computer. Remote access is off by
-default: the daemon listens only on its unix socket and `127.0.0.1`.
+default: the daemon listens only on its unix socket (none on Windows) and
+`127.0.0.1`.
 
 | `remote.mode` | Use it for | How it works |
 | --- | --- | --- |

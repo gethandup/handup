@@ -131,7 +131,7 @@ The reference tree is generated from canonical docs; do not hand-edit it.
 | --- | --- |
 | Installation, missing prerequisites, an unlisted topic or the complete guide/schema inventory | [Offline reference index](references/index.md), then the relevant guide |
 | Binary/daemon setup and first request | [Getting started](references/docs/public/index.md) |
-| Installing compiled binaries/packages, platform availability, checksums, updates or uninstall | [Downloads](references/docs/public/downloads.md) |
+| Installing compiled binaries/packages, platform availability (including the Windows beta), checksums, updates or uninstall | [Downloads](references/docs/public/downloads.md) |
 | Trial days left, activating/importing a license, exit 6 or `license_required` | [License and trial](references/docs/public/license.md) |
 | Printing agent instructions with the CLI, GitHub npx skill installation or supported agents | [Agent skill](references/docs/public/agents/skill.md) |
 | MCP setup, every tool argument, structured multi-question forms, polling or client timeouts | [MCP](references/docs/public/agents/mcp.md) |
@@ -140,7 +140,7 @@ The reference tree is generated from canonical docs; do not hand-edit it.
 | Cursor MCP configuration | [Cursor](references/docs/public/agents/cursor.md) |
 | Shell/CI execution gates and nonzero decisions | [Shell and CI](references/docs/public/agents/shell-ci.md) |
 | Asking before sending an email draft, editable drafts and what to send after approval | [Email drafts](references/docs/public/agents/email.md) |
-| Desktop Run, `run_result` fields, run limits (`run_timeout`), elevation, cancellation and stopping | [Desktop: run a command](references/docs/public/desktop.md#run-a-command) |
+| Desktop Run (not on Windows), `run_result` fields, run limits (`run_timeout`), elevation, cancellation and stopping | [Desktop: run a command](references/docs/public/desktop.md#run-a-command) |
 | Auto decisions (`decided_by` rule, yolo, `hook:<name>`), scoped allow, presence or terminal inbox | [Rules](references/docs/public/rules.md) |
 | Webhook/exec event hooks, `decide:` policy hooks the human asked you to write, or event payloads | [Event hooks](references/docs/public/integrations/hooks.md), [integrations](references/docs/public/integrations/index.md), [event schema](references/docs/public/schema/event.schema.json) |
 | Advanced recipes: canned email replies, sender routing, policy auto-decider, forms, publish gate, meeting replies | [Cookbook](references/docs/public/cookbook/index.md); scripts in [examples/cookbook](references/examples/cookbook/) |

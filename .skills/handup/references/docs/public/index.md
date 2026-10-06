@@ -3,9 +3,11 @@
 ## Quick start
 
 handup runs on Linux and macOS computers, with an Android app for your phone.
-No Windows or iPhone app yet; a [web inbox](web.md) for iPhone and other
-browsers is included from v0.1.2 (not in v0.1.1 or earlier). [Download it](https://gethandup.dev/downloads),
-or install it from a terminal:
+Windows x86-64 is a beta (CLI and desktop installer; see
+[downloads](downloads.md#windows)). No iPhone app yet; a [web inbox](web.md)
+for iPhone and other browsers is included from v0.1.2 (not in v0.1.1 or
+earlier). [Download it](https://gethandup.dev/downloads), or install it from a
+terminal:
 
 ```sh
 curl -fsSL https://github.com/gethandup/handup/releases/latest/download/install.sh | sh
@@ -16,7 +18,8 @@ On a Mac, `brew install --cask gethandup/tap/handup` works too. Packages and
 the desktop and Android apps are in [downloads](downloads.md). You never need
 Git, Rust or the source.
 
-`handup setup` starts handup in the background, connects every agent it finds
+`handup setup` starts handup in the background (on Windows, see
+[downloads](downloads.md#windows) instead), connects every agent it finds
 (Claude Code, Codex, Cursor, omp) and installs the handup
 [agent skill](agents/skill.md). It is safe to run again, and `--dry-run` shows
 what it would change. Restart your agents, then try it:
@@ -35,7 +38,7 @@ left. See [License and trial](license.md).
 `handup setup` runs these steps; run them yourself to pick and choose:
 
 ```sh
-handup service install   # start handup in the background
+handup service install   # start handup in the background (not on Windows: run handup serve)
 handup integrate all     # connect every detected agent (--list shows what it found)
 handup skill install     # teach agents when and how to ask
 ```

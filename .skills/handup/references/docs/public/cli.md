@@ -77,10 +77,11 @@ handup uninstall             # --yes skips confirmation
 line per step:
 
 1. `handup service install`: installs and starts the user service. Without a
-   systemd or launchd user session it is skipped; run `handup serve`, or rely
-   on `handup ask` autostarting the daemon. An active service is left as is,
-   and the step is skipped when a daemon already runs outside the service.
-   `handup service install` itself keeps a changed service file as `.bak`.
+   systemd or launchd user session, and always on Windows, it is skipped; run
+   `handup serve`, or rely on `handup ask` autostarting the daemon. An active
+   service is left as is, and the step is skipped when a daemon already runs
+   outside the service. `handup service install` itself keeps a changed
+   service file as `.bak`; on Windows `handup service` exits with an error.
 2. `handup integrate all`: connects every detected agent, as described below.
 3. `handup skill install`: installs the generic skill and, when Claude Code or
    Codex is detected, their agent-specific copies. An existing skill directory
@@ -230,7 +231,8 @@ It fails with 409 `not running in the desktop app` when nothing runs. See
 ## Configuration
 
 Config path: `--config` > `HANDUP_CONFIG` > `$XDG_CONFIG_HOME/handup/config.yaml`
-(default `~/.config/handup/config.yaml`). A missing file uses defaults;
+(default `~/.config/handup/config.yaml`; on Windows
+`%USERPROFILE%\.config\handup\config.yaml` when `HOME` is unset). A missing file uses defaults;
 `handup config init` seeds commented examples. `handup config keys` lists the
 keys `config get`/`set`/`unset` accept, including every remappable `keys.<id>`
 action, its label and default shortcut. `remote.relay.allow_plaintext_lan`
@@ -483,7 +485,10 @@ cancellation, blob upload/Range download, and WebSocket `/v1/events` (pinged
 every 25 s; return Pong or the server closes after two unanswered intervals).
 The same API runs on the Unix socket and `daemon.listen` (default `127.0.0.1:7465`). Unix
 access relies on filesystem permissions. TCP requires a bearer token, a loopback
-Host, and an absent or trusted Origin (Tauri origins or `remote.web_origin`).
+Host (`localhost` or any loopback IP), and an absent or trusted Origin (Tauri
+origins or `remote.web_origin`). Windows has no Unix socket: local clients use
+the TCP listener, whose address the daemon writes to `daemon.addr` in the state
+directory next to `token`.
 `daemon.listen` must be loopback; remote access is a separate listener
 (`remote.mode`) that accepts paired device tokens and named submit tokens. See
 [remote access](remote.md) and the generated [OpenAPI](openapi.json).
@@ -542,7 +547,10 @@ live under top-level `hooks:` ([event hooks](integrations/hooks.md)).
 detection support. It also warns when the daemon runs a different build than
 the CLI (local `GET /v1/version`) and, on Linux, lists handup processes still
 running a binary that was replaced on disk, such as a `handup mcp` server or the
-daemon left over from before a binary upgrade; restart those. Daemon
+daemon left over from before a binary upgrade; restart those. On Windows it
+checks that the state directory and token are private: OK when only you,
+SYSTEM and Administrators have access, WARN when the ACL is still inherited
+(restart the daemon to lock it down), FAIL when other accounts have access. Daemon
 replies ignore fields a client does not know, so older clients keep working
 against a newer daemon, while request and decision input still rejects unknown
 fields. `handup demo` creates PNG/WAV/HTML/diff/bundle/JSON/command/PDF

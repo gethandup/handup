@@ -1,15 +1,24 @@
 # Desktop app
 
 The desktop app is a window onto the same local queue that `handup ls` shows.
-It talks to the daemon over the unix socket from its Rust process; the bearer
-token never reaches the web view.
+It talks to the daemon over the unix socket from its Rust process (on Windows,
+the token-gated loopback listener); the bearer token never reaches the web
+view.
 
 ## Install
 
 Use the compiled desktop package for your OS and architecture from
-[downloads and releases](downloads.md) (AppImage, `.deb` or `.rpm`, Linux
-x86-64). Linux is the primary platform; no public release has been
-published yet. No Rust toolchain or source build is required.
+[downloads and releases](downloads.md): AppImage, `.deb` or `.rpm` (Linux
+x86-64), `.dmg` (macOS) or the Windows installer. Linux is the primary
+platform. No Rust toolchain or source build is required.
+
+On Windows x86-64 the desktop app is a beta: run
+`handup-desktop_<version>_amd64-setup.exe` (see
+[downloads](downloads.md#windows); it is not code-signed, so SmartScreen asks
+you to confirm with **More info** → **Run anyway**). It installs per user,
+bundles `handup.exe` next to the app and starts the daemon on launch. Running
+commands from a request is not supported on Windows; the tray is untested
+there, and the daemon's desktop notifications have no action buttons.
 
 The desktop app is an inbox for the `handup` daemon; install the CLI too (see
 [downloads](downloads.md)) so `handup` is on your PATH. If no daemon is

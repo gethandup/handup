@@ -672,9 +672,10 @@ whatever `output_format` says. See [Shell and CI](docs/public/agents/shell-ci.md
 **HTTP.** Locally, the API listens on the Unix socket
 (`$XDG_RUNTIME_DIR/handup/handup.sock`, no auth beyond file permissions) and on
 `daemon.listen` (`127.0.0.1:7465`, bearer token from
-`$XDG_STATE_HOME/handup/token`, loopback Host only). Remote harnesses use a named
-submit token, which can create and read only its own requests. Routes:
-[OpenAPI](docs/public/openapi.json).
+`$XDG_STATE_HOME/handup/token`, loopback Host only). Windows has no socket: use
+`daemon.listen` with the token from `%APPDATA%\handup\data\token`. Remote
+harnesses use a named submit token, which can create and read only its own
+requests. Routes: [OpenAPI](docs/public/openapi.json).
 
 ```sh
 curl --unix-socket "$XDG_RUNTIME_DIR/handup/handup.sock" \

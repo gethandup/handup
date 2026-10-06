@@ -8,6 +8,7 @@
 
 [![Linux: x86-64 and ARM64](https://img.shields.io/badge/Linux-x86--64%20%7C%20ARM64-2b2b2b?logo=linux&logoColor=white)](docs/public/downloads.md#linux)
 [![macOS: Intel and Apple Silicon](https://img.shields.io/badge/macOS-Intel%20%7C%20Apple%20Silicon-2b2b2b?logo=apple&logoColor=white)](docs/public/downloads.md#macos)
+[![Windows: x86-64 beta](https://img.shields.io/badge/Windows-x86--64%20beta-2b2b2b?logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTAgMGgxMS4zNzd2MTEuMzcySDBabTEyLjYyMyAwSDI0djExLjM3MkgxMi42MjNaTTAgMTIuNjIzaDExLjM3N1YyNEgwWm0xMi42MjMgMEgyNFYyNEgxMi42MjMiLz48L3N2Zz4=)](docs/public/downloads.md#windows)
 [![Android app](https://img.shields.io/badge/Android-app-2b2b2b?logo=android&logoColor=white)](docs/public/mobile.md)
 
 </div>
@@ -18,8 +19,8 @@ or phone.
 
 https://github.com/user-attachments/assets/cc0aa659-68e8-47e8-8d35-bafb793d742c
 
-> **Beta.** handup runs on your Linux or Mac computer; the Android app lets you
-> decide from your phone. No Windows or iPhone app yet. Releases work fully for
+> **Beta.** handup runs on your Linux, Mac or Windows computer; the Android app
+> lets you decide from your phone. No iPhone app yet. Releases work fully for
 > a 14-day trial, then need a [license](docs/public/license.md).
 
 ## Quick start
@@ -74,7 +75,7 @@ application source is not here.
 `handup setup` runs these steps for you; run them yourself to pick and choose:
 
 ```sh
-handup service install   # start handup in the background
+handup service install   # start handup in the background (not on Windows: run handup serve)
 handup integrate all     # connect every detected agent (--list shows what it found)
 handup skill install     # teach agents when and how to ask (--agent claude|codex, --project)
 ```

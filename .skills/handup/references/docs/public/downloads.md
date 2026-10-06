@@ -33,8 +33,10 @@ agents; see the [quick start](index.md#quick-start).
 | macOS Intel / Apple Silicon | Homebrew cask, tar.gz | Beta; not notarized. |
 | macOS desktop app (universal) | .dmg | Beta; not notarized; needs the CLI daemon installed too. |
 | Android | APK (sideload) | Beta companion app for the daemon on your computer. |
+| Windows x86-64 | zip | Beta; CLI and daemon, no background service. |
+| Windows desktop app, x86-64 | NSIS installer (.exe) | Beta; not code-signed; bundles the CLI daemon. |
 
-There is no Windows or iPhone app yet. On Windows, use the Linux build in WSL.
+There is no iPhone app yet. See [Windows](#windows) for the Windows beta.
 Releases from v0.1.2 include the [web inbox](web.md) that iPhone and other
 browsers use; v0.1.1 and earlier do not.
 
@@ -130,6 +132,53 @@ xattr -dr com.apple.quarantine /Applications/handup.app
 Install the CLI as well (above); daemon notification banners on macOS need the
 desktop app. See [desktop app on macOS](desktop.md#macos).
 
+## Windows
+
+Windows x86-64 is a beta. Each release has the desktop installer
+`handup-desktop_<version>_amd64-setup.exe` and the CLI zip
+`handup_<version>_windows_amd64.zip`; check them against `checksums.txt` like
+the other downloads.
+
+### Desktop app
+
+Run `handup-desktop_<version>_amd64-setup.exe`. It installs for your account
+only (no administrator prompt) to `%LOCALAPPDATA%\handup`, adds a Start menu
+entry and bundles `handup.exe` next to the app; the app starts the daemon on
+launch. The installer is not code-signed, so SmartScreen shows "Windows
+protected your PC" on first run: choose **More info**, then **Run anyway**.
+Uninstall from Settings › Apps. See [desktop app](desktop.md) for what is
+not supported on Windows yet.
+
+### CLI
+
+Unzip `handup_<version>_windows_amd64.zip`, put `handup.exe` on your `PATH`
+(or add `%LOCALAPPDATA%\handup` from the desktop install), keeping the `share`
+folder beside `handup.exe` (it holds the [web inbox](web.md)), then start the
+daemon in its own terminal unless the desktop app is running:
+
+```powershell
+handup serve
+```
+
+`handup ask` also starts it on demand (`daemon.autostart`). There is no
+background service: `handup service install` is not supported on Windows; to
+start handup at logon, run `handup serve` from a Task Scheduler logon task.
+The terminal inbox (`handup inbox`) works; `handup ui` opens the desktop app
+when `handup-app.exe` is next to `handup.exe` or on `PATH`.
+
+Windows has no Unix socket: the CLI reaches the daemon on its loopback listener
+(`daemon.listen`, default `127.0.0.1:7465`) with the bearer token in handup's
+per-user state directory (`%APPDATA%\handup\data` unless `HANDUP_STATE_DIR` is
+set). handup gives its data and state directories and the token an owner-only
+ACL (you, SYSTEM and Administrators), repairs one it owns that other accounts
+can read, and refuses to start on such a directory owned by someone else;
+`handup doctor` reports whether they are private. Only one Windows user per
+machine can run the daemon on the default port; give others a different
+loopback `daemon.listen`, such as `127.0.0.1:7466`. The configuration file is
+`%USERPROFILE%\.config\handup\config.yaml`. Agent integration commands
+(`handup setup`, `handup integrate`, `handup skill install`) currently need
+`HOME` set.
+
 ## Android
 
 Download `handup-android_<version>_arm64.apk` on the phone, allow your browser
@@ -179,7 +228,8 @@ Every update is a new binary release; see the [changelog](https://github.com/get
   `v1.2.0`), keeps the previous binary as `handup.backup.<date>` (newest three kept)
   and restores it if the new binary fails to start.
 - Debian/Fedora/Alpine/Arch: install the newer package file the same way.
-- Desktop app: install the newer AppImage, package or `.dmg` over the old one.
+- Desktop app: install the newer AppImage, package or `.dmg` over the old one;
+  on Windows, quit the app and run the newer installer.
 - Homebrew: `brew upgrade --cask handup`.
 - Android: install the newer APK over the old one, or let Obtainium do it.
 
@@ -212,7 +262,8 @@ installer backups. Configuration and data are kept.
 
 Packages: `sudo pacman -R handup`, `sudo apt remove handup`, `sudo dnf remove handup`,
 `sudo apk del handup`, `brew uninstall --cask handup`. Run `handup service uninstall`
-first if you installed the user service.
+first if you installed the user service. Windows: uninstall the desktop app from
+Settings › Apps, or delete the unzipped `handup.exe`.
 
 ## Source and documentation
 

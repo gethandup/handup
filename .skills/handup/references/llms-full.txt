@@ -179,9 +179,10 @@ whatever `output_format` says. See [Shell and CI](docs/public/agents/shell-ci.md
 **HTTP.** Locally, the API listens on the Unix socket
 (`$XDG_RUNTIME_DIR/handup/handup.sock`, no auth beyond file permissions) and on
 `daemon.listen` (`127.0.0.1:7465`, bearer token from
-`$XDG_STATE_HOME/handup/token`, loopback Host only). Remote harnesses use a named
-submit token, which can create and read only its own requests. Routes:
-[OpenAPI](docs/public/openapi.json).
+`$XDG_STATE_HOME/handup/token`, loopback Host only). Windows has no socket: use
+`daemon.listen` with the token from `%APPDATA%\handup\data\token`. Remote
+harnesses use a named submit token, which can create and read only its own
+requests. Routes: [OpenAPI](docs/public/openapi.json).
 
 ```sh
 curl --unix-socket "$XDG_RUNTIME_DIR/handup/handup.sock" \
@@ -902,10 +903,11 @@ handup uninstall             # --yes skips confirmation
 line per step:
 
 1. `handup service install`: installs and starts the user service. Without a
-   systemd or launchd user session it is skipped; run `handup serve`, or rely
-   on `handup ask` autostarting the daemon. An active service is left as is,
-   and the step is skipped when a daemon already runs outside the service.
-   `handup service install` itself keeps a changed service file as `.bak`.
+   systemd or launchd user session, and always on Windows, it is skipped; run
+   `handup serve`, or rely on `handup ask` autostarting the daemon. An active
+   service is left as is, and the step is skipped when a daemon already runs
+   outside the service. `handup service install` itself keeps a changed
+   service file as `.bak`; on Windows `handup service` exits with an error.
 2. `handup integrate all`: connects every detected agent, as described below.
 3. `handup skill install`: installs the generic skill and, when Claude Code or
    Codex is detected, their agent-specific copies. An existing skill directory
@@ -1055,7 +1057,8 @@ It fails with 409 `not running in the desktop app` when nothing runs. See
 ## Configuration
 
 Config path: `--config` > `HANDUP_CONFIG` > `$XDG_CONFIG_HOME/handup/config.yaml`
-(default `~/.config/handup/config.yaml`). A missing file uses defaults;
+(default `~/.config/handup/config.yaml`; on Windows
+`%USERPROFILE%\.config\handup\config.yaml` when `HOME` is unset). A missing file uses defaults;
 `handup config init` seeds commented examples. `handup config keys` lists the
 keys `config get`/`set`/`unset` accept, including every remappable `keys.<id>`
 action, its label and default shortcut. `remote.relay.allow_plaintext_lan`
@@ -1308,7 +1311,10 @@ cancellation, blob upload/Range download, and WebSocket `/v1/events` (pinged
 every 25 s; return Pong or the server closes after two unanswered intervals).
 The same API runs on the Unix socket and `daemon.listen` (default `127.0.0.1:7465`). Unix
 access relies on filesystem permissions. TCP requires a bearer token, a loopback
-Host, and an absent or trusted Origin (Tauri origins or `remote.web_origin`).
+Host (`localhost` or any loopback IP), and an absent or trusted Origin (Tauri
+origins or `remote.web_origin`). Windows has no Unix socket: local clients use
+the TCP listener, whose address the daemon writes to `daemon.addr` in the state
+directory next to `token`.
 `daemon.listen` must be loopback; remote access is a separate listener
 (`remote.mode`) that accepts paired device tokens and named submit tokens. See
 [remote access](docs/public/remote.md) and the generated [OpenAPI](docs/public/openapi.json).
@@ -1367,7 +1373,10 @@ live under top-level `hooks:` ([event hooks](docs/public/integrations/hooks.md))
 detection support. It also warns when the daemon runs a different build than
 the CLI (local `GET /v1/version`) and, on Linux, lists handup processes still
 running a binary that was replaced on disk, such as a `handup mcp` server or the
-daemon left over from before a binary upgrade; restart those. Daemon
+daemon left over from before a binary upgrade; restart those. On Windows it
+checks that the state directory and token are private: OK when only you,
+SYSTEM and Administrators have access, WARN when the ACL is still inherited
+(restart the daemon to lock it down), FAIL when other accounts have access. Daemon
 replies ignore fields a client does not know, so older clients keep working
 against a newer daemon, while request and decision input still rejects unknown
 fields. `handup demo` creates PNG/WAV/HTML/diff/bundle/JSON/command/PDF
@@ -2064,15 +2073,24 @@ Source: [docs/public/desktop.md](docs/public/desktop.md)
 # Desktop app
 
 The desktop app is a window onto the same local queue that `handup ls` shows.
-It talks to the daemon over the unix socket from its Rust process; the bearer
-token never reaches the web view.
+It talks to the daemon over the unix socket from its Rust process (on Windows,
+the token-gated loopback listener); the bearer token never reaches the web
+view.
 
 ## Install
 
 Use the compiled desktop package for your OS and architecture from
-[downloads and releases](docs/public/downloads.md) (AppImage, `.deb` or `.rpm`, Linux
-x86-64). Linux is the primary platform; no public release has been
-published yet. No Rust toolchain or source build is required.
+[downloads and releases](docs/public/downloads.md): AppImage, `.deb` or `.rpm` (Linux
+x86-64), `.dmg` (macOS) or the Windows installer. Linux is the primary
+platform. No Rust toolchain or source build is required.
+
+On Windows x86-64 the desktop app is a beta: run
+`handup-desktop_<version>_amd64-setup.exe` (see
+[downloads](docs/public/downloads.md#windows); it is not code-signed, so SmartScreen asks
+you to confirm with **More info** → **Run anyway**). It installs per user,
+bundles `handup.exe` next to the app and starts the daemon on launch. Running
+commands from a request is not supported on Windows; the tray is untested
+there, and the daemon's desktop notifications have no action buttons.
 
 The desktop app is an inbox for the `handup` daemon; install the CLI too (see
 [downloads](docs/public/downloads.md)) so `handup` is on your PATH. If no daemon is
@@ -2612,8 +2630,10 @@ agents; see the [quick start](docs/public/index.md#quick-start).
 | macOS Intel / Apple Silicon | Homebrew cask, tar.gz | Beta; not notarized. |
 | macOS desktop app (universal) | .dmg | Beta; not notarized; needs the CLI daemon installed too. |
 | Android | APK (sideload) | Beta companion app for the daemon on your computer. |
+| Windows x86-64 | zip | Beta; CLI and daemon, no background service. |
+| Windows desktop app, x86-64 | NSIS installer (.exe) | Beta; not code-signed; bundles the CLI daemon. |
 
-There is no Windows or iPhone app yet. On Windows, use the Linux build in WSL.
+There is no iPhone app yet. See [Windows](docs/public/downloads.md#windows) for the Windows beta.
 Releases from v0.1.2 include the [web inbox](docs/public/web.md) that iPhone and other
 browsers use; v0.1.1 and earlier do not.
 
@@ -2709,6 +2729,53 @@ xattr -dr com.apple.quarantine /Applications/handup.app
 Install the CLI as well (above); daemon notification banners on macOS need the
 desktop app. See [desktop app on macOS](docs/public/desktop.md#macos).
 
+## Windows
+
+Windows x86-64 is a beta. Each release has the desktop installer
+`handup-desktop_<version>_amd64-setup.exe` and the CLI zip
+`handup_<version>_windows_amd64.zip`; check them against `checksums.txt` like
+the other downloads.
+
+### Desktop app
+
+Run `handup-desktop_<version>_amd64-setup.exe`. It installs for your account
+only (no administrator prompt) to `%LOCALAPPDATA%\handup`, adds a Start menu
+entry and bundles `handup.exe` next to the app; the app starts the daemon on
+launch. The installer is not code-signed, so SmartScreen shows "Windows
+protected your PC" on first run: choose **More info**, then **Run anyway**.
+Uninstall from Settings › Apps. See [desktop app](docs/public/desktop.md) for what is
+not supported on Windows yet.
+
+### CLI
+
+Unzip `handup_<version>_windows_amd64.zip`, put `handup.exe` on your `PATH`
+(or add `%LOCALAPPDATA%\handup` from the desktop install), keeping the `share`
+folder beside `handup.exe` (it holds the [web inbox](docs/public/web.md)), then start the
+daemon in its own terminal unless the desktop app is running:
+
+```powershell
+handup serve
+```
+
+`handup ask` also starts it on demand (`daemon.autostart`). There is no
+background service: `handup service install` is not supported on Windows; to
+start handup at logon, run `handup serve` from a Task Scheduler logon task.
+The terminal inbox (`handup inbox`) works; `handup ui` opens the desktop app
+when `handup-app.exe` is next to `handup.exe` or on `PATH`.
+
+Windows has no Unix socket: the CLI reaches the daemon on its loopback listener
+(`daemon.listen`, default `127.0.0.1:7465`) with the bearer token in handup's
+per-user state directory (`%APPDATA%\handup\data` unless `HANDUP_STATE_DIR` is
+set). handup gives its data and state directories and the token an owner-only
+ACL (you, SYSTEM and Administrators), repairs one it owns that other accounts
+can read, and refuses to start on such a directory owned by someone else;
+`handup doctor` reports whether they are private. Only one Windows user per
+machine can run the daemon on the default port; give others a different
+loopback `daemon.listen`, such as `127.0.0.1:7466`. The configuration file is
+`%USERPROFILE%\.config\handup\config.yaml`. Agent integration commands
+(`handup setup`, `handup integrate`, `handup skill install`) currently need
+`HOME` set.
+
 ## Android
 
 Download `handup-android_<version>_arm64.apk` on the phone, allow your browser
@@ -2758,7 +2825,8 @@ Every update is a new binary release; see the [changelog](https://github.com/get
   `v1.2.0`), keeps the previous binary as `handup.backup.<date>` (newest three kept)
   and restores it if the new binary fails to start.
 - Debian/Fedora/Alpine/Arch: install the newer package file the same way.
-- Desktop app: install the newer AppImage, package or `.dmg` over the old one.
+- Desktop app: install the newer AppImage, package or `.dmg` over the old one;
+  on Windows, quit the app and run the newer installer.
 - Homebrew: `brew upgrade --cask handup`.
 - Android: install the newer APK over the old one, or let Obtainium do it.
 
@@ -2791,7 +2859,8 @@ installer backups. Configuration and data are kept.
 
 Packages: `sudo pacman -R handup`, `sudo apt remove handup`, `sudo dnf remove handup`,
 `sudo apk del handup`, `brew uninstall --cask handup`. Run `handup service uninstall`
-first if you installed the user service.
+first if you installed the user service. Windows: uninstall the desktop app from
+Settings › Apps, or delete the unzipped `handup.exe`.
 
 ## Source and documentation
 
@@ -2817,9 +2886,11 @@ Source: [docs/public/index.md](docs/public/index.md)
 ## Quick start
 
 handup runs on Linux and macOS computers, with an Android app for your phone.
-No Windows or iPhone app yet; a [web inbox](docs/public/web.md) for iPhone and other
-browsers is included from v0.1.2 (not in v0.1.1 or earlier). [Download it](https://gethandup.dev/downloads),
-or install it from a terminal:
+Windows x86-64 is a beta (CLI and desktop installer; see
+[downloads](docs/public/downloads.md#windows)). No iPhone app yet; a [web inbox](docs/public/web.md)
+for iPhone and other browsers is included from v0.1.2 (not in v0.1.1 or
+earlier). [Download it](https://gethandup.dev/downloads), or install it from a
+terminal:
 
 ```sh
 curl -fsSL https://github.com/gethandup/handup/releases/latest/download/install.sh | sh
@@ -2830,7 +2901,8 @@ On a Mac, `brew install --cask gethandup/tap/handup` works too. Packages and
 the desktop and Android apps are in [downloads](docs/public/downloads.md). You never need
 Git, Rust or the source.
 
-`handup setup` starts handup in the background, connects every agent it finds
+`handup setup` starts handup in the background (on Windows, see
+[downloads](docs/public/downloads.md#windows) instead), connects every agent it finds
 (Claude Code, Codex, Cursor, omp) and installs the handup
 [agent skill](docs/public/agents/skill.md). It is safe to run again, and `--dry-run` shows
 what it would change. Restart your agents, then try it:
@@ -2849,7 +2921,7 @@ left. See [License and trial](docs/public/license.md).
 `handup setup` runs these steps; run them yourself to pick and choose:
 
 ```sh
-handup service install   # start handup in the background
+handup service install   # start handup in the background (not on Windows: run handup serve)
 handup integrate all     # connect every detected agent (--list shows what it found)
 handup skill install     # teach agents when and how to ask
 ```
@@ -4574,7 +4646,8 @@ Source: [docs/public/remote.md](docs/public/remote.md)
 # Remote access
 
 Approve requests from a phone or another computer. Remote access is off by
-default: the daemon listens only on its unix socket and `127.0.0.1`.
+default: the daemon listens only on its unix socket (none on Windows) and
+`127.0.0.1`.
 
 | `remote.mode` | Use it for | How it works |
 | --- | --- | --- |

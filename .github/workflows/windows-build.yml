@@ -183,6 +183,9 @@ jobs:
             $bitmap.Save("$shots\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
             $graphics.Dispose(); $bitmap.Dispose()
           }
+          # Keep other windows (runner consoles) out of the public screenshot.
+          (New-Object -ComObject Shell.Application).MinimizeAll()
+          Start-Sleep -Seconds 1
           $started = Get-Date
           $proc = Start-Process -FilePath $app.FullName -PassThru -RedirectStandardError "$shots\app-stderr.log" -RedirectStandardOutput "$shots\app-stdout.log"
           try {
@@ -193,21 +196,22 @@ jobs:
               if (Test-Path "$root\state\daemon.addr") {
                 $candidate = (Get-Content "$root\state\daemon.addr" -Raw).Trim()
                 $code = & curl.exe -s -o NUL -w '%{http_code}' "http://$candidate/v1/health"
-                if ($code -eq '200') { $addr = $candidate }
+                # Any HTTP answer (health is token-gated too) means the listener is up.
+                if ($code -ne '000') { $addr = $candidate }
               }
             }
             Shot 'desktop-launch'
             if (-not $addr) {
-              "app exited: $($proc.HasExited)"
-              Get-Process handup* -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, StartTime
-              Get-ChildItem -Recurse $root -ErrorAction SilentlyContinue | Select-Object FullName, Length
-              netstat -ano | Select-String ':7465'
+              "app exited: $($proc.HasExited)" | Out-Host
+              Get-Process handup* -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, StartTime | Out-Host
+              Get-ChildItem -Recurse $root -ErrorAction SilentlyContinue | Select-Object FullName, Length | Out-Host
+              netstat -ano | Select-String ':7465' | Out-Host
               # Same command the app runs, to see whether and how fast it starts here.
               $t = Get-Date
               $manual = Start-Process -FilePath $cli -ArgumentList '--config', $env:HANDUP_CONFIG, 'serve' -PassThru -NoNewWindow -RedirectStandardError "$shots\manual-serve.log"
               for ($i = 0; $i -lt 60 -and -not (Test-Path "$root\state\daemon.addr"); $i++) { Start-Sleep -Milliseconds 500 }
-              "manual serve: addr after $(((Get-Date) - $t).TotalSeconds)s exists=$(Test-Path "$root\state\daemon.addr") exited=$($manual.HasExited)"
-              Get-Content "$shots\manual-serve.log" -ErrorAction SilentlyContinue
+              "manual serve: addr after $(((Get-Date) - $t).TotalSeconds)s exists=$(Test-Path "$root\state\daemon.addr") exited=$($manual.HasExited)" | Out-Host
+              Get-Content "$shots\manual-serve.log" -ErrorAction SilentlyContinue | Out-Host
               throw 'daemon did not start from the app'
             }
             "app started daemon at $addr after $(((Get-Date) - $started).TotalSeconds)s"

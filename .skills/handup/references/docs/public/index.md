@@ -4,7 +4,7 @@
 
 handup runs on Linux and macOS computers, with an Android app for your phone.
 No Windows or iPhone app yet; a [web inbox](web.md) for iPhone and other
-browsers ships after v0.1.1. [Download it](https://gethandup.dev/downloads),
+browsers is included from v0.1.2 (not in v0.1.1 or earlier). [Download it](https://gethandup.dev/downloads),
 or install it from a terminal:
 
 ```sh
@@ -81,7 +81,7 @@ ask the desktop to stop a running one; see [Desktop](desktop.md).
 - [Integrations](integrations/index.md): let other tools react to requests.
 - [Remote access](remote.md), the [relay](relay.md), the
   [mobile app](mobile.md), the [desktop app](desktop.md) and the
-  [web inbox](web.md) (after v0.1.1): approve away from the terminal.
+  [web inbox](web.md) (included from v0.1.2): approve away from the terminal.
 - [Rules](rules.md): scoped allow rules, presence routing and the terminal
   inbox.
 - [Cookbook](cookbook/index.md): runnable recipes for canned email replies,

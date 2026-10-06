@@ -4,11 +4,10 @@ The web inbox lets you review and decide agent requests from a web browser on
 another computer, a phone or an iPhone, served by the handup daemon on your
 computer.
 
-> **Not in released packages yet.** Releases up to v0.1.1 do not include the
-> web inbox files. Opening the address shows `handup web UI is not installed`
-> (HTTP 503) and there is nothing to pair. The web inbox ships in the next
-> release. Until then, use the [desktop app](desktop.md) on the computer and the
-> [Android app](mobile.md) elsewhere.
+> **Included from v0.1.2.** Release packages include the web inbox files.
+> v0.1.1 and earlier do not include them; upgrade to use a browser.
+> The [desktop app](desktop.md) and [Android app](mobile.md) also work without
+> a browser.
 
 ## What the web inbox does
 
@@ -173,7 +172,7 @@ restart the daemon. See [Managing devices](remote.md#managing-devices).
 
 | You see | Fix |
 | --- | --- |
-| `handup web UI is not installed` | Your release does not include the web inbox yet; see the note at the top |
+| `handup web UI files are missing` (HTTP 503) | Reinstall handup v0.1.2 or later, or set `remote.web_dir` to your installed web inbox files |
 | `host not allowed` | Open the address from the pairing link, or set `remote.public_url` for your own host name |
 | **Device not paired** | Run `handup pair` again: each link works once, for 2 minutes |
 | The page does not load | Check that Tailscale is connected on both devices (`tailscale status`), or that the firewall allows ports 7466 and 7467 in direct mode |

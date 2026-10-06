@@ -173,10 +173,23 @@ management routes are available through the remote listener or relay tunnel.
 Step-by-step browser setups (Tailscale, same computer, direct mode on your
 network) are in [Use handup in a browser](web.md).
 
-Releases up to v0.1.1 do not include the web inbox files: the listener answers
-`handup web UI is not installed` (HTTP 503) until the next release. The
-listener serves the installed files from `remote.web_dir`, `$HANDUP_WEB_DIR` or
-`<prefix>/share/handup/web`. A `view` device sees a read-only inbox.
+Releases from v0.1.2 include the web inbox files; v0.1.1 and earlier do not.
+If files are missing, the listener answers HTTP 503:
+`handup web UI files are missing; reinstall handup or set remote.web_dir`.
+`remote.web_dir` defaults to empty (automatic discovery). The listener uses
+the first candidate containing `index.html`, in this order:
+
+1. `remote.web_dir`, if set.
+2. `$HANDUP_WEB_DIR`, if set.
+3. Paths relative to the daemon executable's directory: `../share/handup/web`,
+   `share/handup/web`, `../lib/handup/share/handup/web`, then
+   `../Resources/share/handup/web` (CLI and desktop package layouts).
+4. `$XDG_DATA_HOME/handup/web`, or `~/.local/share/handup/web` when
+   `$XDG_DATA_HOME` is unset.
+5. The build-time source tree's `ui/dist` (development fallback).
+
+A missing candidate does not stop the search. A `view` device sees a
+read-only inbox.
 
 The browser UI never executes command requests, even on the same computer as
 the daemon. **Run** and **Run as admin** exist only in the local desktop app;
@@ -352,7 +365,7 @@ removed; loading them reports a migration hint.
 | `remote.port` | `7466` | API and web UI |
 | `remote.preview_port` | `7467` | Separate preview origin |
 | `remote.public_url` | empty | Externally visible origin for pairing links and Host checks |
-| `remote.web_dir` | empty | Built UI directory |
+| `remote.web_dir` | empty (automatic discovery) | Built web inbox directory; see [lookup order](#web-ui) |
 | `remote.web_origin` | empty | Extra trusted browser origin |
 | `remote.tls.enabled` | `false` | TLS on the remote listener (required for direct) |
 | `remote.tls.cert`, `remote.tls.key` | empty | Your PEM cert and key; empty generates a self-signed pair |

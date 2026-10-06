@@ -2614,8 +2614,8 @@ agents; see the [quick start](docs/public/index.md#quick-start).
 | Android | APK (sideload) | Beta companion app for the daemon on your computer. |
 
 There is no Windows or iPhone app yet. On Windows, use the Linux build in WSL.
-Releases up to v0.1.1 also do not include the [web inbox](docs/public/web.md) that iPhone
-and other browsers use; it ships in the next release.
+Releases from v0.1.2 include the [web inbox](docs/public/web.md) that iPhone and other
+browsers use; v0.1.1 and earlier do not.
 
 ## Linux
 
@@ -2747,7 +2747,7 @@ handup doctor --json
 
 To decide from a phone, iPhone or another computer, pair it over Tailscale:
 see [remote access](docs/public/remote.md) for the Android app and
-[use handup in a browser](docs/public/web.md) for the web inbox (after v0.1.1).
+[use handup in a browser](docs/public/web.md) for the web inbox (included from v0.1.2).
 
 ## Updates
 
@@ -2818,7 +2818,7 @@ Source: [docs/public/index.md](docs/public/index.md)
 
 handup runs on Linux and macOS computers, with an Android app for your phone.
 No Windows or iPhone app yet; a [web inbox](docs/public/web.md) for iPhone and other
-browsers ships after v0.1.1. [Download it](https://gethandup.dev/downloads),
+browsers is included from v0.1.2 (not in v0.1.1 or earlier). [Download it](https://gethandup.dev/downloads),
 or install it from a terminal:
 
 ```sh
@@ -2895,7 +2895,7 @@ ask the desktop to stop a running one; see [Desktop](docs/public/desktop.md).
 - [Integrations](docs/public/integrations/index.md): let other tools react to requests.
 - [Remote access](docs/public/remote.md), the [relay](docs/public/relay.md), the
   [mobile app](docs/public/mobile.md), the [desktop app](docs/public/desktop.md) and the
-  [web inbox](docs/public/web.md) (after v0.1.1): approve away from the terminal.
+  [web inbox](docs/public/web.md) (included from v0.1.2): approve away from the terminal.
 - [Rules](docs/public/rules.md): scoped allow rules, presence routing and the terminal
   inbox.
 - [Cookbook](docs/public/cookbook/index.md): runnable recipes for canned email replies,
@@ -4104,20 +4104,20 @@ The [ntfy backend](docs/public/remote.md#notification-backends) adds an **Open**
 with this link to every notification, so tapping **Open** in the ntfy Android
 app opens the request in handup. When remote access is on, tapping the
 notification itself (`click`) opens the [web inbox](docs/public/web.md) (`<web UI>/#/r/<id>`)
-in the browser instead; releases up to v0.1.1 do not include the web inbox, so
-that page shows `handup web UI is not installed`. ntfy remains an optional
-alternative; native FCM is Android-only.
+in the browser instead. Releases from v0.1.2 include the web inbox; v0.1.1
+and earlier do not, so upgrade before using notification browser links.
+ntfy remains an optional alternative; native FCM is Android-only.
 Native APNs delivery from the daemon is not implemented.
 
 ## iOS
 
 No native iOS app yet, and no TestFlight or App Store download.
 
-The planned alternative is the daemon's [web inbox](docs/public/web.md) over Tailscale:
+The alternative is the daemon's [web inbox](docs/public/web.md) over Tailscale:
 pair from Safari using the `handup pair` QR code and add it to the Home Screen.
 It lacks native biometric confirmation and deep links, but has the same inbox.
-Releases up to v0.1.1 do not include the web inbox; it ships in the next
-release, so an iPhone cannot approve requests with v0.1.1.
+Releases from v0.1.2 include the web inbox. v0.1.1 and earlier do not,
+so upgrade to use an iPhone to approve requests.
 
 ---
 
@@ -4746,10 +4746,23 @@ management routes are available through the remote listener or relay tunnel.
 Step-by-step browser setups (Tailscale, same computer, direct mode on your
 network) are in [Use handup in a browser](docs/public/web.md).
 
-Releases up to v0.1.1 do not include the web inbox files: the listener answers
-`handup web UI is not installed` (HTTP 503) until the next release. The
-listener serves the installed files from `remote.web_dir`, `$HANDUP_WEB_DIR` or
-`<prefix>/share/handup/web`. A `view` device sees a read-only inbox.
+Releases from v0.1.2 include the web inbox files; v0.1.1 and earlier do not.
+If files are missing, the listener answers HTTP 503:
+`handup web UI files are missing; reinstall handup or set remote.web_dir`.
+`remote.web_dir` defaults to empty (automatic discovery). The listener uses
+the first candidate containing `index.html`, in this order:
+
+1. `remote.web_dir`, if set.
+2. `$HANDUP_WEB_DIR`, if set.
+3. Paths relative to the daemon executable's directory: `../share/handup/web`,
+   `share/handup/web`, `../lib/handup/share/handup/web`, then
+   `../Resources/share/handup/web` (CLI and desktop package layouts).
+4. `$XDG_DATA_HOME/handup/web`, or `~/.local/share/handup/web` when
+   `$XDG_DATA_HOME` is unset.
+5. The build-time source tree's `ui/dist` (development fallback).
+
+A missing candidate does not stop the search. A `view` device sees a
+read-only inbox.
 
 The browser UI never executes command requests, even on the same computer as
 the daemon. **Run** and **Run as admin** exist only in the local desktop app;
@@ -4925,7 +4938,7 @@ removed; loading them reports a migration hint.
 | `remote.port` | `7466` | API and web UI |
 | `remote.preview_port` | `7467` | Separate preview origin |
 | `remote.public_url` | empty | Externally visible origin for pairing links and Host checks |
-| `remote.web_dir` | empty | Built UI directory |
+| `remote.web_dir` | empty (automatic discovery) | Built web inbox directory; see [lookup order](docs/public/remote.md#web-ui) |
 | `remote.web_origin` | empty | Extra trusted browser origin |
 | `remote.tls.enabled` | `false` | TLS on the remote listener (required for direct) |
 | `remote.tls.cert`, `remote.tls.key` | empty | Your PEM cert and key; empty generates a self-signed pair |
@@ -5036,11 +5049,10 @@ The web inbox lets you review and decide agent requests from a web browser on
 another computer, a phone or an iPhone, served by the handup daemon on your
 computer.
 
-> **Not in released packages yet.** Releases up to v0.1.1 do not include the
-> web inbox files. Opening the address shows `handup web UI is not installed`
-> (HTTP 503) and there is nothing to pair. The web inbox ships in the next
-> release. Until then, use the [desktop app](docs/public/desktop.md) on the computer and the
-> [Android app](docs/public/mobile.md) elsewhere.
+> **Included from v0.1.2.** Release packages include the web inbox files.
+> v0.1.1 and earlier do not include them; upgrade to use a browser.
+> The [desktop app](docs/public/desktop.md) and [Android app](docs/public/mobile.md) also work without
+> a browser.
 
 ## What the web inbox does
 
@@ -5205,7 +5217,7 @@ restart the daemon. See [Managing devices](docs/public/remote.md#managing-device
 
 | You see | Fix |
 | --- | --- |
-| `handup web UI is not installed` | Your release does not include the web inbox yet; see the note at the top |
+| `handup web UI files are missing` (HTTP 503) | Reinstall handup v0.1.2 or later, or set `remote.web_dir` to your installed web inbox files |
 | `host not allowed` | Open the address from the pairing link, or set `remote.public_url` for your own host name |
 | **Device not paired** | Run `handup pair` again: each link works once, for 2 minutes |
 | The page does not load | Check that Tailscale is connected on both devices (`tailscale status`), or that the firewall allows ports 7466 and 7467 in direct mode |

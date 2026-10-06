@@ -20,7 +20,7 @@ Layout and pane sizes save per device in localStorage (`handup.layout`,
 `handup.listWidth`, `handup.listHeight`), not daemon config.
 See [Desktop](docs/public/desktop.md), [Mobile](docs/public/mobile.md#display-and-navigation)
 and [Web UI](docs/public/remote.md#web-ui); browser setup is in
-[Use handup in a browser](docs/public/web.md) (not in releases up to v0.1.1).
+[Use handup in a browser](docs/public/web.md) (included from v0.1.2; not in v0.1.1 or earlier).
 
 ## Settings, test requests and read aloud
 

@@ -104,7 +104,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $cliDir = Join-Path $env:RUNNER_TEMP 'cli'
-          Expand-Archive -Path out\handup-windows-amd64.zip -DestinationPath $cliDir
+          $zip = Get-ChildItem out\handup_*_windows_amd64.zip | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath $cliDir
           $exe = Join-Path $cliDir 'handup.exe'
           $root = Join-Path $env:RUNNER_TEMP 'handup-smoke'
           New-Item -ItemType Directory -Force $root | Out-Null

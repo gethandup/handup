@@ -17,7 +17,7 @@ Your agents ask before risky actions like migrations, releases and emails. You
 see exactly what they want to do and approve or deny from your terminal, desktop
 or phone.
 
-https://github.com/user-attachments/assets/cc0aa659-68e8-47e8-8d35-bafb793d742c
+https://github.com/user-attachments/assets/d11dc54f-1422-48c8-a593-1b35e86ccfb0
 
 > **Beta.** handup runs on your Linux, Mac or Windows computer; the Android app
 > lets you decide from your phone. No iPhone app yet. Releases work fully for

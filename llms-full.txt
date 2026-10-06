@@ -128,7 +128,7 @@ provider.
 | `rules` | Human: `handup rules list`, `test request.json` (or ID), `rm RULE_ID` |
 | `log` | `handup log --json` tails the append-only audit with rule IDs |
 | `storage` | Human only: `handup storage [--json]` shows disk use by category, retention and the last cleanup; `handup storage clean history` (or `files`) `--older-than 30d` (or `--keep 100`, or `--all`) deletes resolved requests, or only their files, in the background. Pending requests are never touched. Agents never clean up |
-| `pair` | Human only: `handup pair --scope decide` prints a one-time QR pairing link for a phone or browser (needs `remote.mode`); agents never pair devices |
+| `pair` | Human only: `handup pair --scope decide` prints a one-time QR pairing link for a phone or browser (direct/Tailscale needs `remote.mode` enabled; `handup pair --relay` works with mode `off` when a relay is configured); agents never pair devices |
 | `devices` | Human only: `handup devices list [--json]` shows enabled state; `handup devices disable DEVICE_ID` / `enable DEVICE_ID` pauses/resumes access and push without unpairing; `handup devices revoke DEVICE_ID` unpairs immediately |
 | `tokens` | Human only: `handup tokens create NAME [--expires 90d]`, `tokens list`, `tokens revoke NAME`. Submit credentials create and access only their own requests; never decide. See docs/public/integrations/tokens.md |
 | `yolo` | Human only: `handup yolo on --for 1h` auto-approves new low/medium-risk requests (`hard`: every risk; `off`); bare `handup yolo --json` prints `{mode, until}`. Agents never turn it on |
@@ -606,7 +606,7 @@ See [the result contract](docs/public/agents/mcp.md#desktop-run-results).
 `examples/deploy-gate.sh` skips its own execution on exit 5 and returns the
 desktop command's `run_result.exit_code`, or 1 when no exit code is available.
 
-Capture JSON even when exit is nonzero so human feedback is not lost. Do not use `|| true` before the execution gate. Ask auto-starts the local daemon unless daemon.autostart is false; wait/status do not. CI needs a reachable local daemon and a human able to decide (CLI, desktop app, terminal inbox, or a paired phone/browser when `remote.mode` is on; see [remote access](docs/public/remote.md)); unattended timeout is denial, not approval.
+Capture JSON even when exit is nonzero so human feedback is not lost. Do not use `|| true` before the execution gate. Ask auto-starts the local daemon unless daemon.autostart is false; wait/status do not. CI needs a reachable local daemon and a human able to decide (CLI, desktop app, terminal inbox, or a paired phone/browser through direct/Tailscale remote access or a configured relay, which works with `remote.mode` off; see [remote access](docs/public/remote.md) and [relay](docs/public/relay.md)); unattended timeout is denial, not approval.
 
 Agent shell tools often kill commands after a default timeout (omp: 300s), long before a human decides. Run `handup ask --wait` and `handup wait <id>` with the tool's timeout disabled or raised (omp: `timeout: 0`), or ask without waiting and keep the request id. A killed waiter is not an answer: the request stays pending. Reattach with `handup wait <id>` or read it with `handup status <id> --json`, and never act until the decision is approved.
 

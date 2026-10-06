@@ -153,7 +153,11 @@ same database transaction, so a request that is already in flight cannot
 approve after its device is revoked. Request bodies are read only after the
 token, CSRF, and scope checks pass, and must arrive within 10 seconds (1 MiB
 max). Each remote listener serves at most 64 connections at once, and open
-event WebSockets count toward that limit. Connections that send no request
+event WebSockets count toward that limit. Each paired device may hold at most
+16 event subscriptions across listener sockets and relay streams combined; excess requests return
+HTTP 429. Slots are released when sockets close. The server pings every 25
+seconds and closes sockets that fail to return Pong for two ping intervals.
+Connections that send no request
 headers within 10 seconds (including the TLS handshake and idle keep-alive
 connections) are closed. The API equivalents are local-only:
 `GET /v1/devices`, `PATCH /v1/devices/{id}` with any combination of

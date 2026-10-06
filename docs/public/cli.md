@@ -38,7 +38,8 @@ handup log --json            # append-only audit, newest first
 handup storage --json        # disk use by category, retention, last cleanup
 handup storage clean history --older-than 30d  # background cleanup; or files, --all
 handup license status        # trial days left or license; activate KEY | import FILE | deactivate
-handup pair --scope decide   # QR pairing link for a phone (needs remote.mode)
+handup pair --scope decide   # QR phone pairing; direct/Tailscale needs remote.mode enabled
+handup pair --relay          # uses the configured relay, even with remote.mode off
 handup devices list          # enabled/disabled and push state; --json includes enabled and push
 handup devices disable <id>  # pause access and push without unpairing
 handup devices enable <id>   # resume the same pairing
@@ -210,7 +211,8 @@ Config path: `--config` > `HANDUP_CONFIG` > `$XDG_CONFIG_HOME/handup/config.yaml
 (default `~/.config/handup/config.yaml`). A missing file uses defaults;
 `handup config init` seeds commented examples. `handup config keys` lists the
 keys `config get`/`set`/`unset` accept, including every remappable `keys.<id>`
-action, its label and default shortcut. Relay settings (`remote.relay.*`) are
+action, its label and default shortcut. `remote.relay.allow_plaintext_lan`
+is a validated boolean (default `false`); the other relay settings are
 edited in YAML (`handup config edit`), see [relay](relay.md).
 
 | Command | Effect |
@@ -403,6 +405,8 @@ data and state. `HANDUP_DATA_DIR`, `HANDUP_STATE_DIR`, and `HANDUP_SOCKET`
 override these paths. Existing data/state/socket-parent directories must already
 be private (0700); shared directories and symlinks are rejected rather than
 chmodded. A process lock prevents a second daemon on the same state directory.
+The daemon creates and repairs its database and SQLite sidecar files to mode
+0600 on open.
 
 ### Storage usage and cleanup
 
@@ -454,8 +458,8 @@ forgets it.
 
 API v1 covers health/OpenAPI, requests, long-poll wait, hash-bound decisions,
 cancellation, blob upload/Range download, and WebSocket `/v1/events` (pinged
-every 25 s; treat a longer silence as a dead connection). The same
-API runs on the Unix socket and `daemon.listen` (default `127.0.0.1:7465`). Unix
+every 25 s; return Pong or the server closes after two unanswered intervals).
+The same API runs on the Unix socket and `daemon.listen` (default `127.0.0.1:7465`). Unix
 access relies on filesystem permissions. TCP requires a bearer token, a loopback
 Host, and an absent or trusted Origin (Tauri origins or `remote.web_origin`).
 `daemon.listen` must be loopback; remote access is a separate listener
@@ -493,7 +497,8 @@ Native notifications support sound/visual/both, new requests, critical
 high-risk urgency on Linux (bypasses quiet hours), expiry warnings, reminders,
 and quiet hours. Sound uses `paplay` (Linux) or `afplay` (macOS), with a
 platform sound or `notifications.sound_file`. Notification text redacts common
-credentials and includes the request ID. Linux notification actions follow
+credentials (including handup device tokens, license keys, and labeled relay
+secrets) and includes the request ID. Linux notification actions follow
 `none|low_risk|all`; macOS actions are not supported. Deny actions cannot bypass
 a required-feedback policy. An info notice reads "Notice: title" with its
 redacted summary as the body, and its actions are **OK** and **Dismiss**.

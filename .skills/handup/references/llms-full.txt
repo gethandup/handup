@@ -707,7 +707,7 @@ See [the result contract](docs/public/agents/mcp.md#desktop-run-results).
 `examples/deploy-gate.sh` skips its own execution on exit 5 and returns the
 desktop command's `run_result.exit_code`, or 1 when no exit code is available.
 
-Capture JSON even when exit is nonzero so human feedback is not lost. Do not use `|| true` before the execution gate. Ask auto-starts the local daemon unless daemon.autostart is false; wait/status do not. CI needs a reachable local daemon and a human able to decide (CLI, desktop app, terminal inbox, or a paired phone/browser when `remote.mode` is on; see [remote access](docs/public/remote.md)); unattended timeout is denial, not approval.
+Capture JSON even when exit is nonzero so human feedback is not lost. Do not use `|| true` before the execution gate. Ask auto-starts the local daemon unless daemon.autostart is false; wait/status do not. CI needs a reachable local daemon and a human able to decide (CLI, desktop app, terminal inbox, or a paired phone/browser through direct/Tailscale remote access or a configured relay, which works with `remote.mode` off; see [remote access](docs/public/remote.md) and [relay](docs/public/relay.md)); unattended timeout is denial, not approval.
 
 Agent shell tools often kill commands after a default timeout (omp: 300s), long before a human decides. Run `handup ask --wait` and `handup wait <id>` with the tool's timeout disabled or raised (omp: `timeout: 0`), or ask without waiting and keep the request id. A killed waiter is not an answer: the request stays pending. Reattach with `handup wait <id>` or read it with `handup status <id> --json`, and never act until the decision is approved.
 
@@ -863,7 +863,8 @@ handup log --json            # append-only audit, newest first
 handup storage --json        # disk use by category, retention, last cleanup
 handup storage clean history --older-than 30d  # background cleanup; or files, --all
 handup license status        # trial days left or license; activate KEY | import FILE | deactivate
-handup pair --scope decide   # QR pairing link for a phone (needs remote.mode)
+handup pair --scope decide   # QR phone pairing; direct/Tailscale needs remote.mode enabled
+handup pair --relay          # uses the configured relay, even with remote.mode off
 handup devices list          # enabled/disabled and push state; --json includes enabled and push
 handup devices disable <id>  # pause access and push without unpairing
 handup devices enable <id>   # resume the same pairing
@@ -1035,7 +1036,8 @@ Config path: `--config` > `HANDUP_CONFIG` > `$XDG_CONFIG_HOME/handup/config.yaml
 (default `~/.config/handup/config.yaml`). A missing file uses defaults;
 `handup config init` seeds commented examples. `handup config keys` lists the
 keys `config get`/`set`/`unset` accept, including every remappable `keys.<id>`
-action, its label and default shortcut. Relay settings (`remote.relay.*`) are
+action, its label and default shortcut. `remote.relay.allow_plaintext_lan`
+is a validated boolean (default `false`); the other relay settings are
 edited in YAML (`handup config edit`), see [relay](docs/public/relay.md).
 
 | Command | Effect |
@@ -1228,6 +1230,8 @@ data and state. `HANDUP_DATA_DIR`, `HANDUP_STATE_DIR`, and `HANDUP_SOCKET`
 override these paths. Existing data/state/socket-parent directories must already
 be private (0700); shared directories and symlinks are rejected rather than
 chmodded. A process lock prevents a second daemon on the same state directory.
+The daemon creates and repairs its database and SQLite sidecar files to mode
+0600 on open.
 
 ### Storage usage and cleanup
 
@@ -1279,8 +1283,8 @@ forgets it.
 
 API v1 covers health/OpenAPI, requests, long-poll wait, hash-bound decisions,
 cancellation, blob upload/Range download, and WebSocket `/v1/events` (pinged
-every 25 s; treat a longer silence as a dead connection). The same
-API runs on the Unix socket and `daemon.listen` (default `127.0.0.1:7465`). Unix
+every 25 s; return Pong or the server closes after two unanswered intervals).
+The same API runs on the Unix socket and `daemon.listen` (default `127.0.0.1:7465`). Unix
 access relies on filesystem permissions. TCP requires a bearer token, a loopback
 Host, and an absent or trusted Origin (Tauri origins or `remote.web_origin`).
 `daemon.listen` must be loopback; remote access is a separate listener
@@ -1318,7 +1322,8 @@ Native notifications support sound/visual/both, new requests, critical
 high-risk urgency on Linux (bypasses quiet hours), expiry warnings, reminders,
 and quiet hours. Sound uses `paplay` (Linux) or `afplay` (macOS), with a
 platform sound or `notifications.sound_file`. Notification text redacts common
-credentials and includes the request ID. Linux notification actions follow
+credentials (including handup device tokens, license keys, and labeled relay
+secrets) and includes the request ID. Linux notification actions follow
 `none|low_risk|all`; macOS actions are not supported. Deny actions cannot bypass
 a required-feedback policy. An info notice reads "Notice: title" with its
 redacted summary as the body, and its actions are **OK** and **Dismiss**.
@@ -2054,7 +2059,10 @@ running, the app starts `handup serve`. You can also start it from the
 
 Run `handup ui` to open the inbox, or `handup ui --next` to open the compact
 quick window on the oldest pending request. Only one instance runs at a time,
-so a second launch focuses the existing window. Closing the main window hides
+so a second launch focuses the existing window; `handup ui --next` switches a
+running app to the quick window on Linux and macOS alike. On launch the inbox
+keeps its default size when it fits, and on small displays shrinks to 90% of
+the monitor's work area (menu bar, dock and panels excluded), centered. Closing the main window hides
 it to the tray, and the tray icon shows the pending count. If the app binary
 was replaced since the running instance started (an upgrade), re-opening it
 from the launcher, `handup ui`, or the tray menu starts the new version and
@@ -2477,7 +2485,7 @@ remote listener uses TLS. Pick **Can decide** or **View only**. When
 
 Each code works once and expires after 2 minutes; the dialog counts down and
 **New code** issues a fresh one. When a phone uses the code, the dialog shows
-"Paired: \<name\>". If remote access is off, the dialog explains how to turn it
+"Paired: \<name\>". For direct/Tailscale pairing when remote access is off, the dialog explains how to turn it
 on (`handup config set remote.mode tailscale`, then restart the daemon) and
 links to [Remote access](docs/public/remote.md). The button exists only in the desktop
 app: pairing codes are local-only, so the web UI and the mobile app never
@@ -2594,8 +2602,11 @@ curl -fsSL https://github.com/gethandup/handup/releases/latest/download/install.
 
 The script detects your OS and CPU (x86-64 or ARM64), downloads the matching
 `handup_<version>_<os>_<arch>.tar.gz`, verifies it against the release
-`checksums.txt` (SHA-256) and installs `handup` to `~/.local/bin`. It never
-uses sudo and refuses to install if the checksum is missing or wrong.
+`checksums.txt` (SHA-256) and installs `handup` to `~/.local/bin`. When minisign
+is installed and the release has a signature, it verifies that signature first
+and refuses to install if it is invalid. Without minisign, or for older releases
+without a signature, it prints a note and still checks SHA-256. It never uses
+sudo and refuses to install if the checksum is missing or wrong.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -2693,12 +2704,16 @@ See [remote access](docs/public/remote.md).
 
 ## Verify a download
 
-Every release publishes `checksums.txt` with SHA-256 sums for all files. Put it
-next to your download and check:
+Every release publishes `checksums.txt` with SHA-256 sums for the downloads.
+Signed releases also publish `checksums.txt.minisig`. Install
+[minisign](https://jedisct1.github.io/minisign/), put both files next to your
+download, and verify the signature before checking the checksum:
 
 ```sh
 curl -fsSLO https://github.com/gethandup/handup/releases/latest/download/checksums.txt
-sha256sum --ignore-missing -c checksums.txt          # Linux
+curl -fsSLO https://github.com/gethandup/handup/releases/latest/download/checksums.txt.minisig
+minisign -Vm checksums.txt -P RWRmxfwgJLzyYHvZKxoWSd44lp0rN3pUKD4HVPJIfwntmiIFFWDPW8V/
+sha256sum -c --ignore-missing checksums.txt          # Linux
 shasum -a 256 --ignore-missing -c checksums.txt      # macOS
 ```
 
@@ -2720,12 +2735,27 @@ See [agent setup](docs/public/agents/mcp.md) to configure one agent at a time.
 Every update is a new binary release; see the [changelog](https://github.com/gethandup/handup/releases).
 
 - Install script: re-run the same one-liner. It upgrades only when the release is
-  newer, keeps the previous binary as `handup.backup.<date>` (newest three kept)
+  newer by SemVer precedence (a prerelease such as `v1.2.0-rc.1` is older than
+  `v1.2.0`), keeps the previous binary as `handup.backup.<date>` (newest three kept)
   and restores it if the new binary fails to start.
 - Debian/Fedora/Alpine/Arch: install the newer package file the same way.
 - Desktop app: install the newer AppImage, package or `.dmg` over the old one.
 - Homebrew: `brew upgrade --cask handup`.
 - Android: install the newer APK over the old one.
+
+After updating the binary:
+
+1. Restart the daemon so it loads the new executable:
+   `systemctl --user restart handup.service` on Linux, or
+   `launchctl kickstart -k "gui/$(id -u)/com.handup.daemon"` on macOS.
+   For a manually started daemon, stop it and run `handup serve --foreground`
+   again. There is no `handup service restart` command.
+2. Reapply the current integration with `handup integrate all` (or your chosen
+   agent target) and refresh the bundled skill with `handup skill install`.
+3. Restart your agent sessions and their handup MCP servers so they load the
+   new binary and integration configuration; close and reopen the desktop app.
+4. Run `handup doctor --json` and `handup version` to check the updated setup.
+
 
 ## Uninstall
 
@@ -2754,7 +2784,10 @@ distributed separately from the application repository.
 Some integrations and web assets necessarily include readable scripts; that is
 not publication of the complete application source. Third-party components
 retain their licenses, and distribution must satisfy their notice and any
-applicable source-offer requirements.
+applicable source-offer requirements. Their license texts ship as
+`THIRD_PARTY_NOTICES.md`: in every CLI archive, at
+`/usr/share/doc/handup/THIRD_PARTY_NOTICES.md` from the Linux packages, and as a
+bundled resource of the desktop app.
 
 ---
 
@@ -4053,6 +4086,17 @@ The relay works alongside any `remote.mode`, including `off`. The phone uses
 the same API v1, scopes, biometric gate, and content-hash-bound decisions as
 the [remote listener](docs/public/remote.md).
 
+Relay URLs require HTTPS by default, except for loopback and Tailscale
+addresses (`100.64.0.0/10` and `fd7a:115c:a1e0::/48`). On a trusted LAN,
+the daemon can explicitly opt in with `remote.relay.allow_plaintext_lan: true`
+(default `false`; also listed by `handup config keys`). This permits HTTP
+to RFC1918, IPv6 ULA, and link-local addresses, not public addresses or
+arbitrary hostnames. HTTP exposes relay credentials and push tokens even
+though request content remains end-to-end encrypted. Prefer HTTPS; phones
+still require a secure relay URL, so set `remote.relay.public_url` to an HTTPS
+URL if the daemon uses a private HTTP endpoint. Restart the daemon after
+changing this setting.
+
 **Settings → Test** can send a synthetic request or question through the relay
 to the selected paired computer. `POST /v1/requests/test` uses the same
 [test request contract](docs/public/cli.md#test-requests) as local and remote HTTP access:
@@ -4184,6 +4228,12 @@ platforms, outcomes and rejection reasons, never channel/tenant ids, tokens or I
 Scale on authenticated daemon/device connections, not the HTTP connection gauge.
 `handup_relay_db_lookups_total{kind="channel"|"tenant"|"readiness"}` counts
 credential and readiness lookups that reached the database.
+Missing or malformed channel credentials do not reach storage. Outside tenant
+mode, unknown channel IDs are cached for at most 10 seconds in a bounded cache;
+a channel created on another instance becomes usable after that interval.
+Tenant mode skips this cache, so re-enabling a tenant takes effect immediately.
+Successful channel authentication is never cached, so deletion and tenant
+revocation remain authoritative.
 
 `log_format` supports `text` (default) or `json`; `log_ips` defaults to true for
 self-hosted compatibility but tenant mode forces false. Set false for hosted
@@ -4365,14 +4415,16 @@ SHA-256 digests; channel credentials as digests too.
 
 ### TLS
 
-Use HTTPS for anything that is not loopback or a private network. You can
+Use HTTPS for anything that is not loopback or a tailnet address. You can
 pass `--tls-cert/--tls-key`, or put the relay behind a reverse proxy (Caddy,
 nginx) with a public certificate. The daemon and the app check relay
 certificates against the Mozilla roots.
 
 TLS protects the per-channel relay credentials and push tokens in transit.
 Request content is end-to-end encrypted either way. The client refuses plain
-`http://` except for loopback, private, link-local, and tailnet addresses.
+`http://` except for loopback and tailnet addresses; private and link-local
+LAN addresses need the daemon's `remote.relay.allow_plaintext_lan: true`
+opt-in, and phones never accept them (see above).
 
 ## Configure the daemon
 
@@ -4382,6 +4434,7 @@ remote:
     url: https://relay.example.com       # how the daemon reaches the relay
     public_url: ""                       # link URL for phones, when it differs from url
     push: wake                           # wake (generic title), title (request title), or off
+    allow_plaintext_lan: false           # true allows http:// to private/link-local LAN addresses
 ```
 
 Restart the daemon, then pair:
@@ -4444,6 +4497,11 @@ content-free wake hint. The relay then sends one of these requests:
 
 - FCM HTTP v1 with a service-account OAuth JWT.
 - APNs HTTP/2 with a token-based ES256 JWT.
+
+FCM/APNs base URLs and the FCM OAuth token endpoint must use HTTPS; only
+loopback HTTP is allowed for local tests. Provider responses, including errors,
+are capped at 64 KiB, and OAuth tokens are cached for at most one hour (with a
+60-second expiry safety margin).
 
 The notification carries only a title: "Approval requested" by default, or
 the credential-redacted request title with `push: title`. Redaction happens in
@@ -4619,7 +4677,11 @@ same database transaction, so a request that is already in flight cannot
 approve after its device is revoked. Request bodies are read only after the
 token, CSRF, and scope checks pass, and must arrive within 10 seconds (1 MiB
 max). Each remote listener serves at most 64 connections at once, and open
-event WebSockets count toward that limit. Connections that send no request
+event WebSockets count toward that limit. Each paired device may hold at most
+16 event subscriptions across listener sockets and relay streams combined; excess requests return
+HTTP 429. Slots are released when sockets close. The server pings every 25
+seconds and closes sockets that fail to return Pong for two ping intervals.
+Connections that send no request
 headers within 10 seconds (including the TLS handshake and idle keep-alive
 connections) are closed. The API equivalents are local-only:
 `GET /v1/devices`, `PATCH /v1/devices/{id}` with any combination of

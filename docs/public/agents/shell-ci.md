@@ -29,7 +29,7 @@ See [the result contract](mcp.md#desktop-run-results).
 `examples/deploy-gate.sh` skips its own execution on exit 5 and returns the
 desktop command's `run_result.exit_code`, or 1 when no exit code is available.
 
-Capture JSON even when exit is nonzero so human feedback is not lost. Do not use `|| true` before the execution gate. Ask auto-starts the local daemon unless daemon.autostart is false; wait/status do not. CI needs a reachable local daemon and a human able to decide (CLI, desktop app, terminal inbox, or a paired phone/browser when `remote.mode` is on; see [remote access](../remote.md)); unattended timeout is denial, not approval.
+Capture JSON even when exit is nonzero so human feedback is not lost. Do not use `|| true` before the execution gate. Ask auto-starts the local daemon unless daemon.autostart is false; wait/status do not. CI needs a reachable local daemon and a human able to decide (CLI, desktop app, terminal inbox, or a paired phone/browser through direct/Tailscale remote access or a configured relay, which works with `remote.mode` off; see [remote access](../remote.md) and [relay](../relay.md)); unattended timeout is denial, not approval.
 
 Agent shell tools often kill commands after a default timeout (omp: 300s), long before a human decides. Run `handup ask --wait` and `handup wait <id>` with the tool's timeout disabled or raised (omp: `timeout: 0`), or ask without waiting and keep the request id. A killed waiter is not an answer: the request stays pending. Reattach with `handup wait <id>` or read it with `handup status <id> --json`, and never act until the decision is approved.
 

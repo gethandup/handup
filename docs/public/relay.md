@@ -10,6 +10,17 @@ The relay works alongside any `remote.mode`, including `off`. The phone uses
 the same API v1, scopes, biometric gate, and content-hash-bound decisions as
 the [remote listener](remote.md).
 
+Relay URLs require HTTPS by default, except for loopback and Tailscale
+addresses (`100.64.0.0/10` and `fd7a:115c:a1e0::/48`). On a trusted LAN,
+the daemon can explicitly opt in with `remote.relay.allow_plaintext_lan: true`
+(default `false`; also listed by `handup config keys`). This permits HTTP
+to RFC1918, IPv6 ULA, and link-local addresses, not public addresses or
+arbitrary hostnames. HTTP exposes relay credentials and push tokens even
+though request content remains end-to-end encrypted. Prefer HTTPS; phones
+still require a secure relay URL, so set `remote.relay.public_url` to an HTTPS
+URL if the daemon uses a private HTTP endpoint. Restart the daemon after
+changing this setting.
+
 **Settings → Test** can send a synthetic request or question through the relay
 to the selected paired computer. `POST /v1/requests/test` uses the same
 [test request contract](cli.md#test-requests) as local and remote HTTP access:
@@ -141,6 +152,12 @@ platforms, outcomes and rejection reasons, never channel/tenant ids, tokens or I
 Scale on authenticated daemon/device connections, not the HTTP connection gauge.
 `handup_relay_db_lookups_total{kind="channel"|"tenant"|"readiness"}` counts
 credential and readiness lookups that reached the database.
+Missing or malformed channel credentials do not reach storage. Outside tenant
+mode, unknown channel IDs are cached for at most 10 seconds in a bounded cache;
+a channel created on another instance becomes usable after that interval.
+Tenant mode skips this cache, so re-enabling a tenant takes effect immediately.
+Successful channel authentication is never cached, so deletion and tenant
+revocation remain authoritative.
 
 `log_format` supports `text` (default) or `json`; `log_ips` defaults to true for
 self-hosted compatibility but tenant mode forces false. Set false for hosted
@@ -322,14 +339,16 @@ SHA-256 digests; channel credentials as digests too.
 
 ### TLS
 
-Use HTTPS for anything that is not loopback or a private network. You can
+Use HTTPS for anything that is not loopback or a tailnet address. You can
 pass `--tls-cert/--tls-key`, or put the relay behind a reverse proxy (Caddy,
 nginx) with a public certificate. The daemon and the app check relay
 certificates against the Mozilla roots.
 
 TLS protects the per-channel relay credentials and push tokens in transit.
 Request content is end-to-end encrypted either way. The client refuses plain
-`http://` except for loopback, private, link-local, and tailnet addresses.
+`http://` except for loopback and tailnet addresses; private and link-local
+LAN addresses need the daemon's `remote.relay.allow_plaintext_lan: true`
+opt-in, and phones never accept them (see above).
 
 ## Configure the daemon
 
@@ -339,6 +358,7 @@ remote:
     url: https://relay.example.com       # how the daemon reaches the relay
     public_url: ""                       # link URL for phones, when it differs from url
     push: wake                           # wake (generic title), title (request title), or off
+    allow_plaintext_lan: false           # true allows http:// to private/link-local LAN addresses
 ```
 
 Restart the daemon, then pair:
@@ -401,6 +421,11 @@ content-free wake hint. The relay then sends one of these requests:
 
 - FCM HTTP v1 with a service-account OAuth JWT.
 - APNs HTTP/2 with a token-based ES256 JWT.
+
+FCM/APNs base URLs and the FCM OAuth token endpoint must use HTTPS; only
+loopback HTTP is allowed for local tests. Provider responses, including errors,
+are capped at 64 KiB, and OAuth tokens are cached for at most one hour (with a
+60-second expiry safety margin).
 
 The notification carries only a title: "Approval requested" by default, or
 the credential-redacted request title with `push: title`. Redaction happens in

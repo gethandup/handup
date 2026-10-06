@@ -18,7 +18,10 @@ running, the app starts `handup serve`. You can also start it from the
 
 Run `handup ui` to open the inbox, or `handup ui --next` to open the compact
 quick window on the oldest pending request. Only one instance runs at a time,
-so a second launch focuses the existing window. Closing the main window hides
+so a second launch focuses the existing window; `handup ui --next` switches a
+running app to the quick window on Linux and macOS alike. On launch the inbox
+keeps its default size when it fits, and on small displays shrinks to 90% of
+the monitor's work area (menu bar, dock and panels excluded), centered. Closing the main window hides
 it to the tray, and the tray icon shows the pending count. If the app binary
 was replaced since the running instance started (an upgrade), re-opening it
 from the launcher, `handup ui`, or the tray menu starts the new version and
@@ -441,7 +444,7 @@ remote listener uses TLS. Pick **Can decide** or **View only**. When
 
 Each code works once and expires after 2 minutes; the dialog counts down and
 **New code** issues a fresh one. When a phone uses the code, the dialog shows
-"Paired: \<name\>". If remote access is off, the dialog explains how to turn it
+"Paired: \<name\>". For direct/Tailscale pairing when remote access is off, the dialog explains how to turn it
 on (`handup config set remote.mode tailscale`, then restart the daemon) and
 links to [Remote access](remote.md). The button exists only in the desktop
 app: pairing codes are local-only, so the web UI and the mobile app never

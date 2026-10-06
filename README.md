@@ -37,6 +37,13 @@ application source is not here.
 - **Fewer taps**: scoped allow rules, presence routing and a timed YOLO mode,
   with every auto-handled request still in the history.
 
+## Pricing
+
+- **Free 14-day trial**: every install works fully for 14 days, with no account or card.
+- **Personal license, $30 one-time** (plus tax where applicable): one person, all
+  their own machines, no subscription. [Buy on gethandup.dev](https://gethandup.dev/#pricing),
+  then run `handup license activate <key>` ([License and trial](docs/public/license.md)).
+
 ## Connect an agent
 
 ```sh
@@ -118,4 +125,5 @@ privately; see [SECURITY.md](SECURITY.md).
 
 Documentation is [CC BY 4.0](LICENSE.md#documentation-cc-by-40); the agent
 skill, examples and code snippets are [MIT](LICENSE.md#skill-examples-and-code-snippets-mit).
-The handup application is licensed separately and is not in this repository.
+The handup application is not in this repository; it is licensed under the
+[handup Terms of Service](https://gethandup.dev/terms), its end-user license agreement.

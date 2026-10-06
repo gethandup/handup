@@ -2,7 +2,10 @@
 
 This repository contains handup's documentation, agent skill and examples. It
 does not contain the handup application, which is licensed separately under its
-end-user license agreement.
+end-user license agreement: the [handup Terms of Service](https://gethandup.dev/terms).
+Every install includes a 14-day trial; after that, handup needs a
+[paid license](https://gethandup.dev/#pricing). See
+[License and trial](docs/public/license.md).
 
 ## Documentation: CC BY 4.0
 

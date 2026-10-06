@@ -1,6 +1,7 @@
 # Builds the Windows x86-64 CLI zip and desktop NSIS installer on this public
 # repo's free Windows runners, then smoke-tests both on that real Windows
-# machine: CLI + daemon over the token-gated loopback listener, silent install,
+# machine: CLI + daemon over the token-gated loopback listener (owner-only
+# state directory/token ACLs, shared-directory lockdown), silent install,
 # desktop launch (screenshot artifact) and silent uninstall.
 # The private source is checked out only inside the job (read-only deploy key)
 # and removed right after the build; nothing from it is committed, cached or
@@ -115,20 +116,48 @@ jobs:
           Set-Content -Path $env:HANDUP_CONFIG -Value "notifications:`n  enabled: false"
           & $exe version
           if ($LASTEXITCODE) { throw 'handup version failed' }
-          $daemon = Start-Process -FilePath $exe -ArgumentList 'serve' -PassThru -NoNewWindow -RedirectStandardError "$root\serve.log"
-          try {
-            # Wait for the listener without any CLI call that could autostart a second daemon.
-            $addr = $null
-            for ($i = 0; $i -lt 150 -and -not $addr; $i++) {
+          # Wait for the listener without any CLI call that could autostart a second daemon.
+          function Wait-Daemon($daemon, $state) {
+            for ($i = 0; $i -lt 150; $i++) {
               Start-Sleep -Milliseconds 200
-              if ($daemon.HasExited) { break }
-              if (Test-Path "$root\state\daemon.addr") {
-                $candidate = (Get-Content "$root\state\daemon.addr" -Raw).Trim()
+              if ($daemon.HasExited) { return $null }
+              if (Test-Path "$state\daemon.addr") {
+                $candidate = (Get-Content "$state\daemon.addr" -Raw).Trim()
                 $code = & curl.exe -s -o NUL -w '%{http_code}' "http://$candidate/v1/health"
-                if ($code -ne '000') { $addr = $candidate }
+                if ($code -ne '000') { return $candidate }
               }
             }
+            return $null
+          }
+          # The bearer token's directory and file: protected ACL, only this user, SYSTEM
+          # and Administrators. icacls prints principals only, never file contents.
+          function Assert-Private($path) {
+            icacls $path | Out-Host
+            $acl = Get-Acl -LiteralPath $path
+            if (-not $acl.AreAccessRulesProtected) { throw "$path still inherits its parent's ACL" }
+            $allowed = @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544')
+            foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+              if ($rule.AccessControlType -eq 'Allow' -and $allowed -notcontains $rule.IdentityReference.Value) {
+                throw "$path grants $($rule.IdentityReference.Value) access"
+              }
+            }
+          }
+          function Assert-DoctorPrivate {
+            $checks = (& $exe doctor --json) | ConvertFrom-Json
+            $global:LASTEXITCODE = 0
+            foreach ($name in 'state_directory', 'token') {
+              $check = $checks | Where-Object check -eq $name
+              "doctor ${name}: $($check.status) $($check.message)" | Out-Host
+              if ($check.status -ne 'OK') { throw "doctor $name is not OK" }
+            }
+          }
+          $daemon = Start-Process -FilePath $exe -ArgumentList 'serve' -PassThru -NoNewWindow -RedirectStandardError "$root\serve.log"
+          try {
+            $addr = Wait-Daemon $daemon "$root\state"
             if (-not $addr) { throw 'daemon did not start' }
+            Assert-Private "$root\state"
+            Assert-Private "$root\state\token"
+            Assert-DoctorPrivate
             # The loopback listener must refuse requests without the per-user bearer token.
             $code = & curl.exe -s -o NUL -w '%{http_code}' "http://$addr/v1/requests"
             if ($code -eq '200') { throw 'unauthenticated loopback request succeeded' }
@@ -151,6 +180,27 @@ jobs:
           } finally {
             if (-not $daemon.HasExited) { Stop-Process -Id $daemon.Id -Force }
             Get-Content "$root\serve.log" -ErrorAction SilentlyContinue
+          }
+          # A state directory we own but that Users can read (with a pre-existing
+          # world-readable token) must be locked down before the daemon serves.
+          $shared = Join-Path $env:RUNNER_TEMP 'handup-shared'
+          New-Item -ItemType Directory -Force $shared | Out-Null
+          Set-Content -Path "$shared\token" -NoNewline -Value ('0123456789abcdef' * 4)
+          icacls $shared /grant '*S-1-5-32-545:(OI)(CI)R' | Out-Host
+          if ($LASTEXITCODE) { throw 'granting Users read failed' }
+          icacls "$shared\token" /grant '*S-1-5-32-545:R' | Out-Host
+          if ($LASTEXITCODE) { throw 'granting Users read on the token failed' }
+          $env:HANDUP_STATE_DIR = $shared
+          $daemon = Start-Process -FilePath $exe -ArgumentList 'serve' -PassThru -NoNewWindow -RedirectStandardError "$root\serve-shared.log"
+          try {
+            if (-not (Wait-Daemon $daemon $shared)) { throw 'daemon did not start on the shared state directory' }
+            Assert-Private $shared
+            Assert-Private "$shared\token"
+            Assert-DoctorPrivate
+            'shared state directory locked down'
+          } finally {
+            if (-not $daemon.HasExited) { Stop-Process -Id $daemon.Id -Force }
+            Get-Content "$root\serve-shared.log" -ErrorAction SilentlyContinue
           }
       - name: Smoke installer and desktop app
         timeout-minutes: 8

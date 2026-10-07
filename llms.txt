@@ -134,12 +134,13 @@ See [Mobile](docs/public/mobile.md#offline).
 
 - [Downloads](docs/public/downloads.md): Compiled binaries and packages per platform (install script, Arch pacman package, deb, rpm, Alpine, Homebrew, AppImage, macOS desktop dmg, Windows x86-64 beta CLI zip and NSIS desktop installer, APK), checksum verification, updates and uninstall; no source build needed.
 - [License and trial](docs/public/license.md): 14-day trial, then `handup license activate KEY` (exchanged once at gethandup.dev, then offline) or `license import FILE`; when locked new requests are refused (exit 6, HTTP 402 `license_required`, MCP same code), Claude/Codex hooks and the omp extension fall back to the agent's own prompt and never allow, pending requests stay decidable; `GET/PUT/DELETE /v1/license`.
-- [Claude Code](docs/public/agents/claude-code.md): PermissionRequest hook, UserPromptSubmit and background (asyncRewake) Stop notice-reply hooks and MCP setup.
+- [Claude Code](docs/public/agents/claude-code.md): PermissionRequest hook, UserPromptSubmit and background (asyncRewake) Stop notice-reply hooks, opt-in turn-end notices (`handup config set integrations.claude.turn_notice true`) and MCP setup.
 - [Codex](docs/public/agents/codex.md): TOML MCP setup and short-timeout polling.
 - [Cursor](docs/public/agents/cursor.md): Global MCP configuration.
-- [omp](docs/public/agents/omp.md): Native MCP setup and profiles.
+- [omp](docs/public/agents/omp.md): Native MCP setup and profiles; opt-in turn-end notices (`handup config set integrations.omp.turn_notice true`, restart omp; needs the native extension).
 - [MCP](docs/public/agents/mcp.md): Tool contracts and stdio exchange.
 - [Any agent or custom harness](docs/public/agents/custom.md): Steps to wire handup into any harness via MCP, CLI or HTTP; execution gate and checklist.
+- [Agent lifecycle hooks](docs/public/agents/lifecycle-hooks.md): Advanced: post each finished turn as an info notice from omp, Claude Code (built in: `integrations.claude.turn_notice`), Codex, Cursor, Gemini CLI or opencode hooks/plugins, and which can be woken by a later reply.
 - [Shell and CI](docs/public/agents/shell-ci.md): Exit-code gating and feedback.
 - [Submit tokens](docs/public/integrations/tokens.md): Remote HTTP submission for CI, n8n and scripts.
 - [Email drafts](docs/public/agents/email.md): `email` preview plus input {to,cc,bcc,subject,body}; on approve send decision fields if present else the draft with your own mail tool; handup never sends.
@@ -277,6 +278,16 @@ and tells the agent not to run the command again.
 Info notices from MCP `notify` or `handup ask --kind info` are watched the same way, but push only a non-empty human reply: one visible `handup-notice-reply` message, `Reply from the human to your notice TITLE: FEEDBACK`, which wakes or steers the agent. An OK or Dismiss without a reply pushes nothing. Each reply is delivered once; if the [MCP server](docs/public/agents/mcp.md#notice-replies) already handed it to the agent in a later tool result, the extension stays silent.
 
 If a tool result already showed the final state (for example `check_request`, `wait_requests`, `handup wait`, `handup status`, or a blocking MCP call), the extension suppresses that push. Its own approval gates and question-dialog races remain inline and never push. Watchers stop on session switch/branch, shutdown or abort, retry daemon failures with backoff, and silently stop when a request is gone. Only requests observed in the current session are tracked; installing MCP alone does not enable push.
+
+### Turn-end notices
+
+Opt in to see each finished turn in handup without the agent calling `notify`:
+
+```sh
+handup config set integrations.omp.turn_notice true   # default false
+```
+
+Restart omp afterwards: the extension reads the setting once, through `handup config get`, when omp loads it. At each turn end (omp's `session_stop`, main session only, never subagents or task sessions) the extension posts the final assistant message as an info notice: the title is its first non-empty line without Markdown markers (at most 120 characters), the summary is the full text (cut at 16,000 characters), and the source is the omp session (agent, session id and title, cwd). It skips the notice when the run was aborted, the message has no text, or the agent already created a handup request in that run (MCP `request_approval`, `ask_question` or `notify`, or `handup ask` through bash); each new agent run resets that check. The notice is watched like any other: a typed reply arrives as one `handup-notice-reply` message that wakes or steers omp, and OK or Dismiss without a reply does nothing. Posting runs in the background, never delays or continues the turn, and silently ignores daemon errors. It needs the native extension (`handup integrate omp`); MCP alone cannot post it. For other agents, see [Agent lifecycle hooks](docs/public/agents/lifecycle-hooks.md).
 
 ### Limitations
 

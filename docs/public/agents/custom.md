@@ -97,7 +97,9 @@ lone OK choice instead. The human may add an optional reply; it arrives on its
 own (MCP: in later handup tool results; see [notice replies](mcp.md#notice-replies)).
 Other clients claim replies with `POST /v1/notice-replies` `{"id"}` or
 `{"session"}` (both may be given and must then match); each non-empty reply is
-returned once, to the first caller.
+returned once, to the first caller. To post every finished turn as a notice
+from an agent harness's own hooks (Stop, AfterAgent, plugins), see
+[Agent lifecycle hooks](lifecycle-hooks.md).
 
 ## 4. Persist the id, then wait
 

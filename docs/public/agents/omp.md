@@ -65,6 +65,16 @@ Info notices from MCP `notify` or `handup ask --kind info` are watched the same 
 
 If a tool result already showed the final state (for example `check_request`, `wait_requests`, `handup wait`, `handup status`, or a blocking MCP call), the extension suppresses that push. Its own approval gates and question-dialog races remain inline and never push. Watchers stop on session switch/branch, shutdown or abort, retry daemon failures with backoff, and silently stop when a request is gone. Only requests observed in the current session are tracked; installing MCP alone does not enable push.
 
+### Turn-end notices
+
+Opt in to see each finished turn in handup without the agent calling `notify`:
+
+```sh
+handup config set integrations.omp.turn_notice true   # default false
+```
+
+Restart omp afterwards: the extension reads the setting once, through `handup config get`, when omp loads it. At each turn end (omp's `session_stop`, main session only, never subagents or task sessions) the extension posts the final assistant message as an info notice: the title is its first non-empty line without Markdown markers (at most 120 characters), the summary is the full text (cut at 16,000 characters), and the source is the omp session (agent, session id and title, cwd). It skips the notice when the run was aborted, the message has no text, or the agent already created a handup request in that run (MCP `request_approval`, `ask_question` or `notify`, or `handup ask` through bash); each new agent run resets that check. The notice is watched like any other: a typed reply arrives as one `handup-notice-reply` message that wakes or steers omp, and OK or Dismiss without a reply does nothing. Posting runs in the background, never delays or continues the turn, and silently ignores daemon errors. It needs the native extension (`handup integrate omp`); MCP alone cannot post it. For other agents, see [Agent lifecycle hooks](lifecycle-hooks.md).
+
 ### Limitations
 
 The extension uses omp's `additionalContext` tool-result channel (declared in 18.4.9; consumption verified in the installed 18.6.1 binary). It gates the configured names regardless of omp's approval tier; it is not a replacement for the entire omp policy engine. Because it races omp's native prompts, whichever side answers first decides; a native answer cancels the pending handup request. Native question chat/image answers remain native-only; remote answers support option labels and free text. It uses handup's local Unix socket (`HANDUP_SOCKET`, then the standard runtime/state location), not a remote relay.

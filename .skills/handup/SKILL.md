@@ -136,6 +136,7 @@ The reference tree is generated from canonical docs; do not hand-edit it.
 | Printing agent instructions with the CLI, GitHub npx skill installation or supported agents | [Agent skill](references/docs/public/agents/skill.md) |
 | MCP setup, every tool argument, structured multi-question forms, polling or client timeouts | [MCP](references/docs/public/agents/mcp.md) |
 | Adding handup to an agent or harness without a dedicated guide (own agent loop, SDK app, framework, remote HTTP) | [Any agent or custom harness](references/docs/public/agents/custom.md) |
+| Posting each finished agent turn as a notice (omp `integrations.omp.turn_notice`, Claude Code `integrations.claude.turn_notice`, Codex/Cursor/Gemini hooks, opencode plugins) or waking an agent with a notice reply | [Agent lifecycle hooks](references/docs/public/agents/lifecycle-hooks.md) |
 | Claude Code permission hooks and fail-closed fallback | [Claude Code](references/docs/public/agents/claude-code.md) |
 | Cursor MCP configuration | [Cursor](references/docs/public/agents/cursor.md) |
 | Shell/CI execution gates and nonzero decisions | [Shell and CI](references/docs/public/agents/shell-ci.md) |

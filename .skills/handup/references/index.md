@@ -15,6 +15,7 @@ human-readable guide text in one file, read [llms-full.txt](llms-full.txt).
 - [cursor](docs/public/agents/cursor.md)
 - [Any agent or custom harness](docs/public/agents/custom.md)
 - [Email drafts](docs/public/agents/email.md)
+- [Agent lifecycle hooks (advanced)](docs/public/agents/lifecycle-hooks.md)
 - [MCP stdio](docs/public/agents/mcp.md)
 - [omp](docs/public/agents/omp.md)
 - [Shell and CI](docs/public/agents/shell-ci.md)

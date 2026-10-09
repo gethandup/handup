@@ -216,7 +216,8 @@ Questions instead of approvals: MCP `ask_question`, or `kind: "question"` with
 Information that needs no reply (status, finished results, heads-ups): MCP
 `notify`, `handup ask --kind info`, or `kind: "info"`. A notice gets **OK** and
 **Dismiss** options (both record `status: dismissed`), never takes `input`, and
-is never decided by rules or YOLO. Put the message text in `summary` under a
+is never approved by YOLO; a human's `dismiss` rule or mute may dismiss it on
+arrival. Put the message text in `summary` under a
 one-line `title`; there is no body or message field.
 Submit it and move on; do not wait for it, poll it, or ask a question with a
 lone OK choice instead. The human may add an optional reply; it arrives on its
@@ -250,11 +251,19 @@ alive while answers you need are pending unless your client pushes decisions
 | --- | --- | --- |
 | `approved` | Human approved | If `run_result` is present, consume it and do not run again; otherwise run exactly the reviewed action with `decision.fields` edits applied |
 | `answered` | Question submitted | Use `answers` (MCP) or `fields.answers` (CLI/HTTP decision) |
-| `dismissed` | Human read an info notice | Nothing; a notice gates no action |
+| `dismissed` | Human read an info notice (or a rule or mute dismissed it) | Nothing; a notice gates no action |
 | `denied` | Human said no | Stop; show `decision.feedback`; revise only if feedback asks |
 | `expired`, `cancelled` | No decision | Stop; not permission |
 | `pending` | Undecided | Keep waiting; not permission |
 | Any error | Transport/validation failure | Stop; fail closed |
+
+Creating requests is capped per agent session: past `requests.max_per_minute`
+(default 120) in one minute the daemon answers HTTP 429 with
+`"code": "rate_limited"` (CLI exit 4; MCP returns a tool error with the same
+text). Nothing was created. Stop and fix whatever is sending requests in a loop;
+do not retry in a tight loop. A human can also clear a flooding session at once:
+its pending requests come back `denied` with feedback "Cleared as a flood". See
+[floods and mutes](docs/public/rules.md#floods-and-mutes).
 
 Bind execution to `content_hash`: it covers the title, summary, kind, previews,
 options, input and callback URL the human saw. If the action you are about to run
@@ -769,7 +778,7 @@ MCP tools: `request_approval`, `ask_question`, `notify`, `check_request`, `wait_
 
 - `request_approval`: title (required), summary, kind, risk, previews [{type, path OR content OR email, lang?}], input (editable object, returned edited in decision `fields`), options [{id,label,outcome,style?}], timeout (duration string or `"none"`), on_timeout (`deny`|`expire`|`approve`, timed requests only), run_timeout (limit for a desktop Run of the command preview, e.g. `"30m"`; default `run.timeout`, capped at `run.max_timeout`; 1ms to one year; separate from `timeout`), dedupe_key (identical pending requests share one id), callback_url ([callbacks](docs/public/integrations/callbacks.md)), session, session_title, and wait (default true). Relative paths use the server cwd; files upload as immutable blobs. With a progressToken, blocking calls emit progress notifications every long-poll cycle.
 - `ask_question`: question and allow_free_text (both required, even with choices), choices, session, session_title, wait. Example: {"question":"Which region?","choices":["eu","us"],"allow_free_text":true}. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Offer at least two distinct choices, free text with no choices, or both: a single choice is rejected even with free text, and labels must be distinct after trimming. Use `notify` for status or results and `request_approval` for permission. Use `request_approval` with `kind: "question"` and `input.questions` for several questions, multi-select or a timeout; the single-choice guard applies only to MCP `ask_question`, not these forms or omp's native question bridge.
-- `notify`: title (required), summary, previews, session, session_title, timeout, dedupe_key. Put the message text in summary, shown under the one-line title; there is no body or message field, and a notice without summary or previews shows only its title. Tells the human something that needs no reply (status update, finished result, heads-up). It creates a `kind: info` notice and returns at once with `{id, status, message}`; never wait for or poll it. The human reads it and picks **OK** or **Dismiss** (status `dismissed` either way, `option` `ok` or `dismiss`), optionally with a reply; a timeout expires it. Rules and YOLO never decide notices. A reply reaches the agent by itself in later tool results ([notice replies](docs/public/agents/mcp.md#notice-replies)). Example: {"title":"Staging deploy finished","summary":"All checks passed."}.
+- `notify`: title (required), summary, previews, session, session_title, timeout, dedupe_key. Put the message text in summary, shown under the one-line title; there is no body or message field, and a notice without summary or previews shows only its title. Tells the human something that needs no reply (status update, finished result, heads-up). It creates a `kind: info` notice and returns at once with `{id, status, message}`; never wait for or poll it. The human reads it and picks **OK** or **Dismiss** (status `dismissed` either way, `option` `ok` or `dismiss`), optionally with a reply; a timeout expires it. YOLO never decides notices; a human's `dismiss` rule or mute may dismiss one on arrival. A reply reaches the agent by itself in later tool results ([notice replies](docs/public/agents/mcp.md#notice-replies)). Example: {"title":"Staging deploy finished","summary":"All checks passed."}.
 - `check_request` {"id"}: current decision JSON without waiting.
 - `wait_requests` {"ids":[…], "max_wait_seconds"?}: returns every decided request among ids at once, otherwise long-polls until the first decision or `max_wait_seconds` (default 25, max 300, within omp's 30s and Codex's 60s tool timeouts). Result: `{"decided":[decision JSON], "pending":[ids], "message"}`, plus `notices` {ids, message} for undismissed info ids, which it never waits on or reports as pending. Act on each decision and obey the pending result: with the omp extension's push note, end the turn and the decision wakes you; otherwise call again with the pending ids until `pending` is empty before ending the turn.
 - `cancel_request` {"id"}: retract a pending request you no longer need (plan changed, task abandoned). Never cancel to dodge a decision. Cancelling a request that is no longer pending is an error.
@@ -850,12 +859,25 @@ Ask before destructive/irreversible actions, external publication or messages, c
 
 Tool cancellation stops waiting but preserves the pending request; use wait_requests to resume, or cancel_request to retract it. Daemon/API failures return isError=true, never approval. MCP path previews cannot read stdin. For content use UTF-8 text; use path for binary media.
 
+Use `path` rather than `content` when the human should be able to open or
+download the file, including text files. Every stored-file preview has a compact
+`name · type · size` row above it with icon-only **Open** and **Download** actions
+(HTML has **Download** only). Inline content without a blob has no file actions.
+
 When handup's trial has ended or its license was revoked, tools that create a
 request return isError=true with `{"error":"license required: …","code":"license_required"}`.
 That is not a decision: tell the human to activate a license (`handup license
 activate KEY` or Settings → License) and do not act. `check_request`,
 `wait_requests`, `cancel_request` and `list_requests` keep working on pending
 requests. See [License](docs/public/license.md).
+
+When one agent session has created `requests.max_per_minute` requests (default
+120) within a minute, tools that create a request return isError=true with an
+`error` text containing `daemon HTTP 429 Too Many Requests` and `"code":"rate_limited"`.
+Nothing was created and it is not a decision. Stop creating requests, tell the
+human, and do not retry in a loop. If the human clears a flooding session, its
+pending requests come back denied with feedback "Cleared as a flood". See
+[floods and mutes](docs/public/rules.md#floods-and-mutes).
 
 ## Notice replies
 
@@ -954,7 +976,9 @@ Opt in to see each finished turn in handup without the agent calling `notify`:
 handup config set integrations.omp.turn_notice true   # default false
 ```
 
-Restart omp afterwards: the extension reads the setting once, through `handup config get`, when omp loads it. At each turn end (omp's `session_stop`, main session only, never subagents or task sessions) the extension posts the final assistant message as an info notice: the title is its first non-empty line without Markdown markers (at most 120 characters), the summary is the full text (cut at 16,000 characters), and the source is the omp session (agent, session id and title, cwd). It skips the notice when the run was aborted, the message has no text, or the agent already created a handup request in that run (MCP `request_approval`, `ask_question` or `notify`, or `handup ask` through bash); each new agent run resets that check. The notice is watched like any other: a typed reply arrives as one `handup-notice-reply` message that wakes or steers omp, and OK or Dismiss without a reply does nothing. Posting runs in the background, never delays or continues the turn, and silently ignores daemon errors. It needs the native extension (`handup integrate omp`); MCP alone cannot post it. For other agents, see [Agent lifecycle hooks](docs/public/agents/lifecycle-hooks.md).
+Restart omp afterwards: the extension reads the setting once, through `handup config get`, when omp loads it. At each turn end (omp's `session_stop`, interactive main session only: never subagents, task sessions, or headless runs such as `omp -p`) the extension posts the final assistant message as an info notice: the title is its first non-empty line without Markdown markers (at most 120 characters), the summary is the full text (cut at 16,000 characters), and the source is the omp session (agent, session id and title, cwd). It skips the notice when the run was aborted, the message has no text, or the agent already created a handup request in that run (MCP `request_approval`, `ask_question` or `notify`, or `handup ask` through bash); each new agent run resets that check. The notice is watched like any other: a typed reply arrives as one `handup-notice-reply` message that wakes or steers omp, and OK or Dismiss without a reply does nothing. Posting runs in the background, never delays or continues the turn, and silently ignores daemon errors. It needs the native extension (`handup integrate omp`); MCP alone cannot post it. For other agents, see [Agent lifecycle hooks](docs/public/agents/lifecycle-hooks.md).
+
+Too many notices? Turn them off with `handup config set integrations.omp.turn_notice false`; new omp sessions pick it up, and sessions already open keep the value they loaded until restarted. The extension tells interactive sessions from headless ones by omp's `ctx.hasUI` (verified `false` under `omp -p` in omp 18.8.6), so headless runs post nothing even though omp treats them as main sessions and fires `session_stop` for them. Before this release, headless runs (scripted evals, tools that launch `omp -p`) also sent notices and could flood the inbox; update with `handup integrate omp` and restart omp, since a running session keeps the extension code it loaded.
 
 ### Limitations
 
@@ -1163,6 +1187,10 @@ handup devices unmute <id>   # resume push notifications
 handup devices scope <id> view # read-only; use decide to restore decision access
 handup devices revoke <id>   # permanently unpair
 handup yolo on --for 1h      # auto-approve new low/medium risk (hard: all); handup yolo off
+handup flood                 # sources sending a flood of requests, with mute/clear commands
+handup flood clear --agent A --session S  # dismiss its notices, deny its other pending requests
+handup mute --agent A --for 1h  # silence a source's notifications (--session, --dismiss-notices); bare: list
+handup unmute <id>           # or --all
 handup report                # support page in the browser; --feature, --question, --print
 handup version --plain       # alias: handup v
 handup config init           # --force overwrites existing config
@@ -1261,6 +1289,9 @@ agent failed. `--client` and `--list` are rejected with `all` (exit 4). Bare
 These apply to `ask`, `wait`, `status`, `show`, `approve`, `deny`, and `cancel`;
 `ls` returns 0 on success. Non-TTY queue commands never prompt or print banners.
 Exit 6 means the trial ended or the license was revoked; see [License](docs/public/license.md).
+When one agent session already created `requests.max_per_minute` requests
+(default 120) in the last minute, `ask` exits 4 with `daemon HTTP 429 Too Many
+Requests` and `"code": "rate_limited"`; see [floods and mutes](docs/public/rules.md#floods-and-mutes).
 `ask --wait --json` and `wait --json` print the decision (including feedback and
 `content_hash`) with `id` and `status`; a cancellation prints those three fields.
 Other queue commands print Request JSON. `--option id:label[:approve|deny]` adds
@@ -1268,7 +1299,9 @@ custom choices (default outcome approve, except id `deny`).
 
 `--kind info` submits a notice that needs no reply: it gets **OK** (`ok`,
 approve outcome) and **Dismiss** (`dismiss`, deny outcome) options,
-`on_timeout: expire`, takes no `input`, and is never decided by rules or YOLO.
+`on_timeout: expire`, and takes no `input`. YOLO never decides it; only a
+person, a [`dismiss` rule](docs/public/rules.md) or a [mute](docs/public/rules.md#floods-and-mutes)
+with `--dismiss-notices` dismisses it.
 Either choice records `status: dismissed` (exit 0); `decision.option` says which.
 Do not `--wait` on a notice; agents with MCP use `notify`. A human's optional
 reply is delivered once through `POST /v1/notice-replies` (MCP, the omp
@@ -1399,14 +1432,18 @@ handup config set requests.default_timeout 10m
 handup config set run.timeout 30m           # desktop Run limit; run.max_timeout caps it
 handup config set notifications.type visual
 handup config set notifications.quiet_hours 22:00-08:00
-handup config set notifications.backends '[desktop, ntfy]'
+handup config set notifications.backends '[desktop, push, ntfy]'
 handup config set notifications.ntfy.topic my-private-topic
+handup config set notifications.push.payload wake  # default; no request title
+handup config set notifications.push.url https://push.gethandup.dev
 handup config set remote.mode tailscale
 handup config set history.keep_days 30      # 0 disables the age cap
 handup config set history.max_requests 500  # 0 disables the count cap
 handup config set history.max_bytes 1073741824  # best-effort 1 GiB live-storage cap
 handup config set history.files_keep_days 7    # files only; keep decisions/audit
 handup config set previews.max_file_bytes 268435456
+handup config set notifications.burst.max 20  # pings per source per window; 0 = off
+handup config set requests.max_per_minute 120  # creation cap per source; 0 = off
 handup config set decisions.primary_side left  # Approve/Submit on the left
 handup config set keys.approve shift+y
 handup config set keys.help f1
@@ -1453,12 +1490,31 @@ put secrets in `config.yaml`.
 The daemon's `keys:` map overrides desktop/web shortcuts by action id; omitted
 actions keep their defaults. `handup config keys` lists the supported ids (for
 example `approve`, `deny`, `next`, `previous`, `search`, `help`, and `undo`).
+Inbox and History also support remappable `last` (default `shift+g`, with
+built-in `End`), `scroll_line_down` / `scroll_line_up` (`ctrl+e` / `ctrl+y`),
+`scroll_half_down` / `scroll_half_up` (`ctrl+d` / `ctrl+u`), and
+`scroll_page_down` / `scroll_page_up` (`pagedown` / `pageup`). Scroll actions
+move the request detail on screen, not the list. `first` is built in: press
+`g g` (the second `g` within 1 second) or `Home` to jump to the first request;
+`keys.first` cannot be overridden. `Ctrl+F` / `Ctrl+B` are not taken.
 This does not change the terminal inbox's keys.
 
 ```yaml
 keys:
   approve: shift+y
   help: f1
+```
+
+To use `Shift+J` / `Shift+K` for half-screen scrolling, first free their default
+selection-extension bindings by moving `extend_next` / `extend_previous` to
+Shift+arrows. Save all four overrides together:
+
+```yaml
+keys:
+  scroll_half_down: shift+j
+  scroll_half_up: shift+k
+  extend_next: shift+down
+  extend_previous: shift+up
 ```
 
 Keys are case-insensitive and normalized to lowercase. Combine `mod`, `ctrl`,
@@ -1475,11 +1531,20 @@ Two actions cannot use the same effective key in an overlapping view (Inbox
 or History), including unchanged defaults and built-in keys. `mod` conflicts
 with both the equivalent `ctrl` and `meta` binding, so the config works across
 platforms. Disjoint-view actions may share a key. Built-in `Esc`, `Enter`,
-arrows/Shift+arrows, `Home`/`End` (question answers), `Space`, `Tab`, `1`–`9`,
+arrows/Shift+arrows, `g`, `Home`/`End`, `Space`, `Tab`, `1`–`9`,
 and `mod+enter` remain reserved where they apply and cannot be remapped
-(`mod+shift+enter` is free). Unknown action ids, malformed keys and
+(`mod+shift+enter` is free). `g` and `Home` are reserved for `first`, and
+`End` for `last` even if `last` is remapped; Home/End also move through question
+answers. A conflict with Home/End names `first`/`last`, respectively.
+Unknown action ids, malformed keys and
 conflicts are refused without saving. To reuse a taken key, move the other
 action first. Remove an override from YAML to restore that action's default.
+
+`search` defaults to `/` and opens/focuses Inbox search or focuses History search.
+It is a list action, unavailable in the compact quick window or Auto-handled
+view. Because it now overlaps Inbox actions, it cannot share their keys (for
+example `keys.search: a` conflicts with Approve). Inbox search is hidden until
+opened and combines with filters; see [Inbox filters](docs/public/desktop.md#inbox-filters).
 
 CLI/YAML edits apply live (see [Live reload](docs/public/cli.md#live-reload)), and so does
 **Settings → Keyboard shortcuts**; its editor needs a fine pointer and
@@ -1608,6 +1673,48 @@ directory next to `token`.
 (`remote.mode`) that accepts paired device tokens and named submit tokens. See
 [remote access](docs/public/remote.md) and the generated [OpenAPI](docs/public/openapi.json).
 
+### Auto-handled read state
+
+**Mark read** in the Auto-handled view shares a read watermark across every
+device connected to the same daemon, separately for each computer. The daemon
+persists it across restarts; it is not a per-device display preference.
+
+| Endpoint | Contract |
+| --- | --- |
+| `GET /v1/auto-read` | 200 with `{"at":0}` until first marked read, then the stored watermark. Remote/relay devices need `view` (included in `decide`) |
+| `PUT /v1/auto-read` | Body `{"at":123}`; atomically stores `max(stored, at)` and returns 200 with `{"at":stored}`. Remote/relay devices need `decide`; `view` devices and submit tokens get 403 |
+
+`at` is a nonnegative integer in the UI's auto-decision timestamp unit, opaque
+to the daemon. Values above `9223372036854775807` (`i64::MAX`) return **400**
+without changing state. Older or equal writes cannot lower the watermark and
+emit no event. Only an increase emits `{"type":"auto_read.changed","at":123}`
+on `/v1/events`, so other connected devices follow without a reload.
+Local, remote HTTP and relay tunnel routers expose both methods.
+
+Clients keep a per-computer local copy for offline use, merge incoming values
+by maximum, and send a higher local mark on resync. With an older daemon that
+returns 404 for this endpoint, read state remains device-local.
+
+### WebSocket events
+
+`GET /v1/events` upgrades to a live event stream (paired remote/relay devices
+need `view`, included in `decide`). Each JSON message has `type` and its payload:
+
+| `type` | Payload |
+| --- | --- |
+| `request.created`, `request.decided`, `request.expired`, `request.cancelled` | `request`: the request with its current status; an auto-handled request arrives already decided |
+| `request.updated` | `request`: desktop run started, stop requested, claim released or interrupted (`request.run`) |
+| `yolo.changed` | `yolo`: the mode and timer after a change or timer expiry |
+| `auto_read.changed` | `at`: the shared Auto-handled read watermark, only when it rises |
+| `floods.changed` | `floods`: flooding sources after flooding or muted state changes |
+| `mutes.changed` | `mutes`: active mutes after adding, removing or timer expiry |
+| `keys.changed` | `keys`: the complete shortcut override map |
+| `config.changed` | `config`: applied keys, restart-required keys and any validation error; see [Live reload](docs/public/cli.md#live-reload) |
+
+Clients should ignore unknown event types. The server pings every 25 seconds;
+return Pong or the connection closes after two unanswered intervals. These
+live UI events are separate from the [lifecycle hook envelope](docs/public/integrations/hooks.md).
+
 ### Test requests
 
 `POST /v1/requests/test` creates a fixed synthetic request to try the inbox and
@@ -1645,6 +1752,10 @@ secrets) and includes the request ID. Linux notification actions follow
 a required-feedback policy. An info notice reads "Notice: title" with its
 redacted summary as the body, and its actions are **OK** and **Dismiss**.
 `notifications.suppress_when_focused` is reserved.
+Each agent session raises at most `notifications.burst.max` notifications
+(default 20) per `notifications.burst.window` (default `1m`) on every backend,
+then one summary; `handup mute` silences a source entirely. See
+[floods and mutes](docs/public/rules.md#floods-and-mutes).
 
 On macOS the daemon posts banners as the handup desktop app (`handup.app`), so
 click **Allow** when macOS asks whether handup may send notifications. Without
@@ -1652,11 +1763,33 @@ click **Allow** when macOS asks whether handup may send notifications. Without
 macOS does not show them. Banners also stay hidden while Screen Sharing is
 connected. See [desktop app on macOS](docs/public/desktop.md#macos).
 
+`notifications.backends` accepts `desktop`, `ntfy`, `fcm`, and `push`, and
+defaults to `[desktop, push]`. The licensed `push` backend for the official
+Android app is live at `https://push.gethandup.dev`. It requires an installed
+signed license and registered phone tokens with proof-of-possession device
+tickets; only verified phones get woken. No Firebase service-account key is
+needed on the computer.
+`notifications.push.url` defaults to `https://push.gethandup.dev` and requires
+HTTPS (loopback HTTP only for local tests). `notifications.push.payload` is
+`wake` by default (no request title), or `title` for the redacted title; neither
+sends previews. The gateway sees the signed license, phone tokens, device tickets,
+and routing metadata; Google sees the phone tokens and notification data.
+Listing `fcm` as well
+disables the gateway path; self-hosted FCM takes precedence even if its
+credentials fail.
+
 The `ntfy` backend sends only the title, risk, and a `handup://r/<id>` link
 (never preview content unless `ntfy.include_content`); `token_env` names an
 environment variable, not a secret value. See
 [notification backends](docs/public/remote.md#notification-backends). Lifecycle webhooks
 live under top-level `hooks:` ([event hooks](docs/public/integrations/hooks.md)).
+
+The doctor's `push` row names the push route: `off`, `self-hosted FCM` with the
+registered-device count, or `licensed gateway` with license, verified/unverified
+phones and whether the gateway answers. `push-last` shows the last delivery
+result and its age (for example `refused 5m ago: rate limited`), and `relay`
+checks that a configured relay answers. These rows only warn; network checks
+time out after 3 seconds. See [Android push](docs/public/mobile.md#official-app-licensed-push-gateway).
 
 `handup doctor` checks Linux GStreamer H.264, VP9, and Opus plugins and idle
 detection support. It also warns when the daemon runs a different build than
@@ -1987,8 +2120,10 @@ $ sh examples/cookbook/email-route.sh examples/cookbook/noreply-email.json
 denied: Never reply to no-reply senders; archive instead.      # exit 1
 ```
 
-Rule decisions are audited like any other: the desktop **Auto-handled** tab,
-`handup log --json`, and `GET /v1/requests?decided_by=rule` list them.
+Rule decisions are audited like any other: **N auto-handled · View** above the
+Inbox list opens their read-only view; **Mark read** leaves them in History
+and syncs the read state across devices connected to the same daemon.
+`handup log --json` and `GET /v1/requests?decided_by=rule` also list them.
 
 ## Guardrails
 
@@ -2397,6 +2532,42 @@ was replaced since the running instance started (an upgrade), re-opening it
 from the launcher, `handup ui`, or the tray menu starts the new version and
 exits the old one.
 
+## Inbox filters
+
+The desktop app, Android app and web inbox share one row of quick filter chips.
+In **Inbox**, request types with pending requests show a count; a selected type
+stays available even if its count drops to zero. Pick several types to show any
+of them, or tap a selected chip again to remove it. There is no **All** chip:
+nothing selected shows every pending request.
+
+**Filters** opens a small dialog on desktop or a bottom sheet on phones, with
+**Type** and **Agent** sections. Several picks in one section match any of them
+(OR); picks across sections must all match (AND). For example, Command or Edit
+plus agent `codex` shows only Codex's commands and edits. Agent picks appear
+after a divider in the row as removable chips, and the Filters button's badge
+counts those picks. A reset icon appears at the row end while filters or an
+Inbox query are active; it clears all picks and closes Inbox search. The row
+stays on one line and scrolls sideways with a swipe or mouse wheel instead of
+hiding chips in a More menu.
+
+Tap the search icon in the Inbox filter row or press `/` to open and focus
+search. The field is hidden by default, with no setting to enable it.
+It matches a case-insensitive substring in the title, summary, folder (`cwd`),
+repo, branch, agent, or session title, and combines with chip/sheet filters
+(AND). No matching pending requests shows **No matches**, not **All clear**.
+`Esc` in the field or **×** clears and closes search without changing filters;
+the reset icon clears both. `/` also focuses search in History. Search is not
+available in the Auto-handled view or the compact quick window.
+
+When automatic decisions are unread, a line above the list, such as
+**3 auto-handled · View**, opens the read-only **Auto-handled** view. It is not
+a filter tab. **← Inbox** returns to pending requests; **Mark read** moves
+those decisions out of this view and leaves them available in History. Read
+state is shared across every device connected to the same daemon, separately
+for each computer, and survives daemon restarts. A paired device needs
+`decide` access to update that shared state; `view` access can follow it.
+See the [auto-read API](docs/public/cli.md#auto-handled-read-state).
+
 ## Run a command
 
 Run is offered only for a request with exactly one command preview and one
@@ -2527,9 +2698,11 @@ Keyboard shortcuts**, select its key button and press the new key. `Esc` cancels
 capture; `Tab` leaves it. A taken key is refused inline, naming the other action;
 change that action first or choose another key. **Reset** restores one changed
 row (unless its default is now taken); **Reset all** restores every default.
-`Esc`, `Enter`, arrows (including Shift+arrows), `Home`/`End` in question
-answers, `Space`, `Tab`, `1`–`9` and `Ctrl+Enter`/`⌘+Enter` are built in and
-cannot be remapped.
+`Esc`, `Enter`, arrows (including Shift+arrows), `g g`, `Home`/`End`,
+`Space`, `Tab`, `1`–`9` and `Ctrl+Enter`/`⌘+Enter` are built in and cannot be
+remapped. `g` and `Home` stay reserved for the first request; `End` stays
+reserved for the last even if you change `Shift+G`. Home/End also move to the
+first/last answer while choosing a question's answers.
 
 Shortcuts save to the connected computer's daemon config (`keys:`), not to this
 device's preferences. Settings changes apply live to every connected window and
@@ -2541,9 +2714,11 @@ and view-only devices show a read-only list. You can also use
 | Key | Action |
 | --- | --- |
 | `j` / `k` (or `↓` / `↑`) | Next / previous request (also in History) |
+| `g g` (second `g` within 1 second) or `Home` | First request (also in History; built in) |
+| `Shift+G` (or `End`) | Last request (also in History; `Shift+G` is remappable) |
 | `Shift+J` / `Shift+K` | Extend the selection |
 | `Shift+A` | Select the whole session |
-| `/` | Search History |
+| `/` | Open/focus Inbox search or focus History search (not Auto-handled or the quick window) |
 | `h` | Switch between Inbox and History |
 | `i` | Back to the Inbox |
 | `Esc` | Leave a field, the wide preview or the selection; close a sheet |
@@ -2559,10 +2734,16 @@ and view-only devices show a read-only list. You can also use
 | `u` | Undo the newest decision still waiting to be sent; press again for the one before |
 | `Enter` | On a question, submit once every question is answered (a question's only choice, such as OK, counts as answered, so an OK-or-reply question submits without typing); otherwise step into the first open question's answers (`↑`/`↓` or `j`/`k` move, `Space` or `Enter` chooses, `Tab` goes to the next field, `Esc` returns to the list). Enter never moves into a reply box: press `f`. On a notice, OK; otherwise like `o` |
 | `o` | Open the file on screen in its default app (in a file bundle, the file picked in the list) |
+| `Ctrl+E` / `Ctrl+Y` | Scroll the request on screen down / up a line (also in History) |
+| `Ctrl+D` / `Ctrl+U` | Scroll the request on screen down / up half a screen (also in History) |
+| `PageDown` / `PageUp` | Scroll the request on screen down / up a screen (also in History) |
 | `p` | Widen the preview (hide the list); `p` or `Esc` to go back |
 | `t` | Toggle light/dark theme |
 | `m` | Devices (desktop app) |
 | `?` | Show the shortcuts (the sheet also links **Report a bug**) |
+
+The scroll keys move the request detail, not the list, and can be remapped.
+`Ctrl+F` / `Ctrl+B` are not taken; `Ctrl+F` stays available for browser Find.
 
 Decision buttons show their effective key; the hints change with your shortcuts.
 Submit keeps the built-in `Ctrl↵` or `⌘↵`.
@@ -2601,7 +2782,7 @@ summary with **OK** and **Dismiss** actions, which send no reply.
 
 `t` switches to an explicit light or dark theme. The **Settings** button in the
 header opens a dialog with collapsible **Appearance**, **Decisions**, **Sync**,
-**Read aloud**, [**Storage**](docs/public/desktop.md#storage), [**License**](docs/public/license.md), **Test**, **Keyboard shortcuts**,
+**Read aloud**, [**Dictation**](docs/public/desktop.md#dictation), [**Storage**](docs/public/desktop.md#storage), [**License**](docs/public/license.md), **Test**, **Keyboard shortcuts**,
 [**Help & feedback**](docs/public/index.md#report-a-bug-or-request-a-feature), and **About** groups. **Appearance** sets the theme (System,
 Light, Dark), color palette, density, and layout. **Decisions** holds the undo
 window, approve button side, **Swipe cards** on narrow screens (on by default),
@@ -2671,6 +2852,14 @@ The **YOLO** switch in the header turns on [YOLO mode](docs/public/rules.md#yolo
 risk, for 15m, 1h, 4h, or until turned off. While it is on the header shows a
 warning pill (**HARD YOLO** in the destructive color) with the time left.
 
+When one agent session sends a flood of requests (40 in a minute by default),
+a banner at the top of the inbox list says "*agent* · *session* sent *N*
+requests in the last minute". **Mute 1h** silences its notifications for an
+hour (**Unmute** undoes it), **Dismiss all (N pending)** asks for confirmation,
+then dismisses its pending notices and denies its other pending requests, and
+**×** hides the banner until the window reloads. See
+[floods and mutes](docs/public/rules.md#floods-and-mutes).
+
 If the daemon stops after the inbox has loaded, the inbox stays up and the
 header shows **Syncing…** then **Offline · synced hh:mm** (click to retry, or
 **Start daemon**). Decisions made meanwhile wait in the outbox with **Undo** and
@@ -2725,18 +2914,92 @@ the Speech Dispatcher service and a voice. Other desktop platforms use their
 OS speech backend. Voices come from the device;
 online voices send the spoken text to the voice provider.
 
+**Voice provider** chooses who speaks: **This device** (default, free) or a
+cloud voice from **OpenAI** or **ElevenLabs**. A cloud provider needs your own
+API key (see [cloud speech providers](docs/public/desktop.md#cloud-speech-providers)); pick an
+**OpenAI voice** or enter an **ElevenLabs voice ID**, and optionally a **Voice
+model** (empty uses the provider's default). The voice list and **Pitch** apply
+to **This device** only; **Speed** applies to both.
+
+## Dictation
+
+Click the mic (**Dictate**) beside a text field, speak, then click it again
+(**Stop dictation**). The words are added to the end of the field and stay
+editable; nothing is sent until you submit. The mic appears beside the
+free-text answer to a question, **Feedback for the agent** and **Reply to the
+agent**, text fields an agent asks you to fill in, and an email draft's
+**Subject** and **Body** (not the raw JSON editor). It shows **Listening…**,
+then **Transcribing…** after you stop. Starting dictation stops read aloud
+first. Each recording keeps at most its first two minutes.
+
+**Settings → Dictation** saves, on this computer:
+
+- **Provider**: **This device** (default, free) transcribes on this computer
+  with whisper.cpp; or **OpenAI**, **Groq** or **ElevenLabs** (see
+  [cloud speech providers](docs/public/desktop.md#cloud-speech-providers)), with an optional
+  **Transcription model** (empty uses the provider's default).
+- **Language**: **Detect automatically** (default) or a fixed language.
+- **Speech model** (This device only): **tiny** (about 78 MB), **base**
+  (default, about 148 MB) or **small** (about 488 MB). Larger models are more
+  accurate but slower. Select the model to use. No model ships with the app:
+  click **Install** beside one to download it from the whisper.cpp model
+  repository on Hugging Face (progress shows as **Downloading N%**). handup
+  checks its size and SHA-256 before keeping it, and after that dictation works
+  offline. **Remove**
+  deletes a model. Models are stored in the app's data directory, under
+  `stt-models` (for example `~/.local/share/dev.handup.app/stt-models` on
+  Linux).
+- **Models you already have (Linux):** if another speech tool on this computer
+  already downloaded a whisper.cpp model, handup uses it instead of asking you to
+  install one, and the model's row in Settings shows **Using base.en from voxtype** (plus
+  **English only** for `.en` models). It picks the same size as the selected model
+  when one exists, else base, small, tiny, medium, then large. handup only reads
+  these files, never changes or deletes them, and a model you install yourself
+  always wins. It looks in the default model folders of voxtype (Omarchy's
+  dictation), hyprwhspr, Handy, OpenWhispr, Speech Note (also the Flatpak), GNOME
+  Speech2Text, whisper-dictation, Buzz and the AUR `whisper.cpp-model-*`
+  packages. Tools that use another format, such as nerd-dictation (Vosk), can't
+  be reused.
+- Dictating with no installed or reusable model shows **Speech model not
+  installed. Install one in Settings → Dictation.**
+
+On macOS, the first dictation asks for microphone access for handup; if you
+deny it, allow handup under **System Settings → Privacy & Security →
+Microphone**. Without a microphone, Settings says **On-device dictation isn't
+available here**.
+
+### Cloud speech providers
+
+Cloud dictation and cloud read aloud are optional and off by default. Enter
+your own key in **OpenAI API key**, **Groq API key** or **ElevenLabs API key**
+and click **Save**; the field then shows **Configured**, and **Clear** removes
+the key. A key saved under Read aloud also counts for Dictation and the other
+way round. Keys are stored only in the operating system's secure storage
+(Keychain on macOS, Credential Manager on Windows, the Secret Service keyring on
+Linux), are write-only (never shown again) and are never sent to the daemon,
+paired devices or a relay: the app calls the provider directly. Cloud
+providers receive your recorded audio (dictation) or the text being read (read
+aloud), and may bill your account for it.
+
 ## History
 
 The **Inbox | History** switch at the top of the list (or `h`) shows resolved
 requests, newest first and grouped by day. Each row shows the outcome
 (approved, denied, dismissed, expired, cancelled, or auto for rule, YOLO, and decide hook decisions), the agent,
-and when it was resolved. Search matches the title, summary, and folder; the
-chips filter by outcome, **Files** (file, bundle, image, PDF, audio, or video
-previews), and request kind (Command, Edit, Review, Question, Info, or Custom).
-Filters combine; tap the selected Files/kind chip again to clear it.
-These chips and the Inbox filter tabs stay on one line; whatever doesn't fit
-moves into a **More** menu, which shows the active filter's name when it is
-hidden there.
+and when it was resolved. Search matches the title, summary, and folder.
+The quick filter row has outcome chips with colored dots; several outcomes
+can be selected at once. Nothing selected shows every outcome.
+
+**Filters** opens the same dialog or bottom sheet as Inbox, with **Outcome**,
+**Type**, **Agent**, and **Has files** sections. Type means request kind
+(Command, Edit, Review, Question, Info, or Custom); **Files** matches file,
+bundle, image, PDF, audio, or video previews. Picks within a section combine
+with OR; across sections they combine with AND. Type, agent and Files picks
+appear after a divider as removable chips, counted by the Filters badge.
+The row stays on one line and scrolls sideways with a swipe or mouse wheel.
+Tap a selected outcome again to remove it, or use the reset icon at the row
+end to clear all chip/sheet filters without clearing search.
+
 Changing filters discards any older page still loading for the previous filters.
 `j`/`k` move and `/` focuses search. Inbox remains the default view.
 
@@ -2753,8 +3016,15 @@ Attachments retain their **Open** and **Download** actions in read-only history.
 
 The API is `GET /v1/history` with optional `outcome`, `agent`, `type` (one
 preview type), `has=attachments`, `kind`, and `q` (title, summary, folder).
-All filters combine. `limit` defaults to 50 (maximum 500); pass `next_cursor`
-as `cursor` with the same filters to fetch older results without duplicates.
+`outcome`, `kind`, and `agent` each accept one value or a comma-separated list.
+Values within a parameter combine with OR; different parameters combine with
+AND. For example, `GET /v1/history?outcome=approved,denied&kind=command,edit&agent=codex,claude`
+matches either outcome, either kind, and either agent. An invalid outcome or
+kind member returns HTTP 400 for the whole query; single-value queries are
+unchanged. `type` still accepts one preview type, and `has=attachments` matches
+the same file previews as **Files**.
+`limit` defaults to 50 (maximum 500); pass `next_cursor` as `cursor` with the
+same filters to fetch older results without duplicates.
 Paired view/decide devices can also read `GET /v1/requests/{id}/audit`;
 submission tokens cannot access history or request audit.
 History keeps the last `history.keep_days` days and `history.max_requests`
@@ -2921,6 +3191,7 @@ agents; see the [quick start](docs/public/index.md#quick-start).
 | Android | APK (sideload) | Beta companion app for the daemon on your computer. |
 | Windows x86-64 | zip | Beta; CLI and daemon, no background service. |
 | Windows desktop app, x86-64 | NSIS installer (.exe) | Beta; not code-signed; bundles the CLI daemon. |
+| Self-hosted relay, Linux x86-64 / ARM64 server | tar.gz (from v0.1.7) | Optional; see [Self-hosted relay](docs/public/downloads.md#self-hosted-relay). |
 
 There is no iPhone app yet. See [Windows](docs/public/downloads.md#windows) for the Windows beta.
 Releases from v0.1.2 include the [web inbox](docs/public/web.md) that iPhone and other
@@ -3072,6 +3343,18 @@ to install unknown apps when Android asks, and open it. Pair it with
 `handup pair` on the computer. See [mobile](docs/public/mobile.md), which also links an
 [Obtainium](https://obtainium.imranr.dev) setup for automatic APK updates.
 
+## Self-hosted relay
+
+From v0.1.7, releases also include the optional
+[end-to-end encrypted relay](docs/public/relay.md) for your own Linux server:
+`handup-relay_<version>_linux_amd64.tar.gz` or
+`handup-relay_<version>_linux_arm64.tar.gz`. Choose the server's architecture,
+not this computer's. Each is a static (musl) build with the `handup-relay`
+binary, `LICENSE` and `THIRD_PARTY_NOTICES.md`; verify it like any other
+download (below). The website's downloads page lists them under **Self-hosted
+relay (Linux server)**. You need a relay only when a phone cannot reach your
+computer over Tailscale; see [relay setup](docs/public/relay.md#run-a-relay).
+
 ## Verify a download
 
 Every release publishes `checksums.txt` with SHA-256 sums for the downloads.
@@ -3118,6 +3401,8 @@ Every update is a new binary release; see the [changelog](https://github.com/get
   on Windows, quit the app and run the newer installer.
 - Homebrew: `brew upgrade --cask handup`.
 - Android: install the newer APK over the old one, or let Obtainium do it.
+- Self-hosted relay: replace the `handup-relay` binary with the newer archive's
+  and restart the relay.
 
 After updating the binary:
 
@@ -3162,7 +3447,7 @@ Some integrations and web assets necessarily include readable scripts; that is
 not publication of the complete application source. Third-party components
 retain their licenses, and distribution must satisfy their notice and any
 applicable source-offer requirements. Their license texts ship as
-`THIRD_PARTY_NOTICES.md`: in every CLI archive, at
+`THIRD_PARTY_NOTICES.md`: in every CLI and relay archive, at
 `/usr/share/doc/handup/THIRD_PARTY_NOTICES.md` from the Linux packages, and as a
 bundled resource of the desktop app.
 
@@ -3419,7 +3704,7 @@ Source: [docs/public/integrations/hooks.md](docs/public/integrations/hooks.md)
 Use top-level `hooks:` in `config.yaml` to send request lifecycle events to any
 HTTP receiver or local program, or to let a local policy program decide new
 requests. Restart `handup serve` after changing config. Hooks are independent of
-desktop/ntfy/FCM notifications, quiet hours, and `notifications.enabled`.
+desktop/ntfy/FCM/licensed push notifications, quiet hours, and `notifications.enabled`.
 `webhook:` and `exec:` delivery never changes an approval decision; only a
 [`decide:` hook](docs/public/integrations/hooks.md#decide-hooks) can.
 
@@ -3453,6 +3738,8 @@ For webhook and exec hooks, omit `events` for all events;
 `request.reminder`, and `request.expiring`. Reminder/expiring timing comes from
 `notifications.remind_every` / `notifications.on_expiring`, even when notification
 backends are disabled. Requests without deadlines never emit expiring events.
+A [muted](docs/public/rules.md#floods-and-mutes) source emits neither, and a reminder or
+expiry skipped by the per-source `notifications.burst` limit skips its event too.
 Decide hooks run only on `request.created`; setting `events` on one is a config
 error.
 
@@ -3608,8 +3895,11 @@ there is no fail-open path. If a human or rule decided first, the answer is
 silently ignored. Each hook handles one request at a time.
 
 `GET /v1/requests?decided_by=hook:` lists requests decided by any hook. History
-labels them "Hook \<name\>" and counts them as `auto`; the **Auto-handled** tab
-shows them. See the [policy auto-decider](docs/public/cookbook/auto-decider.md) recipe.
+labels them "Hook \<name\>" and counts them as `auto`; **N auto-handled · View**
+above the Inbox list opens their read-only view. **← Inbox** returns to pending
+requests; **Mark read** leaves them in History and syncs the read state across
+devices connected to the same daemon. See the [read-state API](docs/public/cli.md#auto-handled-read-state).
+See the [policy auto-decider](docs/public/cookbook/auto-decider.md) recipe.
 
 ## Signing, retries, and testing
 
@@ -3652,7 +3942,7 @@ A failed test returns the normal error exit code.
 Loading either fails with a hint to use `hooks:`. Move URL and `secret_env` into a
 named `webhook:` hook, select lifecycle `events`, and update the receiver
 from the old `{event,id,title,...}` body to the versioned envelope above. Keep
-`ntfy`, `desktop`, and `fcm` in `notifications.backends` unchanged.
+`ntfy`, `desktop`, `fcm`, and `push` in `notifications.backends` unchanged.
 
 The `type:`, `url:`, and `command:` hook keys are removed with no alias: write
 `webhook: <url>` or `exec: <program>` instead (unknown keys fail config load).
@@ -3671,7 +3961,8 @@ this section covers one of them.
 Setting up an agent to ask for approval is covered under
 [Agents](docs/public/agents/mcp.md), or for any other harness in
 [Any agent or custom harness](docs/public/agents/custom.md). Phone notifications through
-ntfy are covered in [Remote access](docs/public/remote.md#notification-backends);
+ntfy, self-hosted FCM, and the live licensed push gateway (verified official-app phones) are
+covered in [Remote access](docs/public/remote.md#notification-backends);
 lifecycle webhooks, exec commands, and local `decide:` policy programs in
 [event hooks](docs/public/integrations/hooks.md).
 
@@ -4006,13 +4297,50 @@ default). Switching apps or otherwise hiding handup ends that window and hands
 held decisions to delivery immediately. On Android, a native outbox keeps
 retrying offline decisions in the background; see [Offline](docs/public/mobile.md#offline) for limits.
 
+## Inbox filters
+
+The Android app uses the same [filters as desktop](docs/public/desktop.md#inbox-filters).
+One sideways-scrolling row shows request-type chips with counts for types
+present in the inbox (and any selected types). Pick several to show any of
+them; tap again to remove a pick. No **All** chip is needed: nothing picked
+shows everything.
+
+The **Filters** button opens a bottom sheet with **Type** and **Agent**
+sections. Picks within a section combine with OR; across sections they combine
+with AND. Agent picks appear after a divider as removable chips, with their
+count on the Filters button. The reset icon at the row end appears while
+filters or an Inbox query are active and clears both.
+
+Tap the search icon in the Inbox filter row to open a focused search field
+(or press `/` on a hardware keyboard). Search is hidden by default, with no
+setting. A case-insensitive substring matches title, summary, folder (`cwd`),
+repo, branch, agent, or session title, combined with your chip/sheet filters
+(AND). An empty result shows **No matches**. **×** or `Esc` in the field clears
+and closes search; reset also clears the filters. Auto-handled has no search.
+
+Unread automatic decisions appear above the list as **N auto-handled · View**,
+not as a tab. Tap **View** for the read-only **Auto-handled** view, **← Inbox**
+to go back, or **Mark read** to leave those decisions in History. Marking read
+syncs to every device connected to that computer's daemon and survives daemon
+restarts; each paired computer has its own read state. Updating shared read
+state needs `decide` access; view-only devices follow it.
+
 ## History
 
-The **History** tab above the request list shows resolved requests grouped by
-day, with search and outcome chips; swipe the chip rows sideways to see more.
-Tap one for the read-only detail with the
-decision summary and audit trail; **History** (or the back gesture) returns to
-the list. It uses the same API as the desktop app, so a view-only device sees
+The **Inbox | History** switch above the request list shows resolved requests
+grouped by day, with search and a single sideways-scrolling row of outcome
+chips with colored dots. Select several outcomes to show any of them; nothing
+selected shows every outcome.
+
+**Filters** opens a bottom sheet with **Outcome**, **Type**, **Agent**, and
+**Has files** sections. Picks within a section combine with OR; across
+sections they combine with AND. Type, agent and Files picks appear after a
+divider as removable chips, with their count on the Filters button. The reset
+icon clears chip/sheet filters but keeps your search.
+
+Tap a request for the read-only detail with the decision summary and audit
+trail; **History** (or the back gesture) returns to the list. It uses the same
+[history API](docs/public/desktop.md#history) as the desktop app, so a view-only device sees
 it too.
 
 ## Security model
@@ -4072,9 +4400,11 @@ reconnecting; you can keep browsing and deciding), or **Offline · synced
 now. The app also resyncs the moment it returns to the foreground, the network
 comes back, its event stream reconnects, or a push notification arrives, and
 while it is on screen it quietly refetches the queue on the **Settings → Sync**
-timer (default every 15 seconds). In the background it does not poll: push
-notifications cover that, and opening the app resyncs. The daemon pings the event
-stream every 25 seconds (through a relay, the relay's own pings every 30
+timer (default every 15 seconds). In the background it does not poll: configured
+[push notifications](docs/public/mobile.md#notifications) can wake it, and opening the app resyncs.
+The licensed gateway is live for license holders using verified official-app
+phones. The daemon pings the event stream every 25 seconds (through a relay,
+the relay's own pings every 30
 seconds count); a stream that stays silent for 75 seconds (a network change,
 or Android dozing) is dropped and reconnected rather than left looking live.
 Waking the phone after it slept reconnects any stream not heard from in the
@@ -4090,6 +4420,9 @@ leaves the phone's inbox as soon as the event arrives. If it is the one open on
 screen, it stays for a moment with its controls dimmed and the footer saying
 how it ended, e.g. **Approved on laptop** or **Denied on another device**, then
 moves to the next pending request, or **All clear**. It is in History as usual.
+In **Split** layout, if you are back on the phone's list screen when the request
+you last opened is resolved elsewhere, the list moves on immediately and shows
+**All clear** after the last pending request.
 
 Once the inbox has loaded, losing the connection to your computer never hides
 it. The last queue is kept on the phone, so opening the app while offline still
@@ -4219,7 +4552,7 @@ failed, Back keeps Settings open and offers **Retry** or **Discard and go
 back**; discarding keeps the settings that were actually stored.
 
 Settings has collapsible **Appearance**, **Decisions**, **Sync**, **Previews**, **Read
-aloud**, [**Storage**](docs/public/mobile.md#storage), [**License**](docs/public/license.md) (one row per paired computer), **Test**, **Keyboard shortcuts**,
+aloud**, [**Dictation**](docs/public/mobile.md#dictation), [**Storage**](docs/public/mobile.md#storage), [**License**](docs/public/license.md) (one row per paired computer), **Test**, **Keyboard shortcuts**,
 [**Help & feedback**](docs/public/index.md#report-a-bug-or-request-a-feature), and **About** groups alongside the paired-computer controls.
 **About** lists the app version, commit, build date and platform, with **Copy**
 for a bug report; the daemon's version is shown in Settings › About on the computer.
@@ -4256,6 +4589,12 @@ divider focused, arrow keys adjust it; double-tap, double-click, or Enter
 resets it. **Reset sizes** also appears on the Layout page after resizing.
 Split width is 240–640px (default 380px); Stacked height is 15–75% (default 38%).
 
+A paired computer flooded by one agent session (40 requests in a minute by
+default) shows a banner at the top of the inbox list, naming the computer when
+several are paired, with **Mute 1h** and **Dismiss all (N pending)**; view-only
+pairings see the banner without the buttons. See
+[floods and mutes](docs/public/rules.md#floods-and-mutes).
+
 Android Back closes an open dialog or settings, returns from a request
 (including one opened from a notification) to the list, and leaves the app
 only from the list.
@@ -4291,12 +4630,57 @@ The searchable voice picker filters by name, language name or code, and
 **Natural** or **Online** labels.
 
 Android uses native TTS through `tauri-plugin-tts`, not the System WebView's
-speech APIs. It always reads aloud with the system default text-to-speech
+speech APIs. By default it reads aloud with the system default text-to-speech
 engine. To change the engine or install voices (for example if none appear),
 use Android's own text-to-speech settings, then reopen Read aloud in handup.
 Online voices send the spoken text to the voice provider.
+
+**Voice provider** chooses who speaks: **This device** (default, free) or a
+cloud voice from **OpenAI** or **ElevenLabs**. A cloud provider needs your own
+API key (see [cloud speech providers](docs/public/mobile.md#cloud-speech-providers)); pick an
+**OpenAI voice** or paste an **ElevenLabs voice ID**, and optionally a **Voice
+model** (empty uses the provider's default). The voice list and **Pitch**
+apply to **This device** only; **Speed** applies to both.
 For a phone browser rather than the native app, see
 [Web UI read aloud](docs/public/remote.md#read-aloud).
+
+### Dictation
+
+Tap the mic (**Dictate**) beside a text field, speak, then tap it again
+(**Stop dictation**). The words are added to the end of the field and stay
+editable; nothing is sent until you submit. The mic appears beside the free-text
+answer to a question, **Feedback for the agent** and **Reply to the agent**,
+text fields an agent asks you to fill in, and an email draft's **Subject** and
+**Body** (not the raw JSON editor). While listening it shows what it has heard
+so far, and the Android recognizer also stops by itself when you stop
+speaking. Starting dictation stops read aloud first.
+
+The first time, Android asks for microphone permission (`RECORD_AUDIO`). If you
+deny it, the mic shows **Microphone not available**; allow it in Android's app
+settings and try again.
+
+**Settings → Dictation** saves, on this phone:
+
+- **Provider**: **This device** (default, free) uses Android's own speech
+  recognizer. Settings says which kind your phone has: **On-device** recognizes
+  speech on the phone, offline (Android 12+ phones that support it); otherwise
+  it **Uses Google speech service**, which may send your audio to Google. Or
+  choose **OpenAI**, **Groq** or **ElevenLabs**, which record up to two minutes
+  and send the recording to that provider; set an optional **Transcription
+  model** (empty uses the provider's default) and your API key.
+- **Language**: **Detect automatically** (default) or a fixed language.
+
+### Cloud speech providers
+
+Cloud dictation and cloud read aloud are optional and off by default. Paste
+your own API key into **OpenAI API key**, **Groq API key** or **ElevenLabs API
+key** and tap **Save**; the field then shows **Configured**, and **Clear**
+removes the key. A key saved under Read aloud also counts for Dictation and the
+other way round. Keys are encrypted with the Android Keystore on this phone,
+write-only (never shown again) and never sent to your computer, its daemon or
+a relay: the app calls the provider directly. Cloud providers receive your
+recorded audio (dictation) or the text being read (read aloud), and may bill
+your account for it.
 
 ## Attachments and Markdown
 
@@ -4345,7 +4729,11 @@ implemented. Browser downloads continue to use the browser's own file handling.
 ## Notifications
 
 Android can receive native Firebase Cloud Messaging (FCM) notifications directly
-in handup; the ntfy app is not required. Push is optional at build time.
+in handup; the ntfy app is not required. The licensed `push` gateway is live at
+`https://push.gethandup.dev` for license holders using the official Android app.
+Only phones with a proof-of-possession device ticket get woken. Self-hosted FCM
+requires a sender in the APK's Firebase project. Builds without Firebase
+configuration receive no push.
 
 Queued decision delivery uses a separate silent **Sending decisions** channel
 (`outbox`, low importance), not FCM or ntfy. It has no sound, vibration, or badge
@@ -4360,8 +4748,70 @@ permissions, not extra runtime prompts. Android 13+'s notification permission
 controls notification visibility; it is requested after pairing as described
 below. The service is still subject to Android's start restrictions and
 Android 15's daily `dataSync` limit; reopening the app resumes queued work.
+`RECORD_AUDIO` is requested only when you first tap the mic for
+[dictation](docs/public/mobile.md#dictation).
 
-### Owner setup
+### Official app: licensed push gateway
+
+Install the official APK, install a [signed license](docs/public/license.md) on the computer,
+and pair the phone (Tailscale, direct, or relay). The default daemon backends
+are `[desktop, push]`; existing
+explicit lists must include `push` to use it. A trial alone is not enough, and
+you do not need your own Firebase project or service-account credentials.
+Android 13+ asks for notification permission after pairing.
+
+The app proves possession of its FCM token automatically: it requests a challenge
+from the gateway, receives a silent `verify` push, and exchanges its nonce for a
+device ticket. Verification shows no notification. Rust stores the token and
+ticket in Android Keystore-sealed storage and registers both with every paired
+computer. A failed verification retries on app startup or token refresh; open
+the app if `handup doctor` reports an unverified phone. Token-only registration
+still works for self-hosted FCM; the licensed gateway wakes only verified phones.
+
+```yaml
+notifications:
+  backends: [desktop, push]
+  push:
+    url: https://push.gethandup.dev
+    payload: wake
+```
+
+`notifications.push.url` requires HTTPS (loopback HTTP is allowed for local
+tests). `notifications.push.payload` accepts `wake` (default, no title) or
+`title` (redacted request title); neither sends preview content. The gateway
+sees the signed license, phone tokens, device tickets, and request metadata (type, id, risk);
+Google receives the tokens and notification data. Choosing `title` also shares
+the redacted title with both. See [notification backends](docs/public/remote.md#notification-backends).
+
+`handup doctor` adds three rows. They report OK or WARN, never FAIL, and each
+network check gives up after 3 seconds:
+
+- `push` names the route that sends phone notifications. It says `off` when
+  notifications are off or no usable push backend is listed. With `fcm` listed it
+  says `self-hosted FCM; N registered devices`: `fcm` takes precedence and this is
+  not a fallback to the gateway. Otherwise it says `licensed gateway <url>`, whether
+  a license is installed, how many phones are verified and unverified, and whether
+  the gateway answered. It warns when there is no license, a phone is unverified
+  (open the app on the phone to verify), no phone is paired, or the gateway is
+  unreachable.
+- `push-last` shows the last delivery on that route and how long ago it was, for
+  example `ok 2m ago to 2 devices` or `refused 5m ago: rate limited`. The result
+  is `ok`, `partial` (some phones got it, or unregistered tokens were removed),
+  `refused` (the gateway turned it down: rate limit, license, unverified phones,
+  payload too large) or `failed` (unreachable, gateway error, delivery failed).
+  Anything but `ok` warns. Before the first push it says `no notifications sent yet`.
+  The daemon keeps only this summary (result, a fixed reason, device count, time),
+  never tokens or provider error text.
+- `relay` says `off` without `remote.relay.url`; otherwise it checks that the
+  relay's `/v1/health` answers and shows its protocol and version, or warns
+  `relay unreachable`.
+
+### Self-hosted Firebase: owner setup
+
+The following build-time setup is for APK maintainers using their own Firebase
+project, not customer installation of the official APK. A service account from
+another project cannot send to the official app. For that app, use the live
+licensed gateway.
 
 1. In the [Firebase console](https://console.firebase.google.com/), create a
    project and add an Android app with package name **`dev.handup.app`**.
@@ -4424,12 +4874,28 @@ variable named `GOOGLE_SERVICES_JSON`; the `android` job copies it into place.
    Android 12 and earlier use the system setting
    without a runtime permission prompt.
 
-After pairing, the app registers its FCM token with each paired daemon using
-device authentication, whether or not notification permission is granted,
-over either the tailnet listener or the encrypted relay tunnel. Token refresh is synchronized
-while the app is running, and on the next launch after an Android background
-refresh. Registration retries when the daemon is offline. Unpairing attempts to
-remove push registration; revoking the device always deletes it on the daemon.
+After pairing, the app registers its FCM token for each paired computer using
+device authentication, whether or not notification permission is granted.
+Every pairing registers at the daemon (`PUT /v1/devices/self/push` with
+`{"platform":"fcm","token":"…","ticket":"…"}`). The optional `ticket` is omitted
+or `null` until verification succeeds; tokens without tickets remain usable by
+self-hosted `fcm`, but not the licensed `push` gateway. When the FCM token changes,
+the app discards the old ticket and verifies the new token. Computers paired
+through a [relay](docs/public/relay.md#push-notifications) also register the token at the
+relay, scoped to that pairing's channel; that path does not use gateway tickets.
+The daemon's licensed `push` and self-hosted `fcm` backends can reach relay-paired
+phones as well as direct/Tailscale phones; relay `push: wake` or `push: title`
+wake-ups remain independent. Token refresh is synchronized while the app is
+running, and on the next launch after an Android background refresh; pairing
+the same computer again registers again. Registration retries when the daemon
+or relay is offline. Unpairing attempts removal from both daemon and relay;
+revoking the device always deletes the daemon registration.
+
+A relay wake-up carries no request id. It shows the relay's title ("Approval
+requested" unless the computer uses `push: title`) with **Open handup to
+review**, and tapping it opens the inbox; the next inbox sync clears it. For
+wake-ups to reach the app, the relay's FCM service account must belong to the
+same Firebase project as the APK, as with the daemon's `fcm` backend.
 
 FCM uses two system channels: **Approval requests** (`requests`, default
 importance) and **High-risk approvals** (`high_risk`, high importance), separate
@@ -4440,11 +4906,14 @@ notification even when its activity is not running. Swiping the app away is
 supported; Android's explicit **Force stop** prevents FCM delivery until the app
 is opened again.
 
-`payload: title` (default) sends only the redacted title, request id, and risk;
-**preview content is never sent**. `payload: wake` substitutes the generic
-“Approval requested” title. Google can see this push metadata; the relay's
-end-to-end encryption does not cover the daemon-to-FCM notification. The usual
-notification rules and quiet hours apply. Decide, cancel, and expiry send a
+For the self-hosted `fcm` backend, `notifications.fcm.payload: title` (default)
+sends the redacted title, request id, and risk; `wake` substitutes the generic
+“Approval requested” title. For the licensed `push` backend,
+`notifications.push.payload: wake` is the default and omits the title;
+`title` opts into the redacted title. **Neither sends preview content.**
+Google can see push metadata, and the gateway also sees it when using `push`;
+relay end-to-end encryption does not cover either notification path.
+The usual notification rules and quiet hours apply. Decide, cancel, and expiry send a
 `resolved` message to cancel the matching notification, even during quiet hours.
 Android can delay that message while the app is closed, so the app also clears
 a request's notification as soon as you tap its decision (not after the undo
@@ -4520,9 +4989,23 @@ does over the remote listener.
 
 ## Run a relay
 
-This requires the compiled `handup-relay` program. handup releases do not
-include a relay binary yet; see [downloads and releases](docs/public/downloads.md) for what
-is published. The following commands apply once the relay binary is installed:
+From v0.1.7, each handup release includes a static Linux build of the
+relay: `handup-relay_<version>_linux_amd64.tar.gz` (x86-64) or
+`handup-relay_<version>_linux_arm64.tar.gz` (ARM64). Pick the archive for the
+server's architecture, which may differ from the computer you download it on.
+Each archive holds the `handup-relay` binary, `LICENSE` and
+`THIRD_PARTY_NOTICES.md`; it is a musl build, so it runs on any Linux
+distribution, Alpine included. The [downloads page](https://gethandup.dev/downloads)
+lists them under **Self-hosted relay (Linux server)**. Verify the archive against
+the release's `checksums.txt` as described in
+[verify a download](docs/public/downloads.md#verify-a-download), then install it:
+
+```bash
+tar -xzf handup-relay_*_linux_amd64.tar.gz handup-relay
+sudo install -m 0755 handup-relay /usr/local/bin/handup-relay
+```
+
+Then start it:
 
 ```bash
 handup-relay --listen 127.0.0.1:8787 --db /var/lib/handup-relay/relay.db
@@ -4622,7 +5105,9 @@ and specific private addresses; wildcard or public binds require
 Tenant mode on a non-loopback listener without
 `probe_listen` logs a warning at startup. The probe and metrics listeners stay
 up until the drain ends, so readiness reports 503 throughout. The existing
-`/v1/health` endpoint remains available for protocol clients.
+`/v1/health` endpoint remains available for protocol clients; `handup doctor`
+on a paired computer checks it (`relay` row, 3-second timeout) and shows the
+relay's protocol and version, or warns `relay unreachable`.
 
 SIGTERM and SIGINT stop admission and drain for up to `drain_timeout` (10s).
 Already-started HTTP writes finish within the deadline; WebSockets close with
@@ -4920,14 +5405,42 @@ the daemon before sending the title to the relay. It has no request id and never
 includes preview content. Tapping it opens the app, which fetches the queue
 through the encrypted channel.
 
-Push registration and removal (`PUT`/`DELETE /v1/devices/self/push`) also
-travel through the encrypted session, with the same paired-device scope checks
-as direct remote access.
+The Android app registers its FCM token with both the relay channel
+(`PUT /v1/channels/<channel>/push` with the phone's channel credential) and
+the daemon (`PUT /v1/devices/self/push` through the encrypted channel with device
+authentication, plus the device ticket once verified). The daemon's licensed
+`push` gateway is live for verified official-app phones with an installed signed
+license; its self-hosted `fcm` backend can also send when configured for the APK's
+Firebase project. Relay token registration does not use gateway tickets.
+Unpairing attempts to remove both registrations. Phones paired directly or
+over Tailscale register only with the daemon.
+
+A relay wake-up shows a generic Android notification titled with the relay's
+title ("Approval requested", or the request title with `push: title`) and
+**Open handup to review**; tapping it opens the inbox, not a specific request,
+and the next sync of the inbox clears it.
 
 If the provider reports an invalid or unregistered token, the relay removes
-it. The Android app registers an FCM token only when built with your own
-Firebase configuration (see [mobile.md](docs/public/mobile.md)); builds without it receive
-no push.
+it. The Android app registers an FCM token only when built with Firebase
+configuration (see [mobile.md](docs/public/mobile.md#notifications)); builds without it
+receive no push. FCM only delivers a wake-up when the relay's
+`push.fcm.service_account` belongs to the same Firebase project as the APK. For
+the released handup APK, that means a self-hosted relay's wake-ups reach the
+official app only with a service account for that APK's Firebase project;
+otherwise build the APK with your own Firebase project and give the relay that
+project's service account.
+
+The licensed [push gateway backend](docs/public/remote.md#notification-backends) is a
+separate path and does not require the relay to hold Firebase credentials.
+It is live at `https://push.gethandup.dev` for license holders using the official
+Android app. Only phones with a proof-of-possession device ticket get woken.
+Its default `wake` sends no title or preview content, but the gateway receives
+the signed license, phone tokens, device tickets, and request metadata outside
+relay encryption; Google receives the tokens and notification data. The gateway
+verifies the signed license and each ticket.
+Setting `notifications.push.payload: title` shares the
+redacted title with them. Relay `push: title` and daemon
+`notifications.push.payload` are separate settings.
 
 ---
 
@@ -5035,9 +5548,9 @@ use.
 
 | Scope | Can |
 | --- | --- |
-| `view` | List and show requests, browse decision history and each request's audit trail, see storage usage, cleanup estimates and progress (`GET /v1/storage*`), see the [license](docs/public/license.md) state (`GET /v1/license`), fetch blobs and previews, see YOLO mode, and receive live events. The web UI is read-only. The global audit log (`/v1/log`) stays local |
-| `decide` | Everything `view` can, plus approve, deny, answer, cancel, stop a command running in the desktop app (`POST /v1/requests/{id}/run/stop`), send server-built test requests/questions (`POST /v1/requests/test`), change [YOLO mode](docs/public/rules.md#yolo-mode), replace [keyboard shortcut overrides](docs/public/cli.md#shortcut-api) (`PUT /v1/keys`), activate, import or remove the computer's license (`PUT`/`DELETE /v1/license`), and clean up storage or change history retention (`POST /v1/storage/cleanup`, its cancel, `PUT /v1/storage/retention`; the daemon log names the device) |
-| `submit` | Create requests and upload blobs; show, wait for, and cancel only requests created by that token. Never decide, list, send synthetic tests, change shortcuts, or read/change YOLO mode. See [integration tokens](docs/public/integrations/tokens.md) |
+| `view` | List and show requests, browse decision history and each request's audit trail, see storage usage, cleanup estimates and progress (`GET /v1/storage*`), see the [license](docs/public/license.md) state (`GET /v1/license`), fetch blobs and previews, see YOLO mode and the shared [Auto-handled read watermark](docs/public/cli.md#auto-handled-read-state) (`GET /v1/auto-read`), see [flooding sources and mutes](docs/public/rules.md#floods-and-mutes) (`GET /v1/floods`, `GET /v1/mutes`), and receive live events (including `auto_read.changed`). The web UI is read-only. The global audit log (`/v1/log`) stays local |
+| `decide` | Everything `view` can, plus approve, deny, answer, cancel, mark Auto-handled decisions read across devices (`PUT /v1/auto-read`), stop a command running in the desktop app (`POST /v1/requests/{id}/run/stop`), send server-built test requests/questions (`POST /v1/requests/test`), change [YOLO mode](docs/public/rules.md#yolo-mode), clear a flooding source and add or remove mutes (`POST /v1/floods/dismiss`, `POST`/`DELETE /v1/mutes`, `DELETE /v1/mutes/{id}`), replace [keyboard shortcut overrides](docs/public/cli.md#shortcut-api) (`PUT /v1/keys`), activate, import or remove the computer's license (`PUT`/`DELETE /v1/license`), and clean up storage or change history retention (`POST /v1/storage/cleanup`, its cancel, `PUT /v1/storage/retention`; the daemon log names the device) |
+| `submit` | Create requests and upload blobs; show, wait for, and cancel only requests created by that token. Never decide, list, send synthetic tests, change shortcuts, read/change YOLO mode, read/change Auto-handled read state, or read/change floods and mutes. See [integration tokens](docs/public/integrations/tokens.md) |
 
 Scoped allow (session, project, or always rules) writes local policy, so it is
 available only on the machine itself. Remote decisions are recorded in the audit log as
@@ -5078,8 +5591,9 @@ are refused while disabled. Decisions already in flight cannot commit after
 disable. Push delivery stops, but the stored push token and relay pairing are
 kept; enabling resumes access and push without registering or pairing again.
 
-Muting stops FCM delivery and relay wake-ups without closing event streams or
-blocking API access. Push defaults to on, including for existing pairings.
+Muting stops licensed push, self-hosted FCM delivery, and relay wake-ups without
+closing event streams or blocking API access. Push defaults to on, including
+for existing pairings.
 Scope changes apply to the next call, including calls on already-open relay
 connections; a device downgraded to `view` cannot decide.
 
@@ -5137,7 +5651,7 @@ and a `decide` pairing can press **Stop** to ask that desktop to stop it
 see [stop from another device](docs/public/desktop.md#stop-from-another-device)).
 
 The header's **Settings** button opens collapsible **Appearance**, **Decisions**, **Sync**,
-**Read aloud**, **Storage**, [**License**](docs/public/license.md), **Test**, **Keyboard shortcuts**,
+**Read aloud**, [**Dictation**](docs/public/remote.md#dictation), **Storage**, [**License**](docs/public/license.md), **Test**, **Keyboard shortcuts**,
 [**Help & feedback**](docs/public/index.md#report-a-bug-or-request-a-feature), and **About** groups. **About** lists the
 web UI's version, commit, build date and platform, the daemon's version (a paired
 browser shows **see Settings › About on the computer**) and, when the daemon
@@ -5173,6 +5687,19 @@ least 36rem; Stacked height is 15–75% (default 38%).
 Layout and pane sizes save per device in the browser's localStorage, not the
 daemon config; see the [desktop guide](docs/public/desktop.md) for the other Settings controls.
 
+Inbox search opens from the filter row's search icon or `/`, hidden by default.
+It matches a case-insensitive substring in title, summary, folder, repo, branch,
+agent or session title, ANDed with filters; an empty result shows **No matches**.
+`Esc` in the field or **×** clears and closes it; Inbox reset clears both search
+and filters, while History reset keeps search. `/` searches both Inbox and History,
+not Auto-handled. See [Inbox filters](docs/public/desktop.md#inbox-filters).
+
+**Mark read** in Auto-handled syncs to every device connected to this daemon,
+separately for each computer, and survives restarts. `GET /v1/auto-read` needs
+`view`; `PUT /v1/auto-read` needs `decide` on both remote HTTP and relay tunnels.
+Only a higher watermark emits `{type:"auto_read.changed", at}`. See the
+[read-state API](docs/public/cli.md#auto-handled-read-state).
+
 Browser protections on the remote listener:
 
 - A **Host** allow-list (the listener address, `remote.public_url`, and
@@ -5193,8 +5720,9 @@ Browser protections on the remote listener:
   origin. Every response carries `Content-Security-Policy: sandbox;
   default-src 'none'` and `X-Content-Type-Options: nosniff`. Anything other
   than passive images, audio, video, PDF, and plain text (for example HTML,
-  SVG, or XML) is sent with `Content-Disposition: attachment`, and the web UI's
-  Open button downloads those types instead of opening a tab.
+  SVG, or XML) is sent with `Content-Disposition: attachment`. HTML previews
+  have **Download** only, never **Open**; for other non-passive types, the web
+  UI's Open action downloads the file instead of opening a tab.
 
 ### Read aloud
 
@@ -5219,6 +5747,25 @@ use `tauri-plugin-tts` instead. Unsupported browsers hide the request button
 and explain the limitation in Read aloud settings. On Linux, install
 `speech-dispatcher` and a voice such as `espeak-ng` if the browser offers no
 voices. Online voices send the spoken text to the voice provider.
+
+### Dictation
+
+In a browser with speech recognition, a mic button (**Dictate**) sits beside
+the free-text answer to a question, **Feedback for the agent** and **Reply to
+the agent**, text fields an agent asks you to fill in, and an email draft's
+**Subject** and **Body** (not the raw JSON editor). Click or tap it, speak, then
+press it again (**Stop dictation**). The words are added to the end of the
+field and stay editable; nothing is sent until you submit. Starting dictation
+stops read aloud first. The browser asks for microphone permission the first
+time.
+
+The web UI uses the browser's own speech recognition (Web Speech
+`SpeechRecognition`); some browsers, such as Chrome, send the audio to their
+own speech service. **Settings → Dictation** sets the **Language** (**Detect
+automatically** by default). Browsers without speech recognition show no mic,
+and Settings → Dictation says **Not available in this browser**. Cloud speech
+providers and on-device models are only in the
+[desktop](docs/public/desktop.md#dictation) and [Android](docs/public/mobile.md#dictation) apps.
 
 ## Direct mode (not recommended)
 
@@ -5249,19 +5796,49 @@ In every remote mode, and per peer IP:
 
 ## Notification backends
 
-`notifications.backends` accepts `desktop`, `ntfy`, and `fcm`. Every
+`notifications.backends` accepts `desktop`, `ntfy`, `fcm`, and `push`; the
+default is `[desktop, push]`. Explicit backend lists replace that default. Every
 backend follows `on_new_request`, `on_high_risk` (high risk bypasses
 `quiet_hours`), `on_expiring`, `remind_every`, and `quiet_hours`. Delivery runs
 in the background with bounded timeouts (10 seconds; FCM 15 seconds per HTTP call), and failures are logged without
 blocking the queue.
 Requests without a deadline do not emit `on_expiring` notifications.
 `remind_every` (off by default) re-notifies while they wait for the human.
+Every backend also follows the per-source `notifications.burst` limit and
+runtime mutes; see [floods and mutes](docs/public/rules.md#floods-and-mutes).
 
 ```yaml
 notifications:
-  backends: [desktop, ntfy]
+  backends: [desktop, push, ntfy]
   ntfy: { server: https://ntfy.sh, topic: "", token_env: HANDUP_NTFY_TOKEN, include_content: false }
 ```
+
+**push** is the licensed gateway backend for the official Android app, live at
+`https://push.gethandup.dev`. It requires an installed [signed license](docs/public/license.md)
+and a paired phone with a proof-of-possession device ticket; a trial alone does
+not enable it. Only verified phones get woken. The app obtains its ticket by
+receiving a silent FCM verification push and registers it with the daemon.
+You do not need a Firebase service-account key on your computer.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `notifications.push.url` | `https://push.gethandup.dev` | Gateway base URL; requires HTTPS (loopback HTTP only for local tests) |
+| `notifications.push.payload` | `wake` | `wake` omits the request title; `title` includes the redacted title; neither sends previews |
+
+The daemon submits the signed license, registered phone tokens and device tickets,
+and request metadata (type, id, and risk) to the gateway, which verifies each
+ticket before forwarding the notification data to Google FCM.
+With the default `wake`, neither gets request titles or
+preview content. `title` opts into sharing the redacted title with both.
+Decide/cancel/expire send a `resolved` message even during quiet hours;
+invalid/unregistered tokens are removed. If both `fcm` and `push` are listed,
+`fcm` takes precedence and the gateway is not used, even if FCM credentials fail.
+The gateway logs one line per request with its route, HTTP status, outcome,
+latency and delivery counts, never tokens, tickets, licenses, IDs, titles or IP
+addresses; Cloudflare Workers Logs keep these lines for 3 days.
+`handup doctor` shows the push route, verified and unverified phones, whether
+the gateway answers, and the last delivery result (`push-last`); see
+[Android push](docs/public/mobile.md#official-app-licensed-push-gateway).
 
 **fcm** delivers Android native notifications to registered paired devices.
 Configure `notifications.fcm.service_account` with a Firebase service-account
@@ -5269,10 +5846,18 @@ JSON key path and `notifications.fcm.payload` with `title` (default) or `wake`
 (generic title). Payloads contain only request id, risk, and redacted title,
 never previews. Decide/cancel/expire also send cancellation messages, independent
 of quiet hours. Invalid/unregistered provider tokens are removed automatically.
-The app registers or removes its own token at `PUT` / `DELETE
-/v1/devices/self/push` with device-token auth (view or decide scope). Device
-revocation removes registration. See [Android notifications](docs/public/mobile.md#notifications)
-for Firebase project and APK setup.
+For every pairing, the app registers at `PUT /v1/devices/self/push` with
+device-token auth (view or decide scope), over the remote listener or encrypted
+relay tunnel. The JSON body is `{"platform":"fcm","token":"…","ticket":"…"}`;
+`ticket` is optional (or `null`) and at most 256 characters. Token-only
+registration remains valid for self-hosted FCM, but the licensed gateway
+requires a ticket bound to that token. `DELETE` on the same endpoint removes
+both token and ticket; device revocation removes the daemon registration.
+A phone paired through a [relay](docs/public/relay.md#push-notifications) also registers
+its token with the relay channel. Both daemon backends can therefore notify
+relay-paired phones; relay wake-ups remain a separate path and do not require
+gateway tickets. See [Android notifications](docs/public/mobile.md#notifications) for
+official-app push and self-hosted Firebase project requirements.
 
 **ntfy** publishes JSON to `<server>/` with the topic, the redacted title, and
 the deep link `handup://r/<id>` as the message. When remote access is on, the
@@ -5312,9 +5897,10 @@ clients show **Restart daemon to apply** until then. Other settings, such as
 `notifications.*`, apply when the config is saved ([live reload](docs/public/cli.md#live-reload)).
 
 The Android app is a native client of the same remote listener; see
-[mobile.md](docs/public/mobile.md). Native FCM push and the end-to-end encrypted
-[relay](docs/public/relay.md) (FCM/APNs wake-ups) are available; native APNs delivery from
-the daemon is not.
+[mobile.md](docs/public/mobile.md). Self-hosted FCM push and the end-to-end encrypted
+[relay](docs/public/relay.md) (FCM/APNs wake-ups) are implemented; the licensed `push`
+gateway is live for verified official-app phones with an installed signed
+license. Native APNs delivery from the daemon is not implemented.
 
 ---
 
@@ -5340,11 +5926,28 @@ rules:
 
 Older versions kept rules in a separate `rules.yaml` beside the config. On start, if that file exists and the config has no `rules:` key, the daemon moves its rules into `rules:` and renames the old file to `rules.yaml.migrated` (logged). If the config already has `rules:` (even `[]`), the legacy file is not read and is ignored with a warning.
 
-Rules are evaluated top to bottom; the **first matching rule wins**, including `ask`. All fields in a matcher must match. Supported fields are `agent`, `kind`, `command` (Rust regex), `cwd` and `repo` (globs, with `~` expanded using the daemon's HOME), `tool`, `risk`, and `session`. Missing source fields do not match. `command` comes from command previews (shell or joined argv, outer whitespace trimmed); `tool` comes from the request's optional `tool` field, or `input.tool`/`input.tool_name`. Actions are `approve`, `deny`, and `ask`. Optional `risk` overrides request risk; optional `feedback` is valid only for deny. `ask` leaves the request pending and only adjusts risk.
+Rules are evaluated top to bottom; the **first matching rule wins**, including `ask`. All fields in a matcher must match. Supported fields are `agent`, `kind`, `command` (Rust regex), `cwd` and `repo` (globs, with `~` expanded using the daemon's HOME), `tool`, `risk`, and `session`. Missing source fields do not match. `command` comes from command previews (shell or joined argv, outer whitespace trimmed); `tool` comes from the request's optional `tool` field, or `input.tool`/`input.tool_name`. Actions are `approve`, `deny`, `ask`, and `dismiss`. Optional `risk` overrides request risk; optional `feedback` is valid only for deny. `ask` leaves the request pending and only adjusts risk.
+
+Info notices (`kind: info`) are matched only by `dismiss` rules, and `dismiss` rules match only info notices: an `approve`, `deny` or `ask` rule never touches a notice, and a `dismiss` rule never touches anything else. A `dismiss` rule whose matcher sets `kind` to anything but `info` is a config error. A matching notice is recorded as `status: dismissed` (option `dismiss`) with `decided_by: rule` and `rule_id`, and sends no notification. Use it to silence a sender of unwanted notices:
+
+```yaml
+rules:
+  - id: noisy-hook-notices
+    match: {agent: my-hook, kind: info}
+    action: dismiss
+```
 
 To route one kind of action several ways, tag each request with a specific `tool` name and match it here; see [Route email by sender](docs/public/cookbook/email-routing.md).
 
-Auto decisions use the normal hash-bound decision path and append-only audit. Their decision metadata includes `decided_by: rule` and `rule_id`. The desktop **Auto-handled** tab shows them, [YOLO mode](docs/public/rules.md#yolo-mode) approvals, and [decide hook](docs/public/integrations/hooks.md#decide-hooks) decisions (`decided_by: hook:<name>`), read-only. A request decided on arrival is announced on the event stream with its final status (`request.created`, then `request.decided`), never as pending. API callers can use `GET /v1/requests?decided_by=rule` (or `decided_by=hook:` for every hook) and `GET /v1/log?limit=100`; `handup log --json` prints the newest audit entries first, including rule IDs.
+Auto decisions use the normal hash-bound decision path and append-only audit. Their decision metadata includes `decided_by: rule` and `rule_id`. **N auto-handled · View** above the Inbox list opens a read-only view of them, [YOLO mode](docs/public/rules.md#yolo-mode) approvals, and [decide hook](docs/public/integrations/hooks.md#decide-hooks) decisions (`decided_by: hook:<name>`). **← Inbox** returns to pending requests; **Mark read** leaves the decisions in History. A request decided on arrival is announced on the event stream with its final status (`request.created`, then `request.decided`), never as pending. API callers can use `GET /v1/requests?decided_by=rule` (or `decided_by=hook:` for every hook) and `GET /v1/log?limit=100`; `handup log --json` prints the newest audit entries first, including rule IDs.
+
+**Mark read** shares the read state across every device connected to the same
+daemon, separately for each computer, and survives daemon restarts. It hides
+those decisions from Auto-handled without removing History or audit evidence.
+`GET /v1/auto-read` returns `{"at":...}`; `PUT /v1/auto-read` max-merges that
+watermark and emits `auto_read.changed` only when it rises. Remote/relay writes
+need `decide` scope; `view` devices can read and follow changes. See the
+[read-state API](docs/public/cli.md#auto-handled-read-state).
 
 For conditions rules cannot express (amount thresholds, allowlists), a [`decide:` hook](docs/public/integrations/hooks.md#decide-hooks) runs a local policy program on requests still pending after rules and YOLO.
 
@@ -5364,9 +5967,47 @@ handup yolo               # YOLO: on (low+medium risk) until 16:05; --json for {
 
 YOLO mode is a runtime daemon switch, off by default and never persisted: a daemon restart turns it off. `on` approves newly arriving requests with risk `low` or `medium`; `hard` approves every risk. `--for` (or the duration in the UI's header switch) turns it off again automatically; without it, it stays on until turned off. Requests already pending when you turn it on are not touched.
 
-Rules run first and win: a request matched by any rule (`approve`, `deny`, or `ask`) is handled by that rule, so a `deny` or `ask` rule still stops a request under YOLO. Info notices (`kind: info`) skip rules and YOLO entirely; only a person dismisses them. Requests that need a human answer always stay pending: questions (`kind: question`), forms (`input.fields`), free-text answers (`input.allow_free_text`), a feedback policy (`input.feedback: required_on_deny`), and requests with several (or no) approve options.
+Rules run first and win: a request matched by any rule (`approve`, `deny`, or `ask`) is handled by that rule, so a `deny` or `ask` rule still stops a request under YOLO. YOLO never decides info notices (`kind: info`); only a person, a `dismiss` rule (above) or a [mute with `--dismiss-notices`](docs/public/rules.md#floods-and-mutes) dismisses them. Requests that need a human answer always stay pending: questions (`kind: question`), forms (`input.fields`), free-text answers (`input.allow_free_text`), a feedback policy (`input.feedback: required_on_deny`), and requests with several (or no) approve options.
 
-YOLO approvals take the normal decision path with `decided_by: yolo` in the decision and audit (`GET /v1/requests?decided_by=yolo`), appear in the **Auto-handled** tab, and count as `auto` in history. The API is `GET /v1/yolo` and `PUT /v1/yolo` with `{"mode": "on", "for": "1h"}`; every change emits a `yolo.changed` event (`{type, yolo: {mode, until}}`) so all open clients update live, and the daemon log records who changed it. Paired `view` devices can see the mode; changing it needs `decide` scope. On the phone app, turning on Hard YOLO asks for the same biometric confirmation as a high-risk approval. Agents must never turn YOLO on: it is a human decision.
+YOLO approvals take the normal decision path with `decided_by: yolo` in the decision and audit (`GET /v1/requests?decided_by=yolo`), appear in the read-only **Auto-handled** view opened through **N auto-handled · View** above the Inbox list, and count as `auto` in history. The API is `GET /v1/yolo` and `PUT /v1/yolo` with `{"mode": "on", "for": "1h"}`; every change emits a `yolo.changed` event (`{type, yolo: {mode, until}}`) so all open clients update live, and the daemon log records who changed it. Paired `view` devices can see the mode; changing it needs `decide` scope. On the phone app, turning on Hard YOLO asks for the same biometric confirmation as a high-risk approval. Agents must never turn YOLO on: it is a human decision.
+
+## Floods and mutes
+
+A broken hook or a runaway agent can send hundreds of requests or notices in a few minutes. handup groups them by **source**: the request's agent plus its session (`source.agent`, `source.session`). A request without an agent counts as agent `unknown`; requests without a session form their own group for that agent. Four tools help, from gentlest to strongest.
+
+**Fewer pings.** Each source may raise `notifications.burst.max` notifications (default `20`) per `notifications.burst.window` (default `1m`). This counts new-request, reminder and expiry notifications on every backend (desktop, ntfy, fcm, push). Past the limit the rest are skipped, and when the window ends handup sends one summary instead, reading like `5 more from my-hook: <latest title>`. Quiet hours and mutes still apply to the summary. A skipped reminder or expiry notification also skips its `request.reminder` or `request.expiring` [hook event](docs/public/integrations/hooks.md). `notifications.burst.max: 0` turns this off. The requests themselves are not affected: they all stay in the inbox.
+
+**See the flood.** A source that creates `requests.flood_threshold` requests (default `40`; `0` turns it off) within one minute is listed as flooding. Every created request counts, including ones a rule or YOLO decided on arrival; a [dedupe](docs/public/cli.md#timeouts-dedupe-and-durability) hit that returns an existing request does not. A source stays listed until five minutes pass with no new request from it, or until you clear it. The inbox shows a banner per flooding source at the top of the list: "*agent* · *session* sent *N* requests in the last minute", with **Mute 1h**, **Dismiss all (N pending)** (asks to confirm first) and **×** to hide it until the page reloads. A muted source shows **Muted until hh:mm** (or **Muted** with no end) and **Unmute** instead of **Mute 1h**. With several paired computers, each banner names its computer. View-only devices see the banner without the buttons. From a terminal:
+
+```sh
+handup flood                               # list flooding sources; --json for the raw list
+handup flood clear --agent my-hook --session abc123
+```
+
+For each flooding source, `handup flood` prints how many requests it sent in the last minute and how many are pending, then a ready-to-run `handup mute …` line, a `handup flood clear …` line, and a `rules:` snippet you can paste into your config: an `action: deny` rule for that agent and session and an `action: dismiss` rule for its notices.
+
+**Clear it.** `handup flood clear --agent A [--session S]` (or **Dismiss all** in the banner) acts on every pending request from exactly that source; without `--session` it covers only that agent's requests that have no session. Info notices are dismissed, and other requests are denied with the feedback "Cleared as a flood". A request with no deny-outcome option stays pending. The decisions are recorded as yours (`local-human`, or `device:<id>` from a paired device) and the source leaves the flood list; it prints `Dismissed N notices; denied M requests` (`--json`: `{"dismissed": N, "denied": M}`).
+
+**Mute it.** A mute silences a source without deciding anything:
+
+```sh
+handup mute --agent my-hook --for 1h       # or --session ID, or both
+handup mute --agent my-hook --dismiss-notices   # also dismiss its notices on arrival
+handup mute                                # list active mutes; --json for the raw list
+handup unmute <id>                         # or --all
+```
+
+A mute needs `--agent`, `--session`, or both; every field it names must match, so `--session ID` alone mutes that session for any agent. `--for` takes a duration (up to one year); without it the mute lasts until removed. Requests from a muted source are created and wait in the inbox as usual, but send no notifications of any kind: no new-request, reminder, expiry or burst-summary notification, and no message clearing a phone notification once the request is decided. They also do not emit `request.reminder` or `request.expiring` [hook events](docs/public/integrations/hooks.md). With `--dismiss-notices`, the source's info notices are dismissed on arrival with `decided_by: mute`, unless a rule matched them first. A mute never approves or denies anything else. Mutes are runtime only, like YOLO mode: a daemon restart removes them all.
+
+**Cap it.** As a last resort, a source that already created `requests.max_per_minute` requests (default `120`; `0` turns it off) in the last minute gets new requests refused until its count drops. Refused requests are not stored. The daemon answers HTTP 429:
+
+```json
+{"error": "rate limited: my-hook (session abc123) created more than 120 requests in the last minute; raise requests.max_per_minute or fix the sender", "code": "rate_limited"}
+```
+
+`handup ask` then exits 4 with `daemon HTTP 429 Too Many Requests: …` and MCP tools return that text as an error. Other sources are not affected.
+
+All four settings apply live. The API is `GET /v1/floods` (`[{agent, session, session_title, count, pending, since, muted}]`, `since` in Unix ms), `POST /v1/floods/dismiss` with `{"agent": "…", "session": "…"}`, `GET /v1/mutes`, `POST /v1/mutes` with `{"agent", "session", "for", "dismiss_notices"}` (returns `{id, agent, session, until, dismiss_notices}`), `DELETE /v1/mutes/{id}` and `DELETE /v1/mutes` for all. A `floods.changed` event (`{type, floods}`) is sent when a source starts or stops flooding or its muted state changes, and `mutes.changed` (`{type, mutes}`) on every mute change, including when a timer ends. Paired `view` devices can read both lists; changing them needs `decide` scope.
 
 ## Scoped allow
 
@@ -5424,10 +6065,45 @@ their previews, history, and Settings. With **decide** access it can approve,
 deny, edit and approve, answer questions, cancel, and stop a command that the
 desktop app is running. **View** access is read-only.
 
+Inbox and History use the same [combinable filters as desktop](docs/public/desktop.md#inbox-filters):
+one sideways-scrolling row of request-type chips with counts in Inbox, or
+outcome chips with colored dots in History. Nothing picked shows everything.
+**Filters** opens a bottom sheet on phones or a small dialog on desktop
+(Inbox: **Type**, **Agent**; History: **Outcome**, **Type**, **Agent**,
+**Has files**). Picks within a section match any of them; across sections they
+must all match. Sheet-only picks show as removable chips after a divider and
+are counted on the Filters button; the reset icon appears while filters or an
+Inbox query are active. Swipe or use the mouse wheel to scroll the row.
+
+The Inbox filter row's search icon or `/` opens a focused search field, hidden
+by default with no setting. It matches a case-insensitive substring in title,
+summary, folder (`cwd`), repo, branch, agent, or session title, ANDed with
+chip/sheet filters. No matching pending requests shows **No matches**.
+`Esc` in the field or **×** clears and closes it; reset clears both search and
+filters. `/` also focuses History search; History reset keeps its search.
+The Auto-handled view has no search.
+
+Unread automatic decisions open through **N auto-handled · View** above the
+list, with **← Inbox** and **Mark read**, not an Auto-handled tab. Marking read
+syncs across every device connected to the same daemon and survives daemon
+restarts; each computer's read state is separate. `decide` access is required
+to update shared read state, while `view` access can follow it.
+
+On a phone in **Split** layout, if the request you last opened is resolved on
+another device while you are on the list screen, the list moves on immediately.
+After the last pending request, it shows **All clear** rather than an empty list.
+
 A browser never runs commands. **Run** and **Run as admin** exist only in the
 desktop app. Scoped allow rules, pairing, device management and the audit log
 also stay on the computer itself. See [Web UI](docs/public/remote.md#web-ui) for every
 setting and the browser protections.
+
+Where the browser supports it, you can also [read requests aloud](docs/public/remote.md#read-aloud)
+and [dictate](docs/public/remote.md#dictation) answers and feedback with a mic button beside
+text fields. Dictation uses the browser's own speech recognition, so some
+browsers, such as Chrome, send the audio to their speech service; the words
+stay editable and nothing is sent until you submit. Cloud speech providers are
+only in the desktop and Android apps.
 
 There is no native iPhone app. On an iPhone, use the web inbox in Safari.
 

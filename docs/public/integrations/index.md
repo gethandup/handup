@@ -13,6 +13,7 @@ this section covers one of them.
 Setting up an agent to ask for approval is covered under
 [Agents](../agents/mcp.md), or for any other harness in
 [Any agent or custom harness](../agents/custom.md). Phone notifications through
-ntfy are covered in [Remote access](../remote.md#notification-backends);
+ntfy, self-hosted FCM, and the live licensed push gateway (verified official-app phones) are
+covered in [Remote access](../remote.md#notification-backends);
 lifecycle webhooks, exec commands, and local `decide:` policy programs in
 [event hooks](hooks.md).

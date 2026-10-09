@@ -49,7 +49,7 @@ MCP tools: `request_approval`, `ask_question`, `notify`, `check_request`, `wait_
 
 - `request_approval`: title (required), summary, kind, risk, previews [{type, path OR content OR email, lang?}], input (editable object, returned edited in decision `fields`), options [{id,label,outcome,style?}], timeout (duration string or `"none"`), on_timeout (`deny`|`expire`|`approve`, timed requests only), run_timeout (limit for a desktop Run of the command preview, e.g. `"30m"`; default `run.timeout`, capped at `run.max_timeout`; 1ms to one year; separate from `timeout`), dedupe_key (identical pending requests share one id), callback_url ([callbacks](../integrations/callbacks.md)), session, session_title, and wait (default true). Relative paths use the server cwd; files upload as immutable blobs. With a progressToken, blocking calls emit progress notifications every long-poll cycle.
 - `ask_question`: question and allow_free_text (both required, even with choices), choices, session, session_title, wait. Example: {"question":"Which region?","choices":["eu","us"],"allow_free_text":true}. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Offer at least two distinct choices, free text with no choices, or both: a single choice is rejected even with free text, and labels must be distinct after trimming. Use `notify` for status or results and `request_approval` for permission. Use `request_approval` with `kind: "question"` and `input.questions` for several questions, multi-select or a timeout; the single-choice guard applies only to MCP `ask_question`, not these forms or omp's native question bridge.
-- `notify`: title (required), summary, previews, session, session_title, timeout, dedupe_key. Put the message text in summary, shown under the one-line title; there is no body or message field, and a notice without summary or previews shows only its title. Tells the human something that needs no reply (status update, finished result, heads-up). It creates a `kind: info` notice and returns at once with `{id, status, message}`; never wait for or poll it. The human reads it and picks **OK** or **Dismiss** (status `dismissed` either way, `option` `ok` or `dismiss`), optionally with a reply; a timeout expires it. Rules and YOLO never decide notices. A reply reaches the agent by itself in later tool results ([notice replies](#notice-replies)). Example: {"title":"Staging deploy finished","summary":"All checks passed."}.
+- `notify`: title (required), summary, previews, session, session_title, timeout, dedupe_key. Put the message text in summary, shown under the one-line title; there is no body or message field, and a notice without summary or previews shows only its title. Tells the human something that needs no reply (status update, finished result, heads-up). It creates a `kind: info` notice and returns at once with `{id, status, message}`; never wait for or poll it. The human reads it and picks **OK** or **Dismiss** (status `dismissed` either way, `option` `ok` or `dismiss`), optionally with a reply; a timeout expires it. YOLO never decides notices; a human's `dismiss` rule or mute may dismiss one on arrival. A reply reaches the agent by itself in later tool results ([notice replies](#notice-replies)). Example: {"title":"Staging deploy finished","summary":"All checks passed."}.
 - `check_request` {"id"}: current decision JSON without waiting.
 - `wait_requests` {"ids":[…], "max_wait_seconds"?}: returns every decided request among ids at once, otherwise long-polls until the first decision or `max_wait_seconds` (default 25, max 300, within omp's 30s and Codex's 60s tool timeouts). Result: `{"decided":[decision JSON], "pending":[ids], "message"}`, plus `notices` {ids, message} for undismissed info ids, which it never waits on or reports as pending. Act on each decision and obey the pending result: with the omp extension's push note, end the turn and the decision wakes you; otherwise call again with the pending ids until `pending` is empty before ending the turn.
 - `cancel_request` {"id"}: retract a pending request you no longer need (plan changed, task abandoned). Never cancel to dodge a decision. Cancelling a request that is no longer pending is an error.
@@ -130,12 +130,25 @@ Ask before destructive/irreversible actions, external publication or messages, c
 
 Tool cancellation stops waiting but preserves the pending request; use wait_requests to resume, or cancel_request to retract it. Daemon/API failures return isError=true, never approval. MCP path previews cannot read stdin. For content use UTF-8 text; use path for binary media.
 
+Use `path` rather than `content` when the human should be able to open or
+download the file, including text files. Every stored-file preview has a compact
+`name · type · size` row above it with icon-only **Open** and **Download** actions
+(HTML has **Download** only). Inline content without a blob has no file actions.
+
 When handup's trial has ended or its license was revoked, tools that create a
 request return isError=true with `{"error":"license required: …","code":"license_required"}`.
 That is not a decision: tell the human to activate a license (`handup license
 activate KEY` or Settings → License) and do not act. `check_request`,
 `wait_requests`, `cancel_request` and `list_requests` keep working on pending
 requests. See [License](../license.md).
+
+When one agent session has created `requests.max_per_minute` requests (default
+120) within a minute, tools that create a request return isError=true with an
+`error` text containing `daemon HTTP 429 Too Many Requests` and `"code":"rate_limited"`.
+Nothing was created and it is not a decision. Stop creating requests, tell the
+human, and do not retry in a loop. If the human clears a flooding session, its
+pending requests come back denied with feedback "Cleared as a flood". See
+[floods and mutes](../rules.md#floods-and-mutes).
 
 ## Notice replies
 

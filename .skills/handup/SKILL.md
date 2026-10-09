@@ -30,7 +30,8 @@ These are the human's controls. Never use them on your own requests, and never
 change them to make your requests pass, even when a command is available to you:
 `approve`, `deny`, `answer`, scoped allow (`--scope`), `yolo`, `rules`,
 `decide:`/`exec:` hooks in `config.yaml`, `pair`, `devices`, `tokens`,
-`storage clean`. Approval comes only from the returned decision.
+`storage clean`, `mute`, `unmute`, `flood clear`, and the `requests.*` /
+`notifications.burst.*` limits. Approval comes only from the returned decision.
 
 ## MCP
 
@@ -65,7 +66,7 @@ test), `integrate`, `skill` (install, uninstall), `prompt`, `completion`, `confi
 get, set, unset, toggle, keys, validate), `uninstall`. Human-only: `approve`, `deny`, `answer`,
 `stop` (a desktop Run), `ui`, `report`, `inbox`, `rules` (list, test, rm), `storage` (clean), `pair`, `devices`
 (list, disable, enable, mute, unmute, scope, revoke), `tokens` (create, list,
-revoke), `yolo`. Run `handup help COMMAND` or read the CLI reference for flags.
+revoke), `yolo`, `flood` (bare lists; `clear`), `mute`, `unmute`. Run `handup help COMMAND` or read the CLI reference for flags.
 For config, prefer `handup config get KEY --json`, `set` and `unset` (all
 validated; invalid writes nothing) over hand edits, and run `handup config
 validate` after any hand edit. `config show --effective --json` lists every
@@ -120,6 +121,11 @@ its trial ended or the license was revoked. It is not a decision and never
 permission: tell the human to run `handup license activate KEY` or open
 Settings → License, and do not act until a request is approved. Other license
 commands: `handup license status|import FILE|deactivate`.
+Exit 4 with `daemon HTTP 429` and `code: rate_limited` (MCP: a tool error with
+that text) means your agent session created more than `requests.max_per_minute`
+requests in the last minute. Nothing was created: stop creating requests, tell
+the human, and fix the loop; do not retry in a tight loop. Requests denied with
+feedback "Cleared as a flood" were cleared by the human; do not resubmit them.
 
 ## Read on demand
 
@@ -142,19 +148,20 @@ The reference tree is generated from canonical docs; do not hand-edit it.
 | Shell/CI execution gates and nonzero decisions | [Shell and CI](references/docs/public/agents/shell-ci.md) |
 | Asking before sending an email draft, editable drafts and what to send after approval | [Email drafts](references/docs/public/agents/email.md) |
 | Desktop Run (not on Windows), `run_result` fields, run limits (`run_timeout`), elevation, cancellation and stopping | [Desktop: run a command](references/docs/public/desktop.md#run-a-command) |
-| Auto decisions (`decided_by` rule, yolo, `hook:<name>`), scoped allow, presence or terminal inbox | [Rules](references/docs/public/rules.md) |
+| Inbox/History multi-select filters, hidden-by-default Inbox search (`/`, icon; Esc/×/reset closes), cross-device Auto-handled View/Mark read or history API lists (`outcome`, `kind`, `agent`: OR within, AND across; invalid outcome/kind member returns 400) | [Desktop filters](references/docs/public/desktop.md#inbox-filters), [History/API](references/docs/public/desktop.md#history); [phone filters](references/docs/public/mobile.md#inbox-filters) |
+| Auto decisions (`decided_by` rule, yolo, mute, `hook:<name>`), `dismiss` rules for notices, floods, mutes, 429 `rate_limited`, scoped allow, presence or terminal inbox | [Rules](references/docs/public/rules.md) |
 | Webhook/exec event hooks, `decide:` policy hooks the human asked you to write, or event payloads | [Event hooks](references/docs/public/integrations/hooks.md), [integrations](references/docs/public/integrations/index.md), [event schema](references/docs/public/schema/event.schema.json) |
 | Advanced recipes: canned email replies, sender routing, policy auto-decider, forms, publish gate, meeting replies | [Cookbook](references/docs/public/cookbook/index.md); scripts in [examples/cookbook](references/examples/cookbook/) |
 | Submit-only tokens, verified integration identity, GitHub Actions or n8n | [Submit tokens](references/docs/public/integrations/tokens.md) |
 | Per-request callback URLs, signing, allowlisting or delivery diagnostics | [Callbacks](references/docs/public/integrations/callbacks.md) |
-| Remote pairing, device scopes or notifications | [Remote access](references/docs/public/remote.md) |
+| Remote pairing, device scopes, notification backends (`desktop`, `ntfy`, `fcm`, licensed `push`), live official-app gateway, proof-of-possession device tickets, push URL/payload or doctor `push`/`push-last`/`relay` rows (unverified phones, last delivery result) | [Remote access](references/docs/public/remote.md#notification-backends) for notifications; [Mobile](references/docs/public/mobile.md#official-app-licensed-push-gateway) for doctor rows; [Remote access](references/docs/public/remote.md) for pairing/scopes |
 | Using the web inbox in a browser or on an iPhone (included from v0.1.2; not in v0.1.1 or earlier) | [Use handup in a browser](references/docs/public/web.md) |
 | Encrypted relay deployment or troubleshooting | [Relay](references/docs/public/relay.md) |
-| Desktop previews, inbox layouts, Settings, configurable keyboard shortcuts, test requests or pairing UI | [Desktop](references/docs/public/desktop.md) |
-| Android/iOS setup, offline queued decisions (a queued phone decision is still pending at the daemon), background delivery or mobile notifications | [Mobile](references/docs/public/mobile.md) |
+| Desktop previews, inbox layouts, Settings, configurable keyboard shortcuts, test requests, read aloud, dictation or pairing UI | [Desktop](references/docs/public/desktop.md) |
+| Android/iOS setup, offline queued decisions (a queued phone decision is still pending at the daemon), background delivery, mobile notifications (relay token registration; daemon token/ticket registration; silent verification for the live licensed gateway) or dictation | [Mobile](references/docs/public/mobile.md) |
 | Constructing request JSON or interpreting decisions | [Request schema](references/docs/public/schema/request.schema.json), [decision schema](references/docs/public/schema/decision.schema.json) |
 | Flags, preview limits, timeouts, config keys (including `keys.<id>` shortcut syntax/conflicts), storage paths or notification behavior | [CLI and daemon reference](references/docs/public/cli.md) |
-| Direct daemon API calls, including `POST /v1/requests/test` or decide-scoped `PUT /v1/keys` | [CLI API guide](references/docs/public/cli.md), [OpenAPI](references/docs/public/openapi.json) |
+| Direct daemon API calls, including `POST /v1/requests/test`, decide-scoped `PUT /v1/keys`, shared `GET`/`PUT /v1/auto-read` (view/decide scopes, max-merge) or `auto_read.changed` WebSocket events | [CLI API guide](references/docs/public/cli.md), [read-state API](references/docs/public/cli.md#auto-handled-read-state), [live events](references/docs/public/cli.md#websocket-events), [OpenAPI](references/docs/public/openapi.json) |
 | Runnable request/preview recipes or approval-gated shell flows | [Examples](references/examples/README.md); run from `references/` |
 | A full offline human-readable reference is explicitly needed | [Full public guide text](references/llms-full.txt) |
 

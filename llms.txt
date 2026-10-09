@@ -47,7 +47,7 @@ entries. Exit 4 means failure; no detected agents exits 0.
 | `service` | `handup service install`, `uninstall`, or `status` (`--dry-run`); not supported on Windows (run `handup serve`) |
 | `setup` | `handup setup [--dry-run]` first run: installs and starts the user service (skipped without a systemd/launchd user session and on Windows), runs `integrate all`, installs the generic skill plus Claude/Codex skills when detected (skips a non-handup skill directory), then waits up to 5s for the daemon. Safe to rerun; `--dry-run` writes nothing and starts nothing. Exit 4 if any step failed |
 | `demo` | `handup demo --json` seeds preview examples |
-| `doctor` | `handup doctor --json` diagnoses local environment |
+| `doctor` | `handup doctor --json` diagnoses the local environment; `push` (route, license, verified/unverified phones, gateway reachable), `push-last` (last delivery result and age) and `relay` rows only warn |
 | `ui` | Human: `handup ui --next` opens or focuses the desktop app |
 | `report` | Human: `handup report` opens the prefilled support page (`--feature`, `--question`; `--print` prints the URL) |
 | `inbox` | Human: `handup inbox` live terminal queue, requires TTY |
@@ -58,6 +58,9 @@ entries. Exit 4 means failure; no detected agents exits 0.
 | `devices` | Human only: `handup devices list [--json]` shows enabled, push and scope; `handup devices disable DEVICE_ID` / `enable DEVICE_ID` pauses/resumes access and push without unpairing; `handup devices mute DEVICE_ID` / `unmute DEVICE_ID` stops/resumes push only; `handup devices scope DEVICE_ID view|decide` changes access; `handup devices revoke DEVICE_ID` unpairs immediately |
 | `tokens` | Human only: `handup tokens create NAME [--expires 90d]`, `tokens list`, `tokens revoke NAME`. Submit credentials create and access only their own requests; never decide. See docs/public/integrations/tokens.md |
 | `yolo` | Human only: `handup yolo on --for 1h` auto-approves new low/medium-risk requests (`hard`: every risk; `off`); bare `handup yolo --json` prints `{mode, until}`. Agents never turn it on |
+| `flood` | Human: `handup flood [--json]` lists sources (agent + session) that sent `requests.flood_threshold` (40) requests in a minute, with ready-to-run mute/clear commands and a rules snippet; `handup flood clear --agent A [--session S]` dismisses that source's pending notices and denies its other pending requests ("Cleared as a flood"). Agents never clear floods |
+| `mute` | Human: `handup mute --agent A [--session S] [--for 1h] [--dismiss-notices]` silences a source's notifications (requests still arrive; runtime only); bare `handup mute [--json]` lists mutes. Agents never mute |
+| `unmute` | Human: `handup unmute ID` or `handup unmute --all` |
 | `mcp` | `handup mcp` serves stdio; stdout is protocol only |
 | `hook` | `handup hook claude` reads PermissionRequest JSON |
 | `integrate` | `handup integrate all [--dry-run] [--uninstall] [--no-mcp]` configures every detected agent; individual targets: `claude`, `codex`, `omp`, `mcp --client claude-code|codex|cursor|omp`; `--list` reports detection and installation |
@@ -96,7 +99,7 @@ request is decidable again. See
 Short client timeouts (omp, Codex): pass `"wait":false` and save the id; follow the pending result's message. With the omp extension's `handup push active` note, end the turn for the watched ids and the decision wakes you; do not also poll or start background CLI waiters for them. Otherwise call `wait_requests` {"ids":[…], "max_wait_seconds"?} (default 25, max 300) until `pending` is empty before ending the turn. Result: `{"decided":[decision JSON], "pending":[ids], "message"}`, plus `notices` {ids, message} for undismissed info notices, which are never pending. Blocking calls stop after 300s with `status: pending`. Pending is neither approval nor an answer; the same id recovers the decision after a reconnect, so never create a duplicate. `check_request` {"id"} reads status without waiting; `list_requests` {"status"?, "session"?, "agent"?, "limit"?} recovers ids after context loss; `cancel_request` {"id"} retracts a request you no longer need, never to dodge a decision.
 Requests wait for the human by default (`requests.default_timeout: none`); an explicit timeout opts into expiry and `on_timeout` (default deny) applies only then. A client tool timeout does not approve or expire anything.
 `ask_question`: {"question":"Which region?","choices":["eu","us"],"allow_free_text":true}; `question` and `allow_free_text` are required. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Submit returns `status: answered` and `answers.answer` = `{"selected":["eu"],"text":"…"}` (`text` only when typed). Decline returns `status: denied` with optional feedback and no answers. It accepts `wait`, `session` and `session_title` like `request_approval`. A single choice is rejected even with free text; choice labels must be distinct after trimming. Offer at least two choices, free text with no choices, or both. For status or results use `notify`; for permission use `request_approval`. These guards apply only to MCP `ask_question`, not approval question forms or omp's native question bridge.
-`notify`: {"title":"Staging deploy finished","summary":"All checks passed."}; `title` is required, plus optional summary, previews, session, session_title, timeout, dedupe_key. Put the message text in summary, shown under the one-line title; there is no body or message field, and a notice without summary or previews shows only its title. For status updates, finished results and heads-ups that need no reply. It creates a `kind: info` notice with OK (`ok`) and Dismiss (`dismiss`) options and `on_timeout: expire`, and returns `{id, status, message}` at once. Never wait for or poll it; either choice records `status: dismissed`. Rules and YOLO never decide notices. The human may add an optional reply: the MCP server appends unread replies to every later handup tool result (`notice_replies` [{id,title,feedback}] plus a line `Reply from the human to your notice TITLE: FEEDBACK`), the omp extension pushes them live, and Claude Code's prompt hook and background Stop waiter deliver them for Claude's `session_id`, waking an idle Claude (under Claude Code, `session` defaults to `CLAUDE_CODE_SESSION_ID`). Each reply is delivered once (`POST /v1/notice-replies`); treat it as new instructions from the human.
+`notify`: {"title":"Staging deploy finished","summary":"All checks passed."}; `title` is required, plus optional summary, previews, session, session_title, timeout, dedupe_key. Put the message text in summary, shown under the one-line title; there is no body or message field, and a notice without summary or previews shows only its title. For status updates, finished results and heads-ups that need no reply. It creates a `kind: info` notice with OK (`ok`) and Dismiss (`dismiss`) options and `on_timeout: expire`, and returns `{id, status, message}` at once. Never wait for or poll it; either choice records `status: dismissed`. YOLO never decides notices; a human's `dismiss` rule or mute may dismiss one on arrival. The human may add an optional reply: the MCP server appends unread replies to every later handup tool result (`notice_replies` [{id,title,feedback}] plus a line `Reply from the human to your notice TITLE: FEEDBACK`), the omp extension pushes them live, and Claude Code's prompt hook and background Stop waiter deliver them for Claude's `session_id`, waking an idle Claude (under Claude Code, `session` defaults to `CLAUDE_CODE_SESSION_ID`). Each reply is delivered once (`POST /v1/notice-replies`); treat it as new instructions from the human.
 Structured questions (`handup ask --request -`): `kind: "question"`, `input.questions` = 1–10 of {id, question, header?, multi?, recommended? (option index), allow_free_text?, options: [{label, description?, preview? (markdown)}]}, plus options with one `approve` (Submit) and one `deny` (Decline). Submit returns `decision.fields.answers` = {QID: {selected: [labels], text?}}; every question is answered, single-choice questions select at most one label, and `text` appears only where free text is allowed.
 
 Blocking `ask --wait` and `wait` exit codes. Nonblocking `ask`, `status` and `show` also exit 0 while pending, so read `status` there.
@@ -122,6 +125,14 @@ permission: ask the human to run `handup license activate KEY` or open Settings 
 License. Pending requests stay decidable. `handup license status|activate|import|deactivate`
 manage it. See [License](docs/public/license.md).
 
+Exit 4 with `daemon HTTP 429` and `code: rate_limited` (MCP: a tool error with
+that text) means your agent session created more than `requests.max_per_minute`
+(default 120) requests in the last minute. Nothing was created and it is not a
+decision: stop creating requests, tell the human, and fix the loop; do not
+retry in a tight loop. A human may clear a flooding session, which denies its
+pending requests with feedback "Cleared as a flood". See
+[floods and mutes](docs/public/rules.md#floods-and-mutes).
+
 Android queues offline decisions durably and delivers them from Rust in the
 background, with a silent sending notification while work waits. Swiping away
 or force-stopping pauses delivery until reopen; service-start restrictions and
@@ -130,9 +141,47 @@ decision is not yet a daemon approval: keep waiting on the same request id.
 High-risk background approvals require the confirmation given at tap time.
 See [Mobile](docs/public/mobile.md#offline).
 
+## Inbox and history filters
+
+Desktop, Android and web use one sideways-scrolling quick-filter row: Inbox
+request types with counts (types present, plus selected types), History
+outcomes with colored dots. Pick several; nothing picked shows everything,
+with no All chip. **Filters** opens a bottom sheet on phones or a small dialog
+on desktop: Inbox has Type and Agent; History has Outcome, Type, Agent and
+Has files. Picks within a section combine with OR, across sections with AND.
+Sheet-only picks appear after a divider as removable chips and are counted
+on the Filters button. Reset clears picks and closes Inbox search but keeps
+History search. Swipe or use the mouse wheel to scroll the row.
+
+The Inbox filter row's search icon or `/` opens a focused field, hidden by
+default with no setting. It matches a case-insensitive substring in title,
+summary, folder (`cwd`), repo, branch, agent or session title, ANDed with
+chip/sheet filters. No matching pending requests shows **No matches**.
+`Esc` in the field or **×** clears and closes search; reset clears both search
+and filters. `/` searches both Inbox and History, not Auto-handled or the
+compact quick window.
+
+Unread automatic decisions open via **N auto-handled · View** above the list,
+with **← Inbox** and **Mark read**, not a tab. Marking read syncs across every
+device connected to the same daemon, separately for each computer, and survives
+daemon restarts. `GET /v1/auto-read` returns `{"at":...}` (initially 0);
+`PUT /v1/auto-read` with `{"at":...}` atomically stores the maximum and returns
+the stored value. Only an increase emits `{"type":"auto_read.changed","at":...}`.
+`at` uses the UI's timestamp unit (opaque to the daemon); values above
+`9223372036854775807` return 400. Remote/relay GET needs `view`, PUT needs
+`decide`; submit tokens cannot use either. See the
+[read-state API and live events](docs/public/cli.md#auto-handled-read-state).
+
+`GET /v1/history` accepts single values or comma-separated lists for `outcome`,
+`kind` and `agent`: OR within a parameter, AND across parameters. An invalid
+outcome or kind member returns HTTP 400; single-value queries are unchanged.
+`type` remains one preview type; `has=attachments` and `q` also combine with
+the other filters. See [Inbox filters](docs/public/desktop.md#inbox-filters) and
+[History/API](docs/public/desktop.md#history).
+
 ## Guides
 
-- [Downloads](docs/public/downloads.md): Compiled binaries and packages per platform (install script, Arch pacman package, deb, rpm, Alpine, Homebrew, AppImage, macOS desktop dmg, Windows x86-64 beta CLI zip and NSIS desktop installer, APK), checksum verification, updates and uninstall; no source build needed.
+- [Downloads](docs/public/downloads.md): Compiled binaries and packages per platform (install script, Arch pacman package, deb, rpm, Alpine, Homebrew, AppImage, macOS desktop dmg, Windows x86-64 beta CLI zip and NSIS desktop installer, APK; from v0.1.7, static Linux amd64/arm64 `handup-relay_<version>_linux_<arch>.tar.gz` self-hosted relay archives), checksum verification, updates and uninstall; no source build needed.
 - [License and trial](docs/public/license.md): 14-day trial, then `handup license activate KEY` (exchanged once at gethandup.dev, then offline) or `license import FILE`; when locked new requests are refused (exit 6, HTTP 402 `license_required`, MCP same code), Claude/Codex hooks and the omp extension fall back to the agent's own prompt and never allow, pending requests stay decidable; `GET/PUT/DELETE /v1/license`.
 - [Claude Code](docs/public/agents/claude-code.md): PermissionRequest hook, UserPromptSubmit and background (asyncRewake) Stop notice-reply hooks, opt-in turn-end notices (`handup config set integrations.claude.turn_notice true`) and MCP setup.
 - [Codex](docs/public/agents/codex.md): TOML MCP setup and short-timeout polling.
@@ -145,11 +194,12 @@ See [Mobile](docs/public/mobile.md#offline).
 - [Submit tokens](docs/public/integrations/tokens.md): Remote HTTP submission for CI, n8n and scripts.
 - [Email drafts](docs/public/agents/email.md): `email` preview plus input {to,cc,bcc,subject,body}; on approve send decision fields if present else the draft with your own mail tool; handup never sends.
 - [Agent skill](.skills/handup/SKILL.md): When to ask, what never to self-approve, MCP/CLI essentials and which bundled reference to read.
-- [Rules](docs/public/rules.md): First-match policy under `rules:` in config.yaml (legacy rules.yaml migrated on start), human-only scoped allow, audit, presence, and terminal keys.
-- [Remote access](docs/public/remote.md): Pairing, device scopes (synthetic tests, storage cleanup/retention, `PUT /v1/keys` and stopping a desktop run need `decide`, never `view`/`submit`), tailscale/direct modes, web UI, ntfy and FCM notifications.
-- [Web inbox in a browser](docs/public/web.md): Browser setups (Tailscale recommended; same computer via desktop app or loopback direct mode; LAN direct mode with self-signed TLS and risk banner; relay not supported), pairing, revoking; included from v0.1.2, not in v0.1.1 or earlier.
-- [Mobile](docs/public/mobile.md): Grouped Settings, per-computer test requests/questions, storage split into this phone's offline copy (Clear frees only the phone) and each computer's use and cleanup (needs `decide`), searchable voices (Android system default TTS engine); durable decision outbox, background delivery limits, biometrics, permissions and notifications.
-- [Desktop](docs/public/desktop.md): Run / Run as admin, output, Cancel, run limit (`run.timeout` 10m, per-request `run_timeout`, `run.max_timeout` 1h), Stop from other devices (`POST /v1/requests/{id}/run/stop`, `handup stop`) and administrator prompts; inbox layouts, configurable keyboard shortcuts (computer-wide, live Settings edits; touch/view-only read-only), header config notice (reloaded, restart needed, invalid file kept previous), grouped Settings (Storage: usage, keep-for retention, background cleanup), test requests/questions and searchable read-aloud voices; macOS daemon banners post as the desktop app (Allow its notifications prompt; CLI-only installs show none).
+- [Rules](docs/public/rules.md): First-match policy under `rules:` in config.yaml (legacy rules.yaml migrated on start; `dismiss` rules for info notices), human-only scoped allow, YOLO mode, floods and mutes (`notifications.burst`, `requests.flood_threshold`, `requests.max_per_minute` 429 `rate_limited`, `handup flood`/`mute`), audit, presence, and terminal keys.
+- [Remote access](docs/public/remote.md): Pairing, device scopes (synthetic tests, storage cleanup/retention, `PUT /v1/keys` and stopping a desktop run need `decide`, never `view`/`submit`), tailscale/direct modes, web UI (browser read aloud and dictation); notification backends `desktop`, `ntfy`, `fcm`, `push` (default `[desktop, push]`). Licensed push is live at https://push.gethandup.dev for license holders using the official Android app; only proof-of-possession verified phones get woken. `PUT /v1/devices/self/push` accepts `{platform, token, ticket?}`; doctor's `push` row warns for unverified phones (tokens without tickets) or an unreachable gateway, and `push-last` shows the last delivery result. The gateway logs per-request outcomes without tokens, tickets, licenses, IDs or IPs (3 days in Cloudflare Workers Logs). notifications.push.url/payload (`wake` default, no title/previews); self-hosted `fcm` takes precedence over `push`.
+- [Relay](docs/public/relay.md): Self-hosted end-to-end encrypted relay (`handup-relay`, Linux release archives from v0.1.7): setup, limits, tenants, shared Postgres, `handup pair --relay`, what the relay sees, FCM/APNs wake-ups (phone registers its FCM token with both relay channel and daemon, plus its device ticket at the daemon; relay FCM service account must match the APK's Firebase project; the live licensed gateway is a separate path for verified official-app phones).
+- [Web inbox in a browser](docs/public/web.md): Browser setups (Tailscale recommended; same computer via desktop app or loopback direct mode; LAN direct mode with self-signed TLS and risk banner; relay not supported), pairing, revoking, browser dictation (Web Speech; Chrome may send audio to its service); included from v0.1.2, not in v0.1.1 or earlier.
+- [Mobile](docs/public/mobile.md): Grouped Settings, per-computer test requests/questions, storage split into this phone's offline copy (Clear frees only the phone) and each computer's use and cleanup (needs `decide`), searchable voices (Android system default TTS engine), dictation (Android speech recognizer, on-device when supported; `RECORD_AUDIO`), optional OpenAI/Groq/ElevenLabs speech providers (keys in Android Keystore, write-only); durable decision outbox, background delivery limits, biometrics, permissions and notifications (relay pairings register push with both relay and daemon; official-app licensed gateway is live, with silent proof-of-possession verification and device tickets).
+- [Desktop](docs/public/desktop.md): Run / Run as admin, output, Cancel, run limit (`run.timeout` 10m, per-request `run_timeout`, `run.max_timeout` 1h), Stop from other devices (`POST /v1/requests/{id}/run/stop`, `handup stop`) and administrator prompts; inbox layouts, configurable keyboard shortcuts (computer-wide, live Settings edits; touch/view-only read-only), header config notice (reloaded, restart needed, invalid file kept previous), grouped Settings (Storage: usage, keep-for retention, background cleanup), test requests/questions and searchable read-aloud voices; dictation with local whisper.cpp (Settings → Dictation downloads tiny/base/small, SHA-256 verified, offline afterwards; on Linux reuses, read-only, a whisper.cpp model already downloaded by voxtype, hyprwhspr, Handy, OpenWhispr, Speech Note, GNOME Speech2Text, whisper-dictation, Buzz or AUR `whisper.cpp-model-*` packages; macOS microphone prompt) and optional OpenAI/Groq/ElevenLabs speech providers (keys in the OS keychain, write-only, never sent to the daemon or relay); macOS daemon banners post as the desktop app (Allow its notifications prompt; CLI-only installs show none).
 - [Test request API](docs/public/cli.md#test-requests): `POST /v1/requests/test`, optional `kind: approval|question` (default approval), fixed server-built low-risk sample with 15m timeout; not permission for any real action.
 - [Config live reload](docs/public/cli.md#live-reload): every config.yaml save applies live (keys, rules, notifications, hooks, history …) except `daemon.listen`, `previews.max_file_bytes` and `remote.*` (restart required); invalid saves keep the previous config; `config.changed` event and `config_restart_required`/`config_error` in `GET /v1/ui-settings`; local-only `GET /v1/config/status` (watched path, SHA-256 of handled content) lets `handup config set` report "Applied live" only after the daemon handled the save.
 - [Shortcut configuration/API](docs/public/cli.md#keyboard-shortcut-configuration): `handup config keys`, `keys.<id>`, key syntax and per-view conflict rules; `GET /v1/ui-settings`, `PUT /v1/keys` and `keys.changed`.
@@ -287,7 +337,9 @@ Opt in to see each finished turn in handup without the agent calling `notify`:
 handup config set integrations.omp.turn_notice true   # default false
 ```
 
-Restart omp afterwards: the extension reads the setting once, through `handup config get`, when omp loads it. At each turn end (omp's `session_stop`, main session only, never subagents or task sessions) the extension posts the final assistant message as an info notice: the title is its first non-empty line without Markdown markers (at most 120 characters), the summary is the full text (cut at 16,000 characters), and the source is the omp session (agent, session id and title, cwd). It skips the notice when the run was aborted, the message has no text, or the agent already created a handup request in that run (MCP `request_approval`, `ask_question` or `notify`, or `handup ask` through bash); each new agent run resets that check. The notice is watched like any other: a typed reply arrives as one `handup-notice-reply` message that wakes or steers omp, and OK or Dismiss without a reply does nothing. Posting runs in the background, never delays or continues the turn, and silently ignores daemon errors. It needs the native extension (`handup integrate omp`); MCP alone cannot post it. For other agents, see [Agent lifecycle hooks](docs/public/agents/lifecycle-hooks.md).
+Restart omp afterwards: the extension reads the setting once, through `handup config get`, when omp loads it. At each turn end (omp's `session_stop`, interactive main session only: never subagents, task sessions, or headless runs such as `omp -p`) the extension posts the final assistant message as an info notice: the title is its first non-empty line without Markdown markers (at most 120 characters), the summary is the full text (cut at 16,000 characters), and the source is the omp session (agent, session id and title, cwd). It skips the notice when the run was aborted, the message has no text, or the agent already created a handup request in that run (MCP `request_approval`, `ask_question` or `notify`, or `handup ask` through bash); each new agent run resets that check. The notice is watched like any other: a typed reply arrives as one `handup-notice-reply` message that wakes or steers omp, and OK or Dismiss without a reply does nothing. Posting runs in the background, never delays or continues the turn, and silently ignores daemon errors. It needs the native extension (`handup integrate omp`); MCP alone cannot post it. For other agents, see [Agent lifecycle hooks](docs/public/agents/lifecycle-hooks.md).
+
+Too many notices? Turn them off with `handup config set integrations.omp.turn_notice false`; new omp sessions pick it up, and sessions already open keep the value they loaded until restarted. The extension tells interactive sessions from headless ones by omp's `ctx.hasUI` (verified `false` under `omp -p` in omp 18.8.6), so headless runs post nothing even though omp treats them as main sessions and fires `session_stop` for them. Before this release, headless runs (scripted evals, tools that launch `omp -p`) also sent notices and could flood the inbox; update with `handup integrate omp` and restart omp, since a running session keeps the extension code it loaded.
 
 ### Limitations
 

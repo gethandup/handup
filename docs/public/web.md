@@ -16,10 +16,45 @@ their previews, history, and Settings. With **decide** access it can approve,
 deny, edit and approve, answer questions, cancel, and stop a command that the
 desktop app is running. **View** access is read-only.
 
+Inbox and History use the same [combinable filters as desktop](desktop.md#inbox-filters):
+one sideways-scrolling row of request-type chips with counts in Inbox, or
+outcome chips with colored dots in History. Nothing picked shows everything.
+**Filters** opens a bottom sheet on phones or a small dialog on desktop
+(Inbox: **Type**, **Agent**; History: **Outcome**, **Type**, **Agent**,
+**Has files**). Picks within a section match any of them; across sections they
+must all match. Sheet-only picks show as removable chips after a divider and
+are counted on the Filters button; the reset icon appears while filters or an
+Inbox query are active. Swipe or use the mouse wheel to scroll the row.
+
+The Inbox filter row's search icon or `/` opens a focused search field, hidden
+by default with no setting. It matches a case-insensitive substring in title,
+summary, folder (`cwd`), repo, branch, agent, or session title, ANDed with
+chip/sheet filters. No matching pending requests shows **No matches**.
+`Esc` in the field or **×** clears and closes it; reset clears both search and
+filters. `/` also focuses History search; History reset keeps its search.
+The Auto-handled view has no search.
+
+Unread automatic decisions open through **N auto-handled · View** above the
+list, with **← Inbox** and **Mark read**, not an Auto-handled tab. Marking read
+syncs across every device connected to the same daemon and survives daemon
+restarts; each computer's read state is separate. `decide` access is required
+to update shared read state, while `view` access can follow it.
+
+On a phone in **Split** layout, if the request you last opened is resolved on
+another device while you are on the list screen, the list moves on immediately.
+After the last pending request, it shows **All clear** rather than an empty list.
+
 A browser never runs commands. **Run** and **Run as admin** exist only in the
 desktop app. Scoped allow rules, pairing, device management and the audit log
 also stay on the computer itself. See [Web UI](remote.md#web-ui) for every
 setting and the browser protections.
+
+Where the browser supports it, you can also [read requests aloud](remote.md#read-aloud)
+and [dictate](remote.md#dictation) answers and feedback with a mic button beside
+text fields. Dictation uses the browser's own speech recognition, so some
+browsers, such as Chrome, send the audio to their speech service; the words
+stay editable and nothing is sent until you submit. Cloud speech providers are
+only in the desktop and Android apps.
 
 There is no native iPhone app. On an iPhone, use the web inbox in Safari.
 

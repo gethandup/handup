@@ -93,8 +93,10 @@ $ sh examples/cookbook/email-route.sh examples/cookbook/noreply-email.json
 denied: Never reply to no-reply senders; archive instead.      # exit 1
 ```
 
-Rule decisions are audited like any other: the desktop **Auto-handled** tab,
-`handup log --json`, and `GET /v1/requests?decided_by=rule` list them.
+Rule decisions are audited like any other: **N auto-handled · View** above the
+Inbox list opens their read-only view; **Mark read** leaves them in History
+and syncs the read state across devices connected to the same daemon.
+`handup log --json` and `GET /v1/requests?decided_by=rule` also list them.
 
 ## Guardrails
 

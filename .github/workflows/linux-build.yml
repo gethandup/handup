@@ -153,8 +153,9 @@ jobs:
         run: |
           sudo apt-get update
           # libspeechd-dev + libclang-dev: read aloud (tauri-plugin-tts, speech-dispatcher-sys bindgen).
+          # libasound2-dev + cmake: dictation (cpal → alsa-sys, whisper-rs-sys builds whisper.cpp).
           sudo apt-get install -y --no-install-recommends pkg-config file xdg-utils libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev librsvg2-dev libssl-dev libspeechd-dev libclang-dev
+            libayatana-appindicator3-dev librsvg2-dev libssl-dev libspeechd-dev libclang-dev libasound2-dev cmake
           corepack enable && corepack prepare "pnpm@$PNPM_VERSION" --activate
           rustup update stable --no-self-update && rustup default stable
           mkdir -p "$RUNNER_TEMP/bin" && echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"

@@ -33,9 +33,23 @@ does over the remote listener.
 
 ## Run a relay
 
-This requires the compiled `handup-relay` program. handup releases do not
-include a relay binary yet; see [downloads and releases](downloads.md) for what
-is published. The following commands apply once the relay binary is installed:
+From v0.1.7, each handup release includes a static Linux build of the
+relay: `handup-relay_<version>_linux_amd64.tar.gz` (x86-64) or
+`handup-relay_<version>_linux_arm64.tar.gz` (ARM64). Pick the archive for the
+server's architecture, which may differ from the computer you download it on.
+Each archive holds the `handup-relay` binary, `LICENSE` and
+`THIRD_PARTY_NOTICES.md`; it is a musl build, so it runs on any Linux
+distribution, Alpine included. The [downloads page](https://gethandup.dev/downloads)
+lists them under **Self-hosted relay (Linux server)**. Verify the archive against
+the release's `checksums.txt` as described in
+[verify a download](downloads.md#verify-a-download), then install it:
+
+```bash
+tar -xzf handup-relay_*_linux_amd64.tar.gz handup-relay
+sudo install -m 0755 handup-relay /usr/local/bin/handup-relay
+```
+
+Then start it:
 
 ```bash
 handup-relay --listen 127.0.0.1:8787 --db /var/lib/handup-relay/relay.db
@@ -135,7 +149,9 @@ and specific private addresses; wildcard or public binds require
 Tenant mode on a non-loopback listener without
 `probe_listen` logs a warning at startup. The probe and metrics listeners stay
 up until the drain ends, so readiness reports 503 throughout. The existing
-`/v1/health` endpoint remains available for protocol clients.
+`/v1/health` endpoint remains available for protocol clients; `handup doctor`
+on a paired computer checks it (`relay` row, 3-second timeout) and shows the
+relay's protocol and version, or warns `relay unreachable`.
 
 SIGTERM and SIGINT stop admission and drain for up to `drain_timeout` (10s).
 Already-started HTTP writes finish within the deadline; WebSockets close with
@@ -433,11 +449,39 @@ the daemon before sending the title to the relay. It has no request id and never
 includes preview content. Tapping it opens the app, which fetches the queue
 through the encrypted channel.
 
-Push registration and removal (`PUT`/`DELETE /v1/devices/self/push`) also
-travel through the encrypted session, with the same paired-device scope checks
-as direct remote access.
+The Android app registers its FCM token with both the relay channel
+(`PUT /v1/channels/<channel>/push` with the phone's channel credential) and
+the daemon (`PUT /v1/devices/self/push` through the encrypted channel with device
+authentication, plus the device ticket once verified). The daemon's licensed
+`push` gateway is live for verified official-app phones with an installed signed
+license; its self-hosted `fcm` backend can also send when configured for the APK's
+Firebase project. Relay token registration does not use gateway tickets.
+Unpairing attempts to remove both registrations. Phones paired directly or
+over Tailscale register only with the daemon.
+
+A relay wake-up shows a generic Android notification titled with the relay's
+title ("Approval requested", or the request title with `push: title`) and
+**Open handup to review**; tapping it opens the inbox, not a specific request,
+and the next sync of the inbox clears it.
 
 If the provider reports an invalid or unregistered token, the relay removes
-it. The Android app registers an FCM token only when built with your own
-Firebase configuration (see [mobile.md](mobile.md)); builds without it receive
-no push.
+it. The Android app registers an FCM token only when built with Firebase
+configuration (see [mobile.md](mobile.md#notifications)); builds without it
+receive no push. FCM only delivers a wake-up when the relay's
+`push.fcm.service_account` belongs to the same Firebase project as the APK. For
+the released handup APK, that means a self-hosted relay's wake-ups reach the
+official app only with a service account for that APK's Firebase project;
+otherwise build the APK with your own Firebase project and give the relay that
+project's service account.
+
+The licensed [push gateway backend](remote.md#notification-backends) is a
+separate path and does not require the relay to hold Firebase credentials.
+It is live at `https://push.gethandup.dev` for license holders using the official
+Android app. Only phones with a proof-of-possession device ticket get woken.
+Its default `wake` sends no title or preview content, but the gateway receives
+the signed license, phone tokens, device tickets, and request metadata outside
+relay encryption; Google receives the tokens and notification data. The gateway
+verifies the signed license and each ticket.
+Setting `notifications.push.payload: title` shares the
+redacted title with them. Relay `push: title` and daemon
+`notifications.push.payload` are separate settings.

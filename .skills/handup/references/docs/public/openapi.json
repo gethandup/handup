@@ -9,6 +9,61 @@
     "version": "1"
   },
   "paths": {
+    "/v1/auto-read": {
+      "get": {
+        "tags": [],
+        "description": "Shared auto-handled read watermark for this computer. Zero until first marked read; persisted across daemon restarts.",
+        "operationId": "auto_read_get",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoRead"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Remote device without view scope"
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "description": "Mark auto-handled requests read on every device of this computer. Atomically stores max(stored, at) and returns the stored watermark. The timestamp unit is opaque to the daemon. Values above 9223372036854775807 are rejected. Emits auto_read.changed with at only when the stored value increases.",
+        "operationId": "auto_read_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoRead"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoRead"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid auto-read time (above i64::MAX)"
+          },
+          "403": {
+            "description": "Remote device without decide scope"
+          }
+        }
+      }
+    },
     "/v1/blobs": {
       "post": {
         "tags": [],
@@ -252,7 +307,59 @@
         "operationId": "events",
         "responses": {
           "101": {
-            "description": "WebSocket events: {type, request} for request.created (carrying the final status, so auto-handled requests arrive already decided), request.decided, request.expired and request.cancelled; request.updated when a pending request's desktop run starts, a stop is requested, or its claim is released or interrupted (`request.run`); {type: yolo.changed, yolo} when YOLO mode changes or its timer ends; {type: keys.changed, keys} when the shortcut overrides change; {type: config.changed, config: ConfigChange} after every config save (file edit, `handup config set`, or a Settings save): `applied` keys are in force, `restart_required` keys wait for a daemon restart, and `error` (`path:line: message`) means the file is invalid and the previous config stays in force. Refetch `/v1/ui-settings` on it. Closed immediately when the calling device is revoked (4401) or disabled (4403). The daemon sends a WebSocket ping every 25 s, so a client that hears nothing for longer can treat the connection as dead"
+            "description": "WebSocket events: {type, request} for request.created (carrying the final status, so auto-handled requests arrive already decided), request.decided, request.expired and request.cancelled; request.updated when a pending request's desktop run starts, a stop is requested, or its claim is released or interrupted (`request.run`); {type: yolo.changed, yolo} when YOLO mode changes or its timer ends; {type: auto_read.changed, at} when the shared auto-handled read watermark increases; {type: floods.changed, floods: [FloodSource]} when a source starts or stops flooding or its muted state changes; {type: mutes.changed, mutes: [Mute]} when a mute is added, removed or its timer ends; {type: keys.changed, keys} when the shortcut overrides change; {type: config.changed, config: ConfigChange} after every config save (file edit, `handup config set`, or a Settings save): `applied` keys are in force, `restart_required` keys wait for a daemon restart, and `error` (`path:line: message`) means the file is invalid and the previous config stays in force. Refetch `/v1/ui-settings` on it. Ignore unknown event types. Closed immediately when the calling device is revoked (4401) or disabled (4403). The daemon sends a WebSocket ping every 25 s, so a client that hears nothing for longer can treat the connection as dead"
+          }
+        }
+      }
+    },
+    "/v1/floods": {
+      "get": {
+        "tags": [],
+        "operationId": "floods_get",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FloodSource"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/floods/dismiss": {
+      "post": {
+        "tags": [],
+        "operationId": "floods_dismiss",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FloodDismiss"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FloodDismissed"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires decide scope"
           }
         }
       }
@@ -296,15 +403,16 @@
           {
             "name": "outcome",
             "in": "query",
-            "description": "approved, denied, expired, cancelled, auto (rule or YOLO decision), or dismissed (info notice)",
+            "description": "One or more of approved, denied, expired, cancelled, auto (rule or YOLO decision), dismissed (info notice), comma-separated",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/HistoryOutcome"
+              "type": "string"
             }
           },
           {
             "name": "agent",
             "in": "query",
+            "description": "One or more agent names, comma-separated",
             "required": false,
             "schema": {
               "type": "string"
@@ -331,10 +439,10 @@
           {
             "name": "kind",
             "in": "query",
-            "description": "Request kind: command, edit, review, question, info, or custom",
+            "description": "One or more request kinds: command, edit, review, question, info, custom, comma-separated",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Kind"
+              "type": "string"
             }
           },
           {
@@ -491,6 +599,98 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/mutes": {
+      "get": {
+        "tags": [],
+        "operationId": "mutes_get",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Mute"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "mutes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MuteSet"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mute"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selector or duration"
+          },
+          "403": {
+            "description": "Requires decide scope"
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "mutes_delete",
+        "responses": {
+          "204": {
+            "description": "All mutes removed"
+          },
+          "403": {
+            "description": "Requires decide scope"
+          }
+        }
+      }
+    },
+    "/v1/mutes/{id}": {
+      "delete": {
+        "tags": [],
+        "operationId": "mute_delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Mute removed"
+          },
+          "403": {
+            "description": "Requires decide scope"
+          },
+          "404": {
+            "description": "Mute not found"
           }
         }
       }
@@ -725,6 +925,9 @@
           },
           "413": {
             "description": "Preview exceeds previews.max_file_bytes"
+          },
+          "429": {
+            "description": "Source creation cap exceeded (`requests.max_per_minute`; `code: rate_limited`)"
           }
         }
       }
@@ -1559,6 +1762,21 @@
           }
         }
       },
+      "AutoRead": {
+        "type": "object",
+        "description": "The shared auto-handled read watermark, opaque to the daemon.",
+        "required": [
+          "at"
+        ],
+        "properties": {
+          "at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Zero until marked read; uses the UI's auto-decision timestamp unit.\nValues above `i64::MAX` (9223372036854775807) are rejected.",
+            "minimum": 0
+          }
+        }
+      },
       "BTreeMap": {
         "type": "object",
         "additionalProperties": {
@@ -2154,6 +2372,84 @@
         },
         "additionalProperties": false
       },
+      "FloodDismiss": {
+        "type": "object",
+        "required": [
+          "agent"
+        ],
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "session": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "FloodDismissed": {
+        "type": "object",
+        "required": [
+          "dismissed",
+          "denied"
+        ],
+        "properties": {
+          "dismissed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "denied": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "FloodSource": {
+        "type": "object",
+        "required": [
+          "agent",
+          "count",
+          "pending",
+          "since",
+          "muted"
+        ],
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "session": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session_title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pending": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "since": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "muted": {
+            "type": "boolean"
+          }
+        }
+      },
       "History": {
         "type": "object",
         "description": "Retention for resolved requests (decision history). The daemon prunes at\nstart and hourly; 0 disables a cap. Pending requests are never pruned.",
@@ -2220,7 +2516,7 @@
       },
       "HistoryOutcome": {
         "type": "string",
-        "description": "How a resolved request ended, as history shows it. `auto` is a rule or\nYOLO-mode decision; `expired` includes timeouts that auto-approved (`on_timeout: approve`);\n`dismissed` is an info notice a person dismissed.",
+        "description": "How a resolved request ended, as history shows it. `auto` is a rule or\nYOLO-mode decision; `expired` includes timeouts that auto-approved (`on_timeout: approve`);\n`dismissed` is a dismissed info notice (by a person, a `dismiss` rule or a mute).",
         "enum": [
           "approved",
           "denied",
@@ -2406,6 +2702,68 @@
             "type": "string"
           }
         }
+      },
+      "Mute": {
+        "type": "object",
+        "required": [
+          "id",
+          "dismiss_notices"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "until": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "dismiss_notices": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MuteSet": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "for": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dismiss_notices": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
       },
       "NoticeRepliesQuery": {
         "type": "object",
@@ -2805,6 +3163,12 @@
           },
           "token": {
             "type": "string"
+          },
+          "ticket": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "additionalProperties": false

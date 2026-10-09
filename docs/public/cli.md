@@ -48,6 +48,10 @@ handup devices unmute <id>   # resume push notifications
 handup devices scope <id> view # read-only; use decide to restore decision access
 handup devices revoke <id>   # permanently unpair
 handup yolo on --for 1h      # auto-approve new low/medium risk (hard: all); handup yolo off
+handup flood                 # sources sending a flood of requests, with mute/clear commands
+handup flood clear --agent A --session S  # dismiss its notices, deny its other pending requests
+handup mute --agent A --for 1h  # silence a source's notifications (--session, --dismiss-notices); bare: list
+handup unmute <id>           # or --all
 handup report                # support page in the browser; --feature, --question, --print
 handup version --plain       # alias: handup v
 handup config init           # --force overwrites existing config
@@ -146,6 +150,9 @@ agent failed. `--client` and `--list` are rejected with `all` (exit 4). Bare
 These apply to `ask`, `wait`, `status`, `show`, `approve`, `deny`, and `cancel`;
 `ls` returns 0 on success. Non-TTY queue commands never prompt or print banners.
 Exit 6 means the trial ended or the license was revoked; see [License](license.md).
+When one agent session already created `requests.max_per_minute` requests
+(default 120) in the last minute, `ask` exits 4 with `daemon HTTP 429 Too Many
+Requests` and `"code": "rate_limited"`; see [floods and mutes](rules.md#floods-and-mutes).
 `ask --wait --json` and `wait --json` print the decision (including feedback and
 `content_hash`) with `id` and `status`; a cancellation prints those three fields.
 Other queue commands print Request JSON. `--option id:label[:approve|deny]` adds
@@ -153,7 +160,9 @@ custom choices (default outcome approve, except id `deny`).
 
 `--kind info` submits a notice that needs no reply: it gets **OK** (`ok`,
 approve outcome) and **Dismiss** (`dismiss`, deny outcome) options,
-`on_timeout: expire`, takes no `input`, and is never decided by rules or YOLO.
+`on_timeout: expire`, and takes no `input`. YOLO never decides it; only a
+person, a [`dismiss` rule](rules.md) or a [mute](rules.md#floods-and-mutes)
+with `--dismiss-notices` dismisses it.
 Either choice records `status: dismissed` (exit 0); `decision.option` says which.
 Do not `--wait` on a notice; agents with MCP use `notify`. A human's optional
 reply is delivered once through `POST /v1/notice-replies` (MCP, the omp
@@ -284,14 +293,18 @@ handup config set requests.default_timeout 10m
 handup config set run.timeout 30m           # desktop Run limit; run.max_timeout caps it
 handup config set notifications.type visual
 handup config set notifications.quiet_hours 22:00-08:00
-handup config set notifications.backends '[desktop, ntfy]'
+handup config set notifications.backends '[desktop, push, ntfy]'
 handup config set notifications.ntfy.topic my-private-topic
+handup config set notifications.push.payload wake  # default; no request title
+handup config set notifications.push.url https://push.gethandup.dev
 handup config set remote.mode tailscale
 handup config set history.keep_days 30      # 0 disables the age cap
 handup config set history.max_requests 500  # 0 disables the count cap
 handup config set history.max_bytes 1073741824  # best-effort 1 GiB live-storage cap
 handup config set history.files_keep_days 7    # files only; keep decisions/audit
 handup config set previews.max_file_bytes 268435456
+handup config set notifications.burst.max 20  # pings per source per window; 0 = off
+handup config set requests.max_per_minute 120  # creation cap per source; 0 = off
 handup config set decisions.primary_side left  # Approve/Submit on the left
 handup config set keys.approve shift+y
 handup config set keys.help f1
@@ -338,12 +351,31 @@ put secrets in `config.yaml`.
 The daemon's `keys:` map overrides desktop/web shortcuts by action id; omitted
 actions keep their defaults. `handup config keys` lists the supported ids (for
 example `approve`, `deny`, `next`, `previous`, `search`, `help`, and `undo`).
+Inbox and History also support remappable `last` (default `shift+g`, with
+built-in `End`), `scroll_line_down` / `scroll_line_up` (`ctrl+e` / `ctrl+y`),
+`scroll_half_down` / `scroll_half_up` (`ctrl+d` / `ctrl+u`), and
+`scroll_page_down` / `scroll_page_up` (`pagedown` / `pageup`). Scroll actions
+move the request detail on screen, not the list. `first` is built in: press
+`g g` (the second `g` within 1 second) or `Home` to jump to the first request;
+`keys.first` cannot be overridden. `Ctrl+F` / `Ctrl+B` are not taken.
 This does not change the terminal inbox's keys.
 
 ```yaml
 keys:
   approve: shift+y
   help: f1
+```
+
+To use `Shift+J` / `Shift+K` for half-screen scrolling, first free their default
+selection-extension bindings by moving `extend_next` / `extend_previous` to
+Shift+arrows. Save all four overrides together:
+
+```yaml
+keys:
+  scroll_half_down: shift+j
+  scroll_half_up: shift+k
+  extend_next: shift+down
+  extend_previous: shift+up
 ```
 
 Keys are case-insensitive and normalized to lowercase. Combine `mod`, `ctrl`,
@@ -360,11 +392,20 @@ Two actions cannot use the same effective key in an overlapping view (Inbox
 or History), including unchanged defaults and built-in keys. `mod` conflicts
 with both the equivalent `ctrl` and `meta` binding, so the config works across
 platforms. Disjoint-view actions may share a key. Built-in `Esc`, `Enter`,
-arrows/Shift+arrows, `Home`/`End` (question answers), `Space`, `Tab`, `1`–`9`,
+arrows/Shift+arrows, `g`, `Home`/`End`, `Space`, `Tab`, `1`–`9`,
 and `mod+enter` remain reserved where they apply and cannot be remapped
-(`mod+shift+enter` is free). Unknown action ids, malformed keys and
+(`mod+shift+enter` is free). `g` and `Home` are reserved for `first`, and
+`End` for `last` even if `last` is remapped; Home/End also move through question
+answers. A conflict with Home/End names `first`/`last`, respectively.
+Unknown action ids, malformed keys and
 conflicts are refused without saving. To reuse a taken key, move the other
 action first. Remove an override from YAML to restore that action's default.
+
+`search` defaults to `/` and opens/focuses Inbox search or focuses History search.
+It is a list action, unavailable in the compact quick window or Auto-handled
+view. Because it now overlaps Inbox actions, it cannot share their keys (for
+example `keys.search: a` conflicts with Approve). Inbox search is hidden until
+opened and combines with filters; see [Inbox filters](desktop.md#inbox-filters).
 
 CLI/YAML edits apply live (see [Live reload](#live-reload)), and so does
 **Settings → Keyboard shortcuts**; its editor needs a fine pointer and
@@ -493,6 +534,48 @@ directory next to `token`.
 (`remote.mode`) that accepts paired device tokens and named submit tokens. See
 [remote access](remote.md) and the generated [OpenAPI](openapi.json).
 
+### Auto-handled read state
+
+**Mark read** in the Auto-handled view shares a read watermark across every
+device connected to the same daemon, separately for each computer. The daemon
+persists it across restarts; it is not a per-device display preference.
+
+| Endpoint | Contract |
+| --- | --- |
+| `GET /v1/auto-read` | 200 with `{"at":0}` until first marked read, then the stored watermark. Remote/relay devices need `view` (included in `decide`) |
+| `PUT /v1/auto-read` | Body `{"at":123}`; atomically stores `max(stored, at)` and returns 200 with `{"at":stored}`. Remote/relay devices need `decide`; `view` devices and submit tokens get 403 |
+
+`at` is a nonnegative integer in the UI's auto-decision timestamp unit, opaque
+to the daemon. Values above `9223372036854775807` (`i64::MAX`) return **400**
+without changing state. Older or equal writes cannot lower the watermark and
+emit no event. Only an increase emits `{"type":"auto_read.changed","at":123}`
+on `/v1/events`, so other connected devices follow without a reload.
+Local, remote HTTP and relay tunnel routers expose both methods.
+
+Clients keep a per-computer local copy for offline use, merge incoming values
+by maximum, and send a higher local mark on resync. With an older daemon that
+returns 404 for this endpoint, read state remains device-local.
+
+### WebSocket events
+
+`GET /v1/events` upgrades to a live event stream (paired remote/relay devices
+need `view`, included in `decide`). Each JSON message has `type` and its payload:
+
+| `type` | Payload |
+| --- | --- |
+| `request.created`, `request.decided`, `request.expired`, `request.cancelled` | `request`: the request with its current status; an auto-handled request arrives already decided |
+| `request.updated` | `request`: desktop run started, stop requested, claim released or interrupted (`request.run`) |
+| `yolo.changed` | `yolo`: the mode and timer after a change or timer expiry |
+| `auto_read.changed` | `at`: the shared Auto-handled read watermark, only when it rises |
+| `floods.changed` | `floods`: flooding sources after flooding or muted state changes |
+| `mutes.changed` | `mutes`: active mutes after adding, removing or timer expiry |
+| `keys.changed` | `keys`: the complete shortcut override map |
+| `config.changed` | `config`: applied keys, restart-required keys and any validation error; see [Live reload](#live-reload) |
+
+Clients should ignore unknown event types. The server pings every 25 seconds;
+return Pong or the connection closes after two unanswered intervals. These
+live UI events are separate from the [lifecycle hook envelope](integrations/hooks.md).
+
 ### Test requests
 
 `POST /v1/requests/test` creates a fixed synthetic request to try the inbox and
@@ -530,6 +613,10 @@ secrets) and includes the request ID. Linux notification actions follow
 a required-feedback policy. An info notice reads "Notice: title" with its
 redacted summary as the body, and its actions are **OK** and **Dismiss**.
 `notifications.suppress_when_focused` is reserved.
+Each agent session raises at most `notifications.burst.max` notifications
+(default 20) per `notifications.burst.window` (default `1m`) on every backend,
+then one summary; `handup mute` silences a source entirely. See
+[floods and mutes](rules.md#floods-and-mutes).
 
 On macOS the daemon posts banners as the handup desktop app (`handup.app`), so
 click **Allow** when macOS asks whether handup may send notifications. Without
@@ -537,11 +624,33 @@ click **Allow** when macOS asks whether handup may send notifications. Without
 macOS does not show them. Banners also stay hidden while Screen Sharing is
 connected. See [desktop app on macOS](desktop.md#macos).
 
+`notifications.backends` accepts `desktop`, `ntfy`, `fcm`, and `push`, and
+defaults to `[desktop, push]`. The licensed `push` backend for the official
+Android app is live at `https://push.gethandup.dev`. It requires an installed
+signed license and registered phone tokens with proof-of-possession device
+tickets; only verified phones get woken. No Firebase service-account key is
+needed on the computer.
+`notifications.push.url` defaults to `https://push.gethandup.dev` and requires
+HTTPS (loopback HTTP only for local tests). `notifications.push.payload` is
+`wake` by default (no request title), or `title` for the redacted title; neither
+sends previews. The gateway sees the signed license, phone tokens, device tickets,
+and routing metadata; Google sees the phone tokens and notification data.
+Listing `fcm` as well
+disables the gateway path; self-hosted FCM takes precedence even if its
+credentials fail.
+
 The `ntfy` backend sends only the title, risk, and a `handup://r/<id>` link
 (never preview content unless `ntfy.include_content`); `token_env` names an
 environment variable, not a secret value. See
 [notification backends](remote.md#notification-backends). Lifecycle webhooks
 live under top-level `hooks:` ([event hooks](integrations/hooks.md)).
+
+The doctor's `push` row names the push route: `off`, `self-hosted FCM` with the
+registered-device count, or `licensed gateway` with license, verified/unverified
+phones and whether the gateway answers. `push-last` shows the last delivery
+result and its age (for example `refused 5m ago: rate limited`), and `relay`
+checks that a configured relay answers. These rows only warn; network checks
+time out after 3 seconds. See [Android push](mobile.md#official-app-licensed-push-gateway).
 
 `handup doctor` checks Linux GStreamer H.264, VP9, and Opus plugins and idle
 detection support. It also warns when the daemon runs a different build than

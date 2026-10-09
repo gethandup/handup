@@ -3,7 +3,7 @@
 Use top-level `hooks:` in `config.yaml` to send request lifecycle events to any
 HTTP receiver or local program, or to let a local policy program decide new
 requests. Restart `handup serve` after changing config. Hooks are independent of
-desktop/ntfy/FCM notifications, quiet hours, and `notifications.enabled`.
+desktop/ntfy/FCM/licensed push notifications, quiet hours, and `notifications.enabled`.
 `webhook:` and `exec:` delivery never changes an approval decision; only a
 [`decide:` hook](#decide-hooks) can.
 
@@ -37,6 +37,8 @@ For webhook and exec hooks, omit `events` for all events;
 `request.reminder`, and `request.expiring`. Reminder/expiring timing comes from
 `notifications.remind_every` / `notifications.on_expiring`, even when notification
 backends are disabled. Requests without deadlines never emit expiring events.
+A [muted](../rules.md#floods-and-mutes) source emits neither, and a reminder or
+expiry skipped by the per-source `notifications.burst` limit skips its event too.
 Decide hooks run only on `request.created`; setting `events` on one is a config
 error.
 
@@ -192,8 +194,11 @@ there is no fail-open path. If a human or rule decided first, the answer is
 silently ignored. Each hook handles one request at a time.
 
 `GET /v1/requests?decided_by=hook:` lists requests decided by any hook. History
-labels them "Hook \<name\>" and counts them as `auto`; the **Auto-handled** tab
-shows them. See the [policy auto-decider](../cookbook/auto-decider.md) recipe.
+labels them "Hook \<name\>" and counts them as `auto`; **N auto-handled · View**
+above the Inbox list opens their read-only view. **← Inbox** returns to pending
+requests; **Mark read** leaves them in History and syncs the read state across
+devices connected to the same daemon. See the [read-state API](../cli.md#auto-handled-read-state).
+See the [policy auto-decider](../cookbook/auto-decider.md) recipe.
 
 ## Signing, retries, and testing
 
@@ -236,7 +241,7 @@ A failed test returns the normal error exit code.
 Loading either fails with a hint to use `hooks:`. Move URL and `secret_env` into a
 named `webhook:` hook, select lifecycle `events`, and update the receiver
 from the old `{event,id,title,...}` body to the versioned envelope above. Keep
-`ntfy`, `desktop`, and `fcm` in `notifications.backends` unchanged.
+`ntfy`, `desktop`, `fcm`, and `push` in `notifications.backends` unchanged.
 
 The `type:`, `url:`, and `command:` hook keys are removed with no alias: write
 `webhook: <url>` or `exec: <program>` instead (unknown keys fail config load).

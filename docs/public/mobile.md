@@ -129,13 +129,50 @@ default). Switching apps or otherwise hiding handup ends that window and hands
 held decisions to delivery immediately. On Android, a native outbox keeps
 retrying offline decisions in the background; see [Offline](#offline) for limits.
 
+## Inbox filters
+
+The Android app uses the same [filters as desktop](desktop.md#inbox-filters).
+One sideways-scrolling row shows request-type chips with counts for types
+present in the inbox (and any selected types). Pick several to show any of
+them; tap again to remove a pick. No **All** chip is needed: nothing picked
+shows everything.
+
+The **Filters** button opens a bottom sheet with **Type** and **Agent**
+sections. Picks within a section combine with OR; across sections they combine
+with AND. Agent picks appear after a divider as removable chips, with their
+count on the Filters button. The reset icon at the row end appears while
+filters or an Inbox query are active and clears both.
+
+Tap the search icon in the Inbox filter row to open a focused search field
+(or press `/` on a hardware keyboard). Search is hidden by default, with no
+setting. A case-insensitive substring matches title, summary, folder (`cwd`),
+repo, branch, agent, or session title, combined with your chip/sheet filters
+(AND). An empty result shows **No matches**. **×** or `Esc` in the field clears
+and closes search; reset also clears the filters. Auto-handled has no search.
+
+Unread automatic decisions appear above the list as **N auto-handled · View**,
+not as a tab. Tap **View** for the read-only **Auto-handled** view, **← Inbox**
+to go back, or **Mark read** to leave those decisions in History. Marking read
+syncs to every device connected to that computer's daemon and survives daemon
+restarts; each paired computer has its own read state. Updating shared read
+state needs `decide` access; view-only devices follow it.
+
 ## History
 
-The **History** tab above the request list shows resolved requests grouped by
-day, with search and outcome chips; swipe the chip rows sideways to see more.
-Tap one for the read-only detail with the
-decision summary and audit trail; **History** (or the back gesture) returns to
-the list. It uses the same API as the desktop app, so a view-only device sees
+The **Inbox | History** switch above the request list shows resolved requests
+grouped by day, with search and a single sideways-scrolling row of outcome
+chips with colored dots. Select several outcomes to show any of them; nothing
+selected shows every outcome.
+
+**Filters** opens a bottom sheet with **Outcome**, **Type**, **Agent**, and
+**Has files** sections. Picks within a section combine with OR; across
+sections they combine with AND. Type, agent and Files picks appear after a
+divider as removable chips, with their count on the Filters button. The reset
+icon clears chip/sheet filters but keeps your search.
+
+Tap a request for the read-only detail with the decision summary and audit
+trail; **History** (or the back gesture) returns to the list. It uses the same
+[history API](desktop.md#history) as the desktop app, so a view-only device sees
 it too.
 
 ## Security model
@@ -195,9 +232,11 @@ reconnecting; you can keep browsing and deciding), or **Offline · synced
 now. The app also resyncs the moment it returns to the foreground, the network
 comes back, its event stream reconnects, or a push notification arrives, and
 while it is on screen it quietly refetches the queue on the **Settings → Sync**
-timer (default every 15 seconds). In the background it does not poll: push
-notifications cover that, and opening the app resyncs. The daemon pings the event
-stream every 25 seconds (through a relay, the relay's own pings every 30
+timer (default every 15 seconds). In the background it does not poll: configured
+[push notifications](#notifications) can wake it, and opening the app resyncs.
+The licensed gateway is live for license holders using verified official-app
+phones. The daemon pings the event stream every 25 seconds (through a relay,
+the relay's own pings every 30
 seconds count); a stream that stays silent for 75 seconds (a network change,
 or Android dozing) is dropped and reconnected rather than left looking live.
 Waking the phone after it slept reconnects any stream not heard from in the
@@ -213,6 +252,9 @@ leaves the phone's inbox as soon as the event arrives. If it is the one open on
 screen, it stays for a moment with its controls dimmed and the footer saying
 how it ended, e.g. **Approved on laptop** or **Denied on another device**, then
 moves to the next pending request, or **All clear**. It is in History as usual.
+In **Split** layout, if you are back on the phone's list screen when the request
+you last opened is resolved elsewhere, the list moves on immediately and shows
+**All clear** after the last pending request.
 
 Once the inbox has loaded, losing the connection to your computer never hides
 it. The last queue is kept on the phone, so opening the app while offline still
@@ -342,7 +384,7 @@ failed, Back keeps Settings open and offers **Retry** or **Discard and go
 back**; discarding keeps the settings that were actually stored.
 
 Settings has collapsible **Appearance**, **Decisions**, **Sync**, **Previews**, **Read
-aloud**, [**Storage**](#storage), [**License**](license.md) (one row per paired computer), **Test**, **Keyboard shortcuts**,
+aloud**, [**Dictation**](#dictation), [**Storage**](#storage), [**License**](license.md) (one row per paired computer), **Test**, **Keyboard shortcuts**,
 [**Help & feedback**](index.md#report-a-bug-or-request-a-feature), and **About** groups alongside the paired-computer controls.
 **About** lists the app version, commit, build date and platform, with **Copy**
 for a bug report; the daemon's version is shown in Settings › About on the computer.
@@ -379,6 +421,12 @@ divider focused, arrow keys adjust it; double-tap, double-click, or Enter
 resets it. **Reset sizes** also appears on the Layout page after resizing.
 Split width is 240–640px (default 380px); Stacked height is 15–75% (default 38%).
 
+A paired computer flooded by one agent session (40 requests in a minute by
+default) shows a banner at the top of the inbox list, naming the computer when
+several are paired, with **Mute 1h** and **Dismiss all (N pending)**; view-only
+pairings see the banner without the buttons. See
+[floods and mutes](rules.md#floods-and-mutes).
+
 Android Back closes an open dialog or settings, returns from a request
 (including one opened from a notification) to the list, and leaves the app
 only from the list.
@@ -414,12 +462,57 @@ The searchable voice picker filters by name, language name or code, and
 **Natural** or **Online** labels.
 
 Android uses native TTS through `tauri-plugin-tts`, not the System WebView's
-speech APIs. It always reads aloud with the system default text-to-speech
+speech APIs. By default it reads aloud with the system default text-to-speech
 engine. To change the engine or install voices (for example if none appear),
 use Android's own text-to-speech settings, then reopen Read aloud in handup.
 Online voices send the spoken text to the voice provider.
+
+**Voice provider** chooses who speaks: **This device** (default, free) or a
+cloud voice from **OpenAI** or **ElevenLabs**. A cloud provider needs your own
+API key (see [cloud speech providers](#cloud-speech-providers)); pick an
+**OpenAI voice** or paste an **ElevenLabs voice ID**, and optionally a **Voice
+model** (empty uses the provider's default). The voice list and **Pitch**
+apply to **This device** only; **Speed** applies to both.
 For a phone browser rather than the native app, see
 [Web UI read aloud](remote.md#read-aloud).
+
+### Dictation
+
+Tap the mic (**Dictate**) beside a text field, speak, then tap it again
+(**Stop dictation**). The words are added to the end of the field and stay
+editable; nothing is sent until you submit. The mic appears beside the free-text
+answer to a question, **Feedback for the agent** and **Reply to the agent**,
+text fields an agent asks you to fill in, and an email draft's **Subject** and
+**Body** (not the raw JSON editor). While listening it shows what it has heard
+so far, and the Android recognizer also stops by itself when you stop
+speaking. Starting dictation stops read aloud first.
+
+The first time, Android asks for microphone permission (`RECORD_AUDIO`). If you
+deny it, the mic shows **Microphone not available**; allow it in Android's app
+settings and try again.
+
+**Settings → Dictation** saves, on this phone:
+
+- **Provider**: **This device** (default, free) uses Android's own speech
+  recognizer. Settings says which kind your phone has: **On-device** recognizes
+  speech on the phone, offline (Android 12+ phones that support it); otherwise
+  it **Uses Google speech service**, which may send your audio to Google. Or
+  choose **OpenAI**, **Groq** or **ElevenLabs**, which record up to two minutes
+  and send the recording to that provider; set an optional **Transcription
+  model** (empty uses the provider's default) and your API key.
+- **Language**: **Detect automatically** (default) or a fixed language.
+
+### Cloud speech providers
+
+Cloud dictation and cloud read aloud are optional and off by default. Paste
+your own API key into **OpenAI API key**, **Groq API key** or **ElevenLabs API
+key** and tap **Save**; the field then shows **Configured**, and **Clear**
+removes the key. A key saved under Read aloud also counts for Dictation and the
+other way round. Keys are encrypted with the Android Keystore on this phone,
+write-only (never shown again) and never sent to your computer, its daemon or
+a relay: the app calls the provider directly. Cloud providers receive your
+recorded audio (dictation) or the text being read (read aloud), and may bill
+your account for it.
 
 ## Attachments and Markdown
 
@@ -468,7 +561,11 @@ implemented. Browser downloads continue to use the browser's own file handling.
 ## Notifications
 
 Android can receive native Firebase Cloud Messaging (FCM) notifications directly
-in handup; the ntfy app is not required. Push is optional at build time.
+in handup; the ntfy app is not required. The licensed `push` gateway is live at
+`https://push.gethandup.dev` for license holders using the official Android app.
+Only phones with a proof-of-possession device ticket get woken. Self-hosted FCM
+requires a sender in the APK's Firebase project. Builds without Firebase
+configuration receive no push.
 
 Queued decision delivery uses a separate silent **Sending decisions** channel
 (`outbox`, low importance), not FCM or ntfy. It has no sound, vibration, or badge
@@ -483,8 +580,70 @@ permissions, not extra runtime prompts. Android 13+'s notification permission
 controls notification visibility; it is requested after pairing as described
 below. The service is still subject to Android's start restrictions and
 Android 15's daily `dataSync` limit; reopening the app resumes queued work.
+`RECORD_AUDIO` is requested only when you first tap the mic for
+[dictation](#dictation).
 
-### Owner setup
+### Official app: licensed push gateway
+
+Install the official APK, install a [signed license](license.md) on the computer,
+and pair the phone (Tailscale, direct, or relay). The default daemon backends
+are `[desktop, push]`; existing
+explicit lists must include `push` to use it. A trial alone is not enough, and
+you do not need your own Firebase project or service-account credentials.
+Android 13+ asks for notification permission after pairing.
+
+The app proves possession of its FCM token automatically: it requests a challenge
+from the gateway, receives a silent `verify` push, and exchanges its nonce for a
+device ticket. Verification shows no notification. Rust stores the token and
+ticket in Android Keystore-sealed storage and registers both with every paired
+computer. A failed verification retries on app startup or token refresh; open
+the app if `handup doctor` reports an unverified phone. Token-only registration
+still works for self-hosted FCM; the licensed gateway wakes only verified phones.
+
+```yaml
+notifications:
+  backends: [desktop, push]
+  push:
+    url: https://push.gethandup.dev
+    payload: wake
+```
+
+`notifications.push.url` requires HTTPS (loopback HTTP is allowed for local
+tests). `notifications.push.payload` accepts `wake` (default, no title) or
+`title` (redacted request title); neither sends preview content. The gateway
+sees the signed license, phone tokens, device tickets, and request metadata (type, id, risk);
+Google receives the tokens and notification data. Choosing `title` also shares
+the redacted title with both. See [notification backends](remote.md#notification-backends).
+
+`handup doctor` adds three rows. They report OK or WARN, never FAIL, and each
+network check gives up after 3 seconds:
+
+- `push` names the route that sends phone notifications. It says `off` when
+  notifications are off or no usable push backend is listed. With `fcm` listed it
+  says `self-hosted FCM; N registered devices`: `fcm` takes precedence and this is
+  not a fallback to the gateway. Otherwise it says `licensed gateway <url>`, whether
+  a license is installed, how many phones are verified and unverified, and whether
+  the gateway answered. It warns when there is no license, a phone is unverified
+  (open the app on the phone to verify), no phone is paired, or the gateway is
+  unreachable.
+- `push-last` shows the last delivery on that route and how long ago it was, for
+  example `ok 2m ago to 2 devices` or `refused 5m ago: rate limited`. The result
+  is `ok`, `partial` (some phones got it, or unregistered tokens were removed),
+  `refused` (the gateway turned it down: rate limit, license, unverified phones,
+  payload too large) or `failed` (unreachable, gateway error, delivery failed).
+  Anything but `ok` warns. Before the first push it says `no notifications sent yet`.
+  The daemon keeps only this summary (result, a fixed reason, device count, time),
+  never tokens or provider error text.
+- `relay` says `off` without `remote.relay.url`; otherwise it checks that the
+  relay's `/v1/health` answers and shows its protocol and version, or warns
+  `relay unreachable`.
+
+### Self-hosted Firebase: owner setup
+
+The following build-time setup is for APK maintainers using their own Firebase
+project, not customer installation of the official APK. A service account from
+another project cannot send to the official app. For that app, use the live
+licensed gateway.
 
 1. In the [Firebase console](https://console.firebase.google.com/), create a
    project and add an Android app with package name **`dev.handup.app`**.
@@ -547,12 +706,28 @@ variable named `GOOGLE_SERVICES_JSON`; the `android` job copies it into place.
    Android 12 and earlier use the system setting
    without a runtime permission prompt.
 
-After pairing, the app registers its FCM token with each paired daemon using
-device authentication, whether or not notification permission is granted,
-over either the tailnet listener or the encrypted relay tunnel. Token refresh is synchronized
-while the app is running, and on the next launch after an Android background
-refresh. Registration retries when the daemon is offline. Unpairing attempts to
-remove push registration; revoking the device always deletes it on the daemon.
+After pairing, the app registers its FCM token for each paired computer using
+device authentication, whether or not notification permission is granted.
+Every pairing registers at the daemon (`PUT /v1/devices/self/push` with
+`{"platform":"fcm","token":"…","ticket":"…"}`). The optional `ticket` is omitted
+or `null` until verification succeeds; tokens without tickets remain usable by
+self-hosted `fcm`, but not the licensed `push` gateway. When the FCM token changes,
+the app discards the old ticket and verifies the new token. Computers paired
+through a [relay](relay.md#push-notifications) also register the token at the
+relay, scoped to that pairing's channel; that path does not use gateway tickets.
+The daemon's licensed `push` and self-hosted `fcm` backends can reach relay-paired
+phones as well as direct/Tailscale phones; relay `push: wake` or `push: title`
+wake-ups remain independent. Token refresh is synchronized while the app is
+running, and on the next launch after an Android background refresh; pairing
+the same computer again registers again. Registration retries when the daemon
+or relay is offline. Unpairing attempts removal from both daemon and relay;
+revoking the device always deletes the daemon registration.
+
+A relay wake-up carries no request id. It shows the relay's title ("Approval
+requested" unless the computer uses `push: title`) with **Open handup to
+review**, and tapping it opens the inbox; the next inbox sync clears it. For
+wake-ups to reach the app, the relay's FCM service account must belong to the
+same Firebase project as the APK, as with the daemon's `fcm` backend.
 
 FCM uses two system channels: **Approval requests** (`requests`, default
 importance) and **High-risk approvals** (`high_risk`, high importance), separate
@@ -563,11 +738,14 @@ notification even when its activity is not running. Swiping the app away is
 supported; Android's explicit **Force stop** prevents FCM delivery until the app
 is opened again.
 
-`payload: title` (default) sends only the redacted title, request id, and risk;
-**preview content is never sent**. `payload: wake` substitutes the generic
-“Approval requested” title. Google can see this push metadata; the relay's
-end-to-end encryption does not cover the daemon-to-FCM notification. The usual
-notification rules and quiet hours apply. Decide, cancel, and expiry send a
+For the self-hosted `fcm` backend, `notifications.fcm.payload: title` (default)
+sends the redacted title, request id, and risk; `wake` substitutes the generic
+“Approval requested” title. For the licensed `push` backend,
+`notifications.push.payload: wake` is the default and omits the title;
+`title` opts into the redacted title. **Neither sends preview content.**
+Google can see push metadata, and the gateway also sees it when using `push`;
+relay end-to-end encryption does not cover either notification path.
+The usual notification rules and quiet hours apply. Decide, cancel, and expiry send a
 `resolved` message to cancel the matching notification, even during quiet hours.
 Android can delay that message while the app is closed, so the app also clears
 a request's notification as soon as you tap its decision (not after the undo

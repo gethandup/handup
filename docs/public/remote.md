@@ -100,9 +100,9 @@ use.
 
 | Scope | Can |
 | --- | --- |
-| `view` | List and show requests, browse decision history and each request's audit trail, see storage usage, cleanup estimates and progress (`GET /v1/storage*`), see the [license](license.md) state (`GET /v1/license`), fetch blobs and previews, see YOLO mode, and receive live events. The web UI is read-only. The global audit log (`/v1/log`) stays local |
-| `decide` | Everything `view` can, plus approve, deny, answer, cancel, stop a command running in the desktop app (`POST /v1/requests/{id}/run/stop`), send server-built test requests/questions (`POST /v1/requests/test`), change [YOLO mode](rules.md#yolo-mode), replace [keyboard shortcut overrides](cli.md#shortcut-api) (`PUT /v1/keys`), activate, import or remove the computer's license (`PUT`/`DELETE /v1/license`), and clean up storage or change history retention (`POST /v1/storage/cleanup`, its cancel, `PUT /v1/storage/retention`; the daemon log names the device) |
-| `submit` | Create requests and upload blobs; show, wait for, and cancel only requests created by that token. Never decide, list, send synthetic tests, change shortcuts, or read/change YOLO mode. See [integration tokens](integrations/tokens.md) |
+| `view` | List and show requests, browse decision history and each request's audit trail, see storage usage, cleanup estimates and progress (`GET /v1/storage*`), see the [license](license.md) state (`GET /v1/license`), fetch blobs and previews, see YOLO mode and the shared [Auto-handled read watermark](cli.md#auto-handled-read-state) (`GET /v1/auto-read`), see [flooding sources and mutes](rules.md#floods-and-mutes) (`GET /v1/floods`, `GET /v1/mutes`), and receive live events (including `auto_read.changed`). The web UI is read-only. The global audit log (`/v1/log`) stays local |
+| `decide` | Everything `view` can, plus approve, deny, answer, cancel, mark Auto-handled decisions read across devices (`PUT /v1/auto-read`), stop a command running in the desktop app (`POST /v1/requests/{id}/run/stop`), send server-built test requests/questions (`POST /v1/requests/test`), change [YOLO mode](rules.md#yolo-mode), clear a flooding source and add or remove mutes (`POST /v1/floods/dismiss`, `POST`/`DELETE /v1/mutes`, `DELETE /v1/mutes/{id}`), replace [keyboard shortcut overrides](cli.md#shortcut-api) (`PUT /v1/keys`), activate, import or remove the computer's license (`PUT`/`DELETE /v1/license`), and clean up storage or change history retention (`POST /v1/storage/cleanup`, its cancel, `PUT /v1/storage/retention`; the daemon log names the device) |
+| `submit` | Create requests and upload blobs; show, wait for, and cancel only requests created by that token. Never decide, list, send synthetic tests, change shortcuts, read/change YOLO mode, read/change Auto-handled read state, or read/change floods and mutes. See [integration tokens](integrations/tokens.md) |
 
 Scoped allow (session, project, or always rules) writes local policy, so it is
 available only on the machine itself. Remote decisions are recorded in the audit log as
@@ -143,8 +143,9 @@ are refused while disabled. Decisions already in flight cannot commit after
 disable. Push delivery stops, but the stored push token and relay pairing are
 kept; enabling resumes access and push without registering or pairing again.
 
-Muting stops FCM delivery and relay wake-ups without closing event streams or
-blocking API access. Push defaults to on, including for existing pairings.
+Muting stops licensed push, self-hosted FCM delivery, and relay wake-ups without
+closing event streams or blocking API access. Push defaults to on, including
+for existing pairings.
 Scope changes apply to the next call, including calls on already-open relay
 connections; a device downgraded to `view` cannot decide.
 
@@ -202,7 +203,7 @@ and a `decide` pairing can press **Stop** to ask that desktop to stop it
 see [stop from another device](desktop.md#stop-from-another-device)).
 
 The header's **Settings** button opens collapsible **Appearance**, **Decisions**, **Sync**,
-**Read aloud**, **Storage**, [**License**](license.md), **Test**, **Keyboard shortcuts**,
+**Read aloud**, [**Dictation**](#dictation), **Storage**, [**License**](license.md), **Test**, **Keyboard shortcuts**,
 [**Help & feedback**](index.md#report-a-bug-or-request-a-feature), and **About** groups. **About** lists the
 web UI's version, commit, build date and platform, the daemon's version (a paired
 browser shows **see Settings › About on the computer**) and, when the daemon
@@ -238,6 +239,19 @@ least 36rem; Stacked height is 15–75% (default 38%).
 Layout and pane sizes save per device in the browser's localStorage, not the
 daemon config; see the [desktop guide](desktop.md) for the other Settings controls.
 
+Inbox search opens from the filter row's search icon or `/`, hidden by default.
+It matches a case-insensitive substring in title, summary, folder, repo, branch,
+agent or session title, ANDed with filters; an empty result shows **No matches**.
+`Esc` in the field or **×** clears and closes it; Inbox reset clears both search
+and filters, while History reset keeps search. `/` searches both Inbox and History,
+not Auto-handled. See [Inbox filters](desktop.md#inbox-filters).
+
+**Mark read** in Auto-handled syncs to every device connected to this daemon,
+separately for each computer, and survives restarts. `GET /v1/auto-read` needs
+`view`; `PUT /v1/auto-read` needs `decide` on both remote HTTP and relay tunnels.
+Only a higher watermark emits `{type:"auto_read.changed", at}`. See the
+[read-state API](cli.md#auto-handled-read-state).
+
 Browser protections on the remote listener:
 
 - A **Host** allow-list (the listener address, `remote.public_url`, and
@@ -258,8 +272,9 @@ Browser protections on the remote listener:
   origin. Every response carries `Content-Security-Policy: sandbox;
   default-src 'none'` and `X-Content-Type-Options: nosniff`. Anything other
   than passive images, audio, video, PDF, and plain text (for example HTML,
-  SVG, or XML) is sent with `Content-Disposition: attachment`, and the web UI's
-  Open button downloads those types instead of opening a tab.
+  SVG, or XML) is sent with `Content-Disposition: attachment`. HTML previews
+  have **Download** only, never **Open**; for other non-passive types, the web
+  UI's Open action downloads the file instead of opening a tab.
 
 ### Read aloud
 
@@ -284,6 +299,25 @@ use `tauri-plugin-tts` instead. Unsupported browsers hide the request button
 and explain the limitation in Read aloud settings. On Linux, install
 `speech-dispatcher` and a voice such as `espeak-ng` if the browser offers no
 voices. Online voices send the spoken text to the voice provider.
+
+### Dictation
+
+In a browser with speech recognition, a mic button (**Dictate**) sits beside
+the free-text answer to a question, **Feedback for the agent** and **Reply to
+the agent**, text fields an agent asks you to fill in, and an email draft's
+**Subject** and **Body** (not the raw JSON editor). Click or tap it, speak, then
+press it again (**Stop dictation**). The words are added to the end of the
+field and stay editable; nothing is sent until you submit. Starting dictation
+stops read aloud first. The browser asks for microphone permission the first
+time.
+
+The web UI uses the browser's own speech recognition (Web Speech
+`SpeechRecognition`); some browsers, such as Chrome, send the audio to their
+own speech service. **Settings → Dictation** sets the **Language** (**Detect
+automatically** by default). Browsers without speech recognition show no mic,
+and Settings → Dictation says **Not available in this browser**. Cloud speech
+providers and on-device models are only in the
+[desktop](desktop.md#dictation) and [Android](mobile.md#dictation) apps.
 
 ## Direct mode (not recommended)
 
@@ -314,19 +348,49 @@ In every remote mode, and per peer IP:
 
 ## Notification backends
 
-`notifications.backends` accepts `desktop`, `ntfy`, and `fcm`. Every
+`notifications.backends` accepts `desktop`, `ntfy`, `fcm`, and `push`; the
+default is `[desktop, push]`. Explicit backend lists replace that default. Every
 backend follows `on_new_request`, `on_high_risk` (high risk bypasses
 `quiet_hours`), `on_expiring`, `remind_every`, and `quiet_hours`. Delivery runs
 in the background with bounded timeouts (10 seconds; FCM 15 seconds per HTTP call), and failures are logged without
 blocking the queue.
 Requests without a deadline do not emit `on_expiring` notifications.
 `remind_every` (off by default) re-notifies while they wait for the human.
+Every backend also follows the per-source `notifications.burst` limit and
+runtime mutes; see [floods and mutes](rules.md#floods-and-mutes).
 
 ```yaml
 notifications:
-  backends: [desktop, ntfy]
+  backends: [desktop, push, ntfy]
   ntfy: { server: https://ntfy.sh, topic: "", token_env: HANDUP_NTFY_TOKEN, include_content: false }
 ```
+
+**push** is the licensed gateway backend for the official Android app, live at
+`https://push.gethandup.dev`. It requires an installed [signed license](license.md)
+and a paired phone with a proof-of-possession device ticket; a trial alone does
+not enable it. Only verified phones get woken. The app obtains its ticket by
+receiving a silent FCM verification push and registers it with the daemon.
+You do not need a Firebase service-account key on your computer.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `notifications.push.url` | `https://push.gethandup.dev` | Gateway base URL; requires HTTPS (loopback HTTP only for local tests) |
+| `notifications.push.payload` | `wake` | `wake` omits the request title; `title` includes the redacted title; neither sends previews |
+
+The daemon submits the signed license, registered phone tokens and device tickets,
+and request metadata (type, id, and risk) to the gateway, which verifies each
+ticket before forwarding the notification data to Google FCM.
+With the default `wake`, neither gets request titles or
+preview content. `title` opts into sharing the redacted title with both.
+Decide/cancel/expire send a `resolved` message even during quiet hours;
+invalid/unregistered tokens are removed. If both `fcm` and `push` are listed,
+`fcm` takes precedence and the gateway is not used, even if FCM credentials fail.
+The gateway logs one line per request with its route, HTTP status, outcome,
+latency and delivery counts, never tokens, tickets, licenses, IDs, titles or IP
+addresses; Cloudflare Workers Logs keep these lines for 3 days.
+`handup doctor` shows the push route, verified and unverified phones, whether
+the gateway answers, and the last delivery result (`push-last`); see
+[Android push](mobile.md#official-app-licensed-push-gateway).
 
 **fcm** delivers Android native notifications to registered paired devices.
 Configure `notifications.fcm.service_account` with a Firebase service-account
@@ -334,10 +398,18 @@ JSON key path and `notifications.fcm.payload` with `title` (default) or `wake`
 (generic title). Payloads contain only request id, risk, and redacted title,
 never previews. Decide/cancel/expire also send cancellation messages, independent
 of quiet hours. Invalid/unregistered provider tokens are removed automatically.
-The app registers or removes its own token at `PUT` / `DELETE
-/v1/devices/self/push` with device-token auth (view or decide scope). Device
-revocation removes registration. See [Android notifications](mobile.md#notifications)
-for Firebase project and APK setup.
+For every pairing, the app registers at `PUT /v1/devices/self/push` with
+device-token auth (view or decide scope), over the remote listener or encrypted
+relay tunnel. The JSON body is `{"platform":"fcm","token":"…","ticket":"…"}`;
+`ticket` is optional (or `null`) and at most 256 characters. Token-only
+registration remains valid for self-hosted FCM, but the licensed gateway
+requires a ticket bound to that token. `DELETE` on the same endpoint removes
+both token and ticket; device revocation removes the daemon registration.
+A phone paired through a [relay](relay.md#push-notifications) also registers
+its token with the relay channel. Both daemon backends can therefore notify
+relay-paired phones; relay wake-ups remain a separate path and do not require
+gateway tickets. See [Android notifications](mobile.md#notifications) for
+official-app push and self-hosted Firebase project requirements.
 
 **ntfy** publishes JSON to `<server>/` with the topic, the redacted title, and
 the deep link `handup://r/<id>` as the message. When remote access is on, the
@@ -377,6 +449,7 @@ clients show **Restart daemon to apply** until then. Other settings, such as
 `notifications.*`, apply when the config is saved ([live reload](cli.md#live-reload)).
 
 The Android app is a native client of the same remote listener; see
-[mobile.md](mobile.md). Native FCM push and the end-to-end encrypted
-[relay](relay.md) (FCM/APNs wake-ups) are available; native APNs delivery from
-the daemon is not.
+[mobile.md](mobile.md). Self-hosted FCM push and the end-to-end encrypted
+[relay](relay.md) (FCM/APNs wake-ups) are implemented; the licensed `push`
+gateway is live for verified official-app phones with an installed signed
+license. Native APNs delivery from the daemon is not implemented.

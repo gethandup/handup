@@ -90,7 +90,8 @@ Questions instead of approvals: MCP `ask_question`, or `kind: "question"` with
 Information that needs no reply (status, finished results, heads-ups): MCP
 `notify`, `handup ask --kind info`, or `kind: "info"`. A notice gets **OK** and
 **Dismiss** options (both record `status: dismissed`), never takes `input`, and
-is never decided by rules or YOLO. Put the message text in `summary` under a
+is never approved by YOLO; a human's `dismiss` rule or mute may dismiss it on
+arrival. Put the message text in `summary` under a
 one-line `title`; there is no body or message field.
 Submit it and move on; do not wait for it, poll it, or ask a question with a
 lone OK choice instead. The human may add an optional reply; it arrives on its
@@ -124,11 +125,19 @@ alive while answers you need are pending unless your client pushes decisions
 | --- | --- | --- |
 | `approved` | Human approved | If `run_result` is present, consume it and do not run again; otherwise run exactly the reviewed action with `decision.fields` edits applied |
 | `answered` | Question submitted | Use `answers` (MCP) or `fields.answers` (CLI/HTTP decision) |
-| `dismissed` | Human read an info notice | Nothing; a notice gates no action |
+| `dismissed` | Human read an info notice (or a rule or mute dismissed it) | Nothing; a notice gates no action |
 | `denied` | Human said no | Stop; show `decision.feedback`; revise only if feedback asks |
 | `expired`, `cancelled` | No decision | Stop; not permission |
 | `pending` | Undecided | Keep waiting; not permission |
 | Any error | Transport/validation failure | Stop; fail closed |
+
+Creating requests is capped per agent session: past `requests.max_per_minute`
+(default 120) in one minute the daemon answers HTTP 429 with
+`"code": "rate_limited"` (CLI exit 4; MCP returns a tool error with the same
+text). Nothing was created. Stop and fix whatever is sending requests in a loop;
+do not retry in a tight loop. A human can also clear a flooding session at once:
+its pending requests come back `denied` with feedback "Cleared as a flood". See
+[floods and mutes](../rules.md#floods-and-mutes).
 
 Bind execution to `content_hash`: it covers the title, summary, kind, previews,
 options, input and callback URL the human saw. If the action you are about to run

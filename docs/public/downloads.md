@@ -35,6 +35,7 @@ agents; see the [quick start](index.md#quick-start).
 | Android | APK (sideload) | Beta companion app for the daemon on your computer. |
 | Windows x86-64 | zip | Beta; CLI and daemon, no background service. |
 | Windows desktop app, x86-64 | NSIS installer (.exe) | Beta; not code-signed; bundles the CLI daemon. |
+| Self-hosted relay, Linux x86-64 / ARM64 server | tar.gz (from v0.1.7) | Optional; see [Self-hosted relay](#self-hosted-relay). |
 
 There is no iPhone app yet. See [Windows](#windows) for the Windows beta.
 Releases from v0.1.2 include the [web inbox](web.md) that iPhone and other
@@ -186,6 +187,18 @@ to install unknown apps when Android asks, and open it. Pair it with
 `handup pair` on the computer. See [mobile](mobile.md), which also links an
 [Obtainium](https://obtainium.imranr.dev) setup for automatic APK updates.
 
+## Self-hosted relay
+
+From v0.1.7, releases also include the optional
+[end-to-end encrypted relay](relay.md) for your own Linux server:
+`handup-relay_<version>_linux_amd64.tar.gz` or
+`handup-relay_<version>_linux_arm64.tar.gz`. Choose the server's architecture,
+not this computer's. Each is a static (musl) build with the `handup-relay`
+binary, `LICENSE` and `THIRD_PARTY_NOTICES.md`; verify it like any other
+download (below). The website's downloads page lists them under **Self-hosted
+relay (Linux server)**. You need a relay only when a phone cannot reach your
+computer over Tailscale; see [relay setup](relay.md#run-a-relay).
+
 ## Verify a download
 
 Every release publishes `checksums.txt` with SHA-256 sums for the downloads.
@@ -232,6 +245,8 @@ Every update is a new binary release; see the [changelog](https://github.com/get
   on Windows, quit the app and run the newer installer.
 - Homebrew: `brew upgrade --cask handup`.
 - Android: install the newer APK over the old one, or let Obtainium do it.
+- Self-hosted relay: replace the `handup-relay` binary with the newer archive's
+  and restart the relay.
 
 After updating the binary:
 
@@ -276,6 +291,6 @@ Some integrations and web assets necessarily include readable scripts; that is
 not publication of the complete application source. Third-party components
 retain their licenses, and distribution must satisfy their notice and any
 applicable source-offer requirements. Their license texts ship as
-`THIRD_PARTY_NOTICES.md`: in every CLI archive, at
+`THIRD_PARTY_NOTICES.md`: in every CLI and relay archive, at
 `/usr/share/doc/handup/THIRD_PARTY_NOTICES.md` from the Linux packages, and as a
 bundled resource of the desktop app.

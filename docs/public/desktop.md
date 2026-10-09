@@ -36,6 +36,42 @@ was replaced since the running instance started (an upgrade), re-opening it
 from the launcher, `handup ui`, or the tray menu starts the new version and
 exits the old one.
 
+## Inbox filters
+
+The desktop app, Android app and web inbox share one row of quick filter chips.
+In **Inbox**, request types with pending requests show a count; a selected type
+stays available even if its count drops to zero. Pick several types to show any
+of them, or tap a selected chip again to remove it. There is no **All** chip:
+nothing selected shows every pending request.
+
+**Filters** opens a small dialog on desktop or a bottom sheet on phones, with
+**Type** and **Agent** sections. Several picks in one section match any of them
+(OR); picks across sections must all match (AND). For example, Command or Edit
+plus agent `codex` shows only Codex's commands and edits. Agent picks appear
+after a divider in the row as removable chips, and the Filters button's badge
+counts those picks. A reset icon appears at the row end while filters or an
+Inbox query are active; it clears all picks and closes Inbox search. The row
+stays on one line and scrolls sideways with a swipe or mouse wheel instead of
+hiding chips in a More menu.
+
+Tap the search icon in the Inbox filter row or press `/` to open and focus
+search. The field is hidden by default, with no setting to enable it.
+It matches a case-insensitive substring in the title, summary, folder (`cwd`),
+repo, branch, agent, or session title, and combines with chip/sheet filters
+(AND). No matching pending requests shows **No matches**, not **All clear**.
+`Esc` in the field or **×** clears and closes search without changing filters;
+the reset icon clears both. `/` also focuses search in History. Search is not
+available in the Auto-handled view or the compact quick window.
+
+When automatic decisions are unread, a line above the list, such as
+**3 auto-handled · View**, opens the read-only **Auto-handled** view. It is not
+a filter tab. **← Inbox** returns to pending requests; **Mark read** moves
+those decisions out of this view and leaves them available in History. Read
+state is shared across every device connected to the same daemon, separately
+for each computer, and survives daemon restarts. A paired device needs
+`decide` access to update that shared state; `view` access can follow it.
+See the [auto-read API](cli.md#auto-handled-read-state).
+
 ## Run a command
 
 Run is offered only for a request with exactly one command preview and one
@@ -166,9 +202,11 @@ Keyboard shortcuts**, select its key button and press the new key. `Esc` cancels
 capture; `Tab` leaves it. A taken key is refused inline, naming the other action;
 change that action first or choose another key. **Reset** restores one changed
 row (unless its default is now taken); **Reset all** restores every default.
-`Esc`, `Enter`, arrows (including Shift+arrows), `Home`/`End` in question
-answers, `Space`, `Tab`, `1`–`9` and `Ctrl+Enter`/`⌘+Enter` are built in and
-cannot be remapped.
+`Esc`, `Enter`, arrows (including Shift+arrows), `g g`, `Home`/`End`,
+`Space`, `Tab`, `1`–`9` and `Ctrl+Enter`/`⌘+Enter` are built in and cannot be
+remapped. `g` and `Home` stay reserved for the first request; `End` stays
+reserved for the last even if you change `Shift+G`. Home/End also move to the
+first/last answer while choosing a question's answers.
 
 Shortcuts save to the connected computer's daemon config (`keys:`), not to this
 device's preferences. Settings changes apply live to every connected window and
@@ -180,9 +218,11 @@ and view-only devices show a read-only list. You can also use
 | Key | Action |
 | --- | --- |
 | `j` / `k` (or `↓` / `↑`) | Next / previous request (also in History) |
+| `g g` (second `g` within 1 second) or `Home` | First request (also in History; built in) |
+| `Shift+G` (or `End`) | Last request (also in History; `Shift+G` is remappable) |
 | `Shift+J` / `Shift+K` | Extend the selection |
 | `Shift+A` | Select the whole session |
-| `/` | Search History |
+| `/` | Open/focus Inbox search or focus History search (not Auto-handled or the quick window) |
 | `h` | Switch between Inbox and History |
 | `i` | Back to the Inbox |
 | `Esc` | Leave a field, the wide preview or the selection; close a sheet |
@@ -198,10 +238,16 @@ and view-only devices show a read-only list. You can also use
 | `u` | Undo the newest decision still waiting to be sent; press again for the one before |
 | `Enter` | On a question, submit once every question is answered (a question's only choice, such as OK, counts as answered, so an OK-or-reply question submits without typing); otherwise step into the first open question's answers (`↑`/`↓` or `j`/`k` move, `Space` or `Enter` chooses, `Tab` goes to the next field, `Esc` returns to the list). Enter never moves into a reply box: press `f`. On a notice, OK; otherwise like `o` |
 | `o` | Open the file on screen in its default app (in a file bundle, the file picked in the list) |
+| `Ctrl+E` / `Ctrl+Y` | Scroll the request on screen down / up a line (also in History) |
+| `Ctrl+D` / `Ctrl+U` | Scroll the request on screen down / up half a screen (also in History) |
+| `PageDown` / `PageUp` | Scroll the request on screen down / up a screen (also in History) |
 | `p` | Widen the preview (hide the list); `p` or `Esc` to go back |
 | `t` | Toggle light/dark theme |
 | `m` | Devices (desktop app) |
 | `?` | Show the shortcuts (the sheet also links **Report a bug**) |
+
+The scroll keys move the request detail, not the list, and can be remapped.
+`Ctrl+F` / `Ctrl+B` are not taken; `Ctrl+F` stays available for browser Find.
 
 Decision buttons show their effective key; the hints change with your shortcuts.
 Submit keeps the built-in `Ctrl↵` or `⌘↵`.
@@ -240,7 +286,7 @@ summary with **OK** and **Dismiss** actions, which send no reply.
 
 `t` switches to an explicit light or dark theme. The **Settings** button in the
 header opens a dialog with collapsible **Appearance**, **Decisions**, **Sync**,
-**Read aloud**, [**Storage**](#storage), [**License**](license.md), **Test**, **Keyboard shortcuts**,
+**Read aloud**, [**Dictation**](#dictation), [**Storage**](#storage), [**License**](license.md), **Test**, **Keyboard shortcuts**,
 [**Help & feedback**](index.md#report-a-bug-or-request-a-feature), and **About** groups. **Appearance** sets the theme (System,
 Light, Dark), color palette, density, and layout. **Decisions** holds the undo
 window, approve button side, **Swipe cards** on narrow screens (on by default),
@@ -310,6 +356,14 @@ The **YOLO** switch in the header turns on [YOLO mode](rules.md#yolo-mode):
 risk, for 15m, 1h, 4h, or until turned off. While it is on the header shows a
 warning pill (**HARD YOLO** in the destructive color) with the time left.
 
+When one agent session sends a flood of requests (40 in a minute by default),
+a banner at the top of the inbox list says "*agent* · *session* sent *N*
+requests in the last minute". **Mute 1h** silences its notifications for an
+hour (**Unmute** undoes it), **Dismiss all (N pending)** asks for confirmation,
+then dismisses its pending notices and denies its other pending requests, and
+**×** hides the banner until the window reloads. See
+[floods and mutes](rules.md#floods-and-mutes).
+
 If the daemon stops after the inbox has loaded, the inbox stays up and the
 header shows **Syncing…** then **Offline · synced hh:mm** (click to retry, or
 **Start daemon**). Decisions made meanwhile wait in the outbox with **Undo** and
@@ -364,18 +418,92 @@ the Speech Dispatcher service and a voice. Other desktop platforms use their
 OS speech backend. Voices come from the device;
 online voices send the spoken text to the voice provider.
 
+**Voice provider** chooses who speaks: **This device** (default, free) or a
+cloud voice from **OpenAI** or **ElevenLabs**. A cloud provider needs your own
+API key (see [cloud speech providers](#cloud-speech-providers)); pick an
+**OpenAI voice** or enter an **ElevenLabs voice ID**, and optionally a **Voice
+model** (empty uses the provider's default). The voice list and **Pitch** apply
+to **This device** only; **Speed** applies to both.
+
+## Dictation
+
+Click the mic (**Dictate**) beside a text field, speak, then click it again
+(**Stop dictation**). The words are added to the end of the field and stay
+editable; nothing is sent until you submit. The mic appears beside the
+free-text answer to a question, **Feedback for the agent** and **Reply to the
+agent**, text fields an agent asks you to fill in, and an email draft's
+**Subject** and **Body** (not the raw JSON editor). It shows **Listening…**,
+then **Transcribing…** after you stop. Starting dictation stops read aloud
+first. Each recording keeps at most its first two minutes.
+
+**Settings → Dictation** saves, on this computer:
+
+- **Provider**: **This device** (default, free) transcribes on this computer
+  with whisper.cpp; or **OpenAI**, **Groq** or **ElevenLabs** (see
+  [cloud speech providers](#cloud-speech-providers)), with an optional
+  **Transcription model** (empty uses the provider's default).
+- **Language**: **Detect automatically** (default) or a fixed language.
+- **Speech model** (This device only): **tiny** (about 78 MB), **base**
+  (default, about 148 MB) or **small** (about 488 MB). Larger models are more
+  accurate but slower. Select the model to use. No model ships with the app:
+  click **Install** beside one to download it from the whisper.cpp model
+  repository on Hugging Face (progress shows as **Downloading N%**). handup
+  checks its size and SHA-256 before keeping it, and after that dictation works
+  offline. **Remove**
+  deletes a model. Models are stored in the app's data directory, under
+  `stt-models` (for example `~/.local/share/dev.handup.app/stt-models` on
+  Linux).
+- **Models you already have (Linux):** if another speech tool on this computer
+  already downloaded a whisper.cpp model, handup uses it instead of asking you to
+  install one, and the model's row in Settings shows **Using base.en from voxtype** (plus
+  **English only** for `.en` models). It picks the same size as the selected model
+  when one exists, else base, small, tiny, medium, then large. handup only reads
+  these files, never changes or deletes them, and a model you install yourself
+  always wins. It looks in the default model folders of voxtype (Omarchy's
+  dictation), hyprwhspr, Handy, OpenWhispr, Speech Note (also the Flatpak), GNOME
+  Speech2Text, whisper-dictation, Buzz and the AUR `whisper.cpp-model-*`
+  packages. Tools that use another format, such as nerd-dictation (Vosk), can't
+  be reused.
+- Dictating with no installed or reusable model shows **Speech model not
+  installed. Install one in Settings → Dictation.**
+
+On macOS, the first dictation asks for microphone access for handup; if you
+deny it, allow handup under **System Settings → Privacy & Security →
+Microphone**. Without a microphone, Settings says **On-device dictation isn't
+available here**.
+
+### Cloud speech providers
+
+Cloud dictation and cloud read aloud are optional and off by default. Enter
+your own key in **OpenAI API key**, **Groq API key** or **ElevenLabs API key**
+and click **Save**; the field then shows **Configured**, and **Clear** removes
+the key. A key saved under Read aloud also counts for Dictation and the other
+way round. Keys are stored only in the operating system's secure storage
+(Keychain on macOS, Credential Manager on Windows, the Secret Service keyring on
+Linux), are write-only (never shown again) and are never sent to the daemon,
+paired devices or a relay: the app calls the provider directly. Cloud
+providers receive your recorded audio (dictation) or the text being read (read
+aloud), and may bill your account for it.
+
 ## History
 
 The **Inbox | History** switch at the top of the list (or `h`) shows resolved
 requests, newest first and grouped by day. Each row shows the outcome
 (approved, denied, dismissed, expired, cancelled, or auto for rule, YOLO, and decide hook decisions), the agent,
-and when it was resolved. Search matches the title, summary, and folder; the
-chips filter by outcome, **Files** (file, bundle, image, PDF, audio, or video
-previews), and request kind (Command, Edit, Review, Question, Info, or Custom).
-Filters combine; tap the selected Files/kind chip again to clear it.
-These chips and the Inbox filter tabs stay on one line; whatever doesn't fit
-moves into a **More** menu, which shows the active filter's name when it is
-hidden there.
+and when it was resolved. Search matches the title, summary, and folder.
+The quick filter row has outcome chips with colored dots; several outcomes
+can be selected at once. Nothing selected shows every outcome.
+
+**Filters** opens the same dialog or bottom sheet as Inbox, with **Outcome**,
+**Type**, **Agent**, and **Has files** sections. Type means request kind
+(Command, Edit, Review, Question, Info, or Custom); **Files** matches file,
+bundle, image, PDF, audio, or video previews. Picks within a section combine
+with OR; across sections they combine with AND. Type, agent and Files picks
+appear after a divider as removable chips, counted by the Filters badge.
+The row stays on one line and scrolls sideways with a swipe or mouse wheel.
+Tap a selected outcome again to remove it, or use the reset icon at the row
+end to clear all chip/sheet filters without clearing search.
+
 Changing filters discards any older page still loading for the previous filters.
 `j`/`k` move and `/` focuses search. Inbox remains the default view.
 
@@ -392,8 +520,15 @@ Attachments retain their **Open** and **Download** actions in read-only history.
 
 The API is `GET /v1/history` with optional `outcome`, `agent`, `type` (one
 preview type), `has=attachments`, `kind`, and `q` (title, summary, folder).
-All filters combine. `limit` defaults to 50 (maximum 500); pass `next_cursor`
-as `cursor` with the same filters to fetch older results without duplicates.
+`outcome`, `kind`, and `agent` each accept one value or a comma-separated list.
+Values within a parameter combine with OR; different parameters combine with
+AND. For example, `GET /v1/history?outcome=approved,denied&kind=command,edit&agent=codex,claude`
+matches either outcome, either kind, and either agent. An invalid outcome or
+kind member returns HTTP 400 for the whole query; single-value queries are
+unchanged. `type` still accepts one preview type, and `has=attachments` matches
+the same file previews as **Files**.
+`limit` defaults to 50 (maximum 500); pass `next_cursor` as `cursor` with the
+same filters to fetch older results without duplicates.
 Paired view/decide devices can also read `GET /v1/requests/{id}/audit`;
 submission tokens cannot access history or request audit.
 History keeps the last `history.keep_days` days and `history.max_requests`

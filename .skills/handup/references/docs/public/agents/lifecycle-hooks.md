@@ -51,8 +51,11 @@ Built in, no hook to write: install the native extension with
 handup config set integrations.omp.turn_notice true
 ```
 
-Restart omp. Each finished main-session turn becomes a notice, unless the agent
-already asked handup something in that run; a typed reply wakes or steers omp.
+Restart omp. Each finished interactive main-session turn becomes a notice, unless
+the agent already asked handup something in that run; a typed reply wakes or steers
+omp. Subagents, task sessions and headless runs such as `omp -p` post nothing.
+
+It also skips the notice when kitty reports both this omp's terminal window and its tab focused at turn end (the active tab of the focused OS window). This requires `allow_remote_control yes` and `listen_on` configured in `kitty.conf`, with `KITTY_WINDOW_ID` and `KITTY_LISTEN_ON` set and `TMUX` unset; other terminals, SSH sessions, tmux, missing settings, disabled remote control, errors or a 2-second timeout still send the notice.
 Details in [omp turn-end notices](omp.md#turn-end-notices).
 
 ## Claude Code

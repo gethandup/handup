@@ -38,7 +38,9 @@ handup log --json            # append-only audit, newest first
 handup storage --json        # disk use by category, retention, last cleanup
 handup storage clean history --older-than 30d  # background cleanup; or files, --all
 handup license status        # trial days left or license; activate KEY | import FILE | deactivate
-handup pair --scope decide   # QR phone pairing; direct/Tailscale needs remote.mode enabled
+handup remote tailscale      # enable Tailscale access; restart daemon if needed, print URL
+handup remote off            # disable remote listener; keep devices paired
+handup pair --scope decide   # QR pairing; offers Tailscale setup on a terminal if access is off
 handup pair --relay          # uses the configured relay, even with remote.mode off
 handup devices list          # enabled/disabled and push state; --json includes enabled and push
 handup devices disable <id>  # pause access and push without unpairing
@@ -96,6 +98,45 @@ It is safe to run again: the service, connected agents and handup-owned skills
 are refreshed in place. `--dry-run` previews every step without writing files
 or starting the service. Exit 0 means every step succeeded or was skipped;
 exit 4 means a step failed, and its line names the command to fix it.
+
+With Tailscale connected and remote access off, the final hint suggests
+`handup remote tailscale`, then `handup pair`.
+
+## Remote access and pairing
+
+`handup remote tailscale` checks `tailscale ip -4`, validates the settings,
+and sets `remote.mode: tailscale` only when needed. Missing or disconnected
+Tailscale fails before any config write, with install or sign-in instructions.
+It restarts through systemd/launchd when the user service owns the running
+daemon; otherwise, on Linux and macOS, it stops and autostarts the daemon.
+It checks that the daemon reports the requested mode, then prints the URL and
+**Next: run handup pair**. If config and the running daemon already use
+Tailscale, it does not restart. handup never changes your Tailscale configuration.
+
+`handup remote off` sets the mode to `off` and applies it the same way; paired
+devices stay paired. On Windows, switching a running daemon asks you to quit
+it and run `handup serve` again.
+
+For non-relay pairing when remote access is off, `handup pair` on a terminal
+with Tailscale connected asks **Turn on remote access over Tailscale now? [Y/n]**.
+Enter or **y** enables access and continues pairing. With `--json`, no terminal,
+or a declined prompt, it exits with an error telling you to run
+`handup remote tailscale`. Without Tailscale, it explains how to set it up or
+use `handup pair --relay` with a configured relay.
+
+If `remote.mode` is already `tailscale` and `remote.bind` is empty, a daemon
+started before Tailscale connects keeps serving locally and retries discovery
+every 5 seconds rather than exiting. Non-relay `handup pair` reports that
+remote access is waiting for Tailscale (the local pairing API returns 409).
+Run `sudo tailscale up` on Linux or open the Tailscale app elsewhere, then
+retry pairing; the remote listener binds automatically without a handup restart.
+
+The doctor's `remote` row in Tailscale mode checks the discovered tailnet
+address (or `remote.bind`) and a TCP connection to `remote.port` (2-second
+timeout). Missing/disconnected Tailscale or "nothing answers" produces WARN
+with a fix and `handup remote tailscale`; this is not a phone reachability
+test. With mode `off` and Tailscale connected, it suggests enabling access.
+See [Remote access](remote.md) for setup and manual configuration.
 
 ## Agent integration
 
@@ -297,7 +338,7 @@ handup config set notifications.backends '[desktop, push, ntfy]'
 handup config set notifications.ntfy.topic my-private-topic
 handup config set notifications.push.payload wake  # default; no request title
 handup config set notifications.push.url https://push.gethandup.dev
-handup config set remote.mode tailscale
+handup config set remote.mode tailscale    # manual alternative; restart required, or use handup remote tailscale
 handup config set history.keep_days 30      # 0 disables the age cap
 handup config set history.max_requests 500  # 0 disables the count cap
 handup config set history.max_bytes 1073741824  # best-effort 1 GiB live-storage cap

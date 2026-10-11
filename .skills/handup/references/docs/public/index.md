@@ -6,13 +6,20 @@ handup runs on Linux and macOS computers, with an Android app for your phone.
 Windows x86-64 is a beta (CLI and desktop installer; see
 [downloads](downloads.md#windows)). No iPhone app yet; a [web inbox](web.md)
 for iPhone and other browsers is included from v0.1.2 (not in v0.1.1 or
-earlier). [Download it](https://gethandup.dev/downloads), or install it from a
-terminal:
+earlier). [Download it](https://gethandup.dev/downloads), or on Linux (glibc) or macOS
+install it from a terminal:
 
 ```sh
 curl -fsSL https://github.com/gethandup/handup/releases/latest/download/install.sh | sh
 handup setup
 ```
+
+The Linux archive requires glibc. On Alpine, use the
+[musl APK package](downloads.md#alpine) instead of the install script.
+
+On Windows, download the [desktop EXE or CLI ZIP](downloads.md#windows)
+instead of running the install script. The desktop app starts the daemon;
+for the CLI ZIP, run `handup serve` in its own terminal.
 
 On a Mac, `brew install --cask gethandup/tap/handup` works too. Packages and
 the desktop and Android apps are in [downloads](downloads.md). You never need

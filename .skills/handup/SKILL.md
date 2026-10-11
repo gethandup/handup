@@ -29,7 +29,7 @@ Installing a skill alone does not intercept any tools.
 These are the human's controls. Never use them on your own requests, and never
 change them to make your requests pass, even when a command is available to you:
 `approve`, `deny`, `answer`, scoped allow (`--scope`), `yolo`, `rules`,
-`decide:`/`exec:` hooks in `config.yaml`, `pair`, `devices`, `tokens`,
+`decide:`/`exec:` hooks in `config.yaml`, `remote`, `pair`, `devices`, `tokens`,
 `storage clean`, `mute`, `unmute`, `flood clear`, and the `requests.*` /
 `notifications.burst.*` limits. Approval comes only from the returned decision.
 
@@ -64,13 +64,34 @@ Agent commands: `ask`, `wait`, `status`, `cancel`, `ls`, `show`, `schema`,
 `serve`, `service` (install, uninstall, status), `setup` (`--dry-run`), `mcp`, `hook`, `hooks` (list,
 test), `integrate`, `skill` (install, uninstall), `prompt`, `completion`, `config` (init, show, path, edit,
 get, set, unset, toggle, keys, validate), `uninstall`. Human-only: `approve`, `deny`, `answer`,
-`stop` (a desktop Run), `ui`, `report`, `inbox`, `rules` (list, test, rm), `storage` (clean), `pair`, `devices`
+`stop` (a desktop Run), `ui`, `report`, `inbox`, `rules` (list, test, rm), `storage` (clean), `remote` (tailscale, off), `pair`, `devices`
 (list, disable, enable, mute, unmute, scope, revoke), `tokens` (create, list,
 revoke), `yolo`, `flood` (bare lists; `clear`), `mute`, `unmute`. Run `handup help COMMAND` or read the CLI reference for flags.
 For config, prefer `handup config get KEY --json`, `set` and `unset` (all
 validated; invalid writes nothing) over hand edits, and run `handup config
 validate` after any hand edit. `config show --effective --json` lists every
 setting with its source.
+
+Human remote setup: `handup remote tailscale` checks Tailscale before writing
+config, enables remote access, restarts the daemon if needed, verifies its mode,
+and prints the URL and pairing hint. Already enabled means no restart;
+`handup remote off` turns the listener off without unpairing devices. On Windows,
+switching a running daemon asks for a manual restart. handup never changes your
+Tailscale configuration. Missing/disconnected Tailscale errors explain how to
+install or connect it.
+
+With remote access off, `handup pair` on a terminal with Tailscale connected
+asks **Turn on remote access over Tailscale now? [Y/n]**; Enter or **y** enables
+it and continues pairing. With `--json`, no terminal or a declined prompt,
+it exits telling the human to run `handup remote tailscale` first. Without
+Tailscale, set it up or use `handup pair --relay` with a configured relay.
+Agents never enable remote access or pair devices.
+
+`handup doctor` checks Tailscale and whether the tailnet port answers in its
+`remote` row, warning with a fix if missing/disconnected or nothing answers.
+With remote access off and Tailscale connected, doctor and the final
+`handup setup` hint suggest `handup remote tailscale`, then pairing. See
+[Remote access](references/docs/public/remote.md) for details.
 
 When asked to set up handup:
 
@@ -142,7 +163,7 @@ The reference tree is generated from canonical docs; do not hand-edit it.
 | Printing agent instructions with the CLI, GitHub npx skill installation or supported agents | [Agent skill](references/docs/public/agents/skill.md) |
 | MCP setup, every tool argument, structured multi-question forms, polling or client timeouts | [MCP](references/docs/public/agents/mcp.md) |
 | Adding handup to an agent or harness without a dedicated guide (own agent loop, SDK app, framework, remote HTTP) | [Any agent or custom harness](references/docs/public/agents/custom.md) |
-| Posting each finished agent turn as a notice (omp `integrations.omp.turn_notice`, Claude Code `integrations.claude.turn_notice`, Codex/Cursor/Gemini hooks, opencode plugins) or waking an agent with a notice reply | [Agent lifecycle hooks](references/docs/public/agents/lifecycle-hooks.md) |
+| Posting finished agent turns as notices (omp `integrations.omp.turn_notice`, Claude Code `integrations.claude.turn_notice`, Codex/Cursor/Gemini hooks, opencode plugins), diagnosing omp's focused-kitty-tab skip or waking an agent with a notice reply | [Agent lifecycle hooks](references/docs/public/agents/lifecycle-hooks.md) |
 | Claude Code permission hooks and fail-closed fallback | [Claude Code](references/docs/public/agents/claude-code.md) |
 | Cursor MCP configuration | [Cursor](references/docs/public/agents/cursor.md) |
 | Shell/CI execution gates and nonzero decisions | [Shell and CI](references/docs/public/agents/shell-ci.md) |

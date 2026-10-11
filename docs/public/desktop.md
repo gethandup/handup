@@ -197,6 +197,13 @@ device: a view-only device hides decision keys, the quick window hides list
 keys, and in History the sheet shows History's keys. Keys are ignored while you
 type in a field, except `Esc` (leaves it) and `Ctrl+Enter` (`⌘+Enter` on macOS).
 
+In the inbox's **Feedback for the agent** or **Reply to the agent** box,
+`Ctrl+Enter` (`⌘+Enter` on macOS) sends the primary decision with your text:
+**Approve** on an approval request, **OK** on a notice. Plain Enter inserts a
+newline. At medium and wider widths, the label shows the focus key (default
+`F`) and `Ctrl+Enter approves` or `Ctrl+Enter sends` (`⌘+Enter` on macOS);
+the shortcut still works when the hint is hidden on a narrow screen.
+
 The table below shows the defaults. To change a shortcut, open **Settings →
 Keyboard shortcuts**, select its key button and press the new key. `Esc` cancels
 capture; `Tab` leaves it. A taken key is refused inline, naming the other action;
@@ -232,7 +239,7 @@ and view-only devices show a read-only list. You can also use
 | `Shift+P` | Allow in project |
 | `1`–`9` | Pick an option (on a question: an answer) |
 | `e` | Edit & approve |
-| `Ctrl+Enter` (`⌘+Enter` on macOS) | Approve the edited input or submit a question, even while typing |
+| `Ctrl+Enter` (`⌘+Enter` on macOS) | Approve with the typed feedback (OK on a notice), approve the edited input, or submit a question, even while typing |
 | `f` | Focus a question's reply box, else the feedback box (`Esc` leaves it; Enter inside it is a newline, `Ctrl+Enter` sends) |
 | `r` | Run / Run as admin (desktop app, eligible command requests) |
 | `u` | Undo the newest decision still waiting to be sent; press again for the one before |
@@ -334,7 +341,8 @@ the list narrows so the request keeps at least 36rem (576px); Stacked height is
 15–75% (default 38%).
 
 Previews fit the width of the request pane, not the window: in a narrow pane
-request titles wrap to two lines, preview tabs scroll sideways, the files and
+request titles wrap to two lines, preview tabs scroll sideways (arrows and edge
+fades show when tabs overflow; wheel or drag to scroll), the files and
 diff file lists sit above the content, and diffs start unified (switch to split
 with the toggle) when the preview is under 768px.
 
@@ -588,11 +596,14 @@ remote listener uses TLS. Pick **Can decide** or **View only**. When
 
 Each code works once and expires after 2 minutes; the dialog counts down and
 **New code** issues a fresh one. When a phone uses the code, the dialog shows
-"Paired: \<name\>". For direct/Tailscale pairing when remote access is off, the dialog explains how to turn it
-on (`handup config set remote.mode tailscale`, then restart the daemon) and
-links to [Remote access](remote.md). The button exists only in the desktop
-app: pairing codes are local-only, so the web UI and the mobile app never
-offer it.
+"Paired: \<name\>". For direct/Tailscale pairing when remote access is off, the
+dialog shows **Remote access is off**, tells you to run
+`handup remote tailscale`, and links to [Remote access](remote.md).
+If the daemon started before Tailscale connected, the dialog instead reports
+that remote access is waiting for Tailscale. Local approvals still work;
+connect Tailscale, then request a new code once the listener binds automatically.
+The button exists only in the desktop app: pairing codes are local-only, so
+the web UI and the mobile app never offer it.
 
 ## Devices
 

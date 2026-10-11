@@ -38,27 +38,49 @@ First-time setup takes about five minutes:
 2. **Phone:** install the Tailscale app (Play Store or App Store) and sign in
    with the **same account**. Leave it connected.
 3. **Check:** `tailscale status` on the computer lists both devices.
-4. **Turn on remote access** and restart the daemon:
+4. **Turn on remote access:**
 
    ```sh
-   handup config set remote.mode tailscale
-   systemctl --user restart handup.service                       # Linux
-   launchctl kickstart -k gui/$(id -u)/com.handup.daemon        # macOS
+   handup remote tailscale
    ```
 
-   If you run the daemon yourself instead of as a service, stop it and start
-   `handup serve --foreground` again.
+   handup checks Tailscale, sets `remote.mode: tailscale`, restarts the daemon
+   if needed, and prints the URL and the next step. On Linux and macOS it uses
+   the user service when that service owns the running daemon; otherwise it
+   stops the daemon and starts it again. If already enabled in both config and
+   the running daemon, it does not restart.
 5. **Pair:** run `handup pair` (or **Pair a phone** in the desktop app) and
    scan the QR code with the handup app; see [Mobile](mobile.md#pairing).
 
 If the phone shows "Can't reach handup", check that the Tailscale app is
-connected and that `tailscale status` shows the computer online.
+connected and that `tailscale status` shows the computer online. Run
+`handup doctor` on the computer; see [Troubleshooting](#troubleshooting).
+
+For manual setup, `handup config set remote.mode tailscale` still works, but
+you must restart the daemon yourself:
+
+```sh
+systemctl --user restart handup.service                  # Linux
+launchctl kickstart -k gui/$(id -u)/com.handup.daemon   # macOS
+```
+
+If you run `handup serve --foreground` yourself, stop it and start it again.
+On Windows, switching a running daemon asks you to quit it and run
+`handup serve` again.
 
 The daemon discovers the tailnet IP with the read-only `tailscale ip -4` (or
 set `remote.bind` to it) and serves the web UI and API on `remote.port`
 (default 7466). HTML previews use a second port, `remote.preview_port`
 (default 7467), which is a separate browser origin. Traffic between tailnet
 devices is encrypted by WireGuard.
+
+With `remote.mode: tailscale` and no `remote.bind`, the daemon starts locally
+even if Tailscale is not connected yet (for example at boot, login or resume).
+It logs `handup remote: waiting for Tailscale: …` and retries `tailscale ip -4`
+every 5 seconds instead of exiting. The CLI, desktop app and agents can keep
+using the local queue. Once Tailscale connects, the daemon binds the remote
+listener automatically; pairing, the web UI and notification links become
+available without restarting handup.
 
 handup never runs `tailscale serve`, `tailscale funnel`, or any other command
 that changes your Tailscale configuration. If you want a browser-trusted HTTPS
@@ -72,12 +94,69 @@ handup config set remote.public_url https://your-host.your-tailnet.ts.net:8443
 
 Never use `tailscale funnel` for handup: it publishes the listener to the internet.
 
+### Troubleshooting
+
+`handup remote tailscale` checks `tailscale ip -4` before writing config. If
+Tailscale is missing, install it from
+[tailscale.com/download](https://tailscale.com/download). If disconnected, run
+`sudo tailscale up` on Linux, or open the Tailscale app and sign in on macOS
+or Windows.
+
+The `remote` row in `handup doctor` checks the tailnet address (or the
+configured `remote.bind`) and whether a TCP connection succeeds on
+`<tailnet IP>:remote.port` within 2 seconds. Missing or disconnected Tailscale,
+or "nothing answers" on that port, produces WARN with a fix. If remote access
+is already enabled and the daemon is waiting, connect Tailscale and let it
+bind automatically; no handup restart is needed. If remote access is off,
+connect Tailscale and run `handup remote tailscale`. A successful connection
+does not prove that the phone can reach handup. With remote access off and
+Tailscale connected, the row says so and suggests `handup remote tailscale`.
+
+### Turn remote access off
+
+Run `handup remote off` to set `remote.mode: off` and apply it with a daemon
+restart if needed. Paired devices stay paired and can reconnect when you turn
+remote access back on. A configured relay still works with mode `off`.
+
+### When Tailscale isn't an option
+
+- **Your phone already uses a VPN.** Android and iOS allow one active VPN at
+  a time, so a work VPN, NextDNS, AdGuard or another VPN app stops Tailscale
+  from connecting. Pause the other app while you approve, or use a relay.
+- **Your work computer can't run Tailscale,** because device management
+  blocks it or the computer is already on your company's tailnet (Tailscale
+  joins one tailnet at a time).
+
+In both cases, run the [end-to-end encrypted relay](relay.md) on a small Linux
+server. It uses ordinary HTTPS, so it needs no VPN on the phone or computer,
+and it never sees previews, decisions or keys. handup does not offer a hosted
+relay yet; [tell us](https://gethandup.dev/support) if you need one.
+
 ## Pairing
 
 `handup pair [--scope view|decide] [--name NAME] [--json]` prints a QR code in
 the terminal. The desktop app shows the same code under **Pair a phone** (see
 [Desktop app](desktop.md#pair-a-phone)); both use the local-only
-`POST /v1/pair`, which answers 409 while remote access is off. The QR code encodes:
+`POST /v1/pair`, which answers 409 while remote access is off and recommends
+`handup remote tailscale`.
+
+While the daemon is waiting for Tailscale, non-relay pairing through the CLI,
+desktop dialog or `POST /v1/pair` returns HTTP 409 with:
+
+> remote access is waiting for Tailscale to connect; on Linux run `sudo tailscale up`, elsewhere open the Tailscale app
+
+Connect Tailscale, then request a new pairing code once the remote listener
+has bound. Local requests and decisions remain available while you wait.
+
+For non-relay pairing with remote access off, the CLI checks Tailscale. On a
+terminal with Tailscale connected it asks **Turn on remote access over
+Tailscale now? [Y/n]**. Enter or **y** enables remote access and continues
+pairing. Declining, using `--json`, or running without a terminal exits with
+an error telling you to run `handup remote tailscale`; it does not enable
+remote access. Without Tailscale, the error explains how to set it up or use
+`handup pair --relay` with a configured relay.
+
+The QR code encodes:
 
 ```text
 http://100.x.y.z:7466/pair#code=<32 hex chars>&scope=decide&fp=&name=
@@ -223,6 +302,9 @@ With a fine pointer and `decide` scope, select a key and press its replacement;
 conflicts are refused inline, and **Reset**/**Reset all** restore defaults.
 Touch/coarse-pointer and `view` devices keep a read-only list. Overrides save to
 the connected computer and update all clients live, not just this browser.
+In the feedback/reply box, `Ctrl+Enter` (`⌘+Enter` on macOS) sends **Approve**
+with feedback, or **OK** with a notice reply; plain Enter inserts a newline.
+See [desktop keys](desktop.md#keys) for the full shortcut table.
 **Settings → Appearance → Layout**, beside **Density**, opens a page with previews: **Split**
 (default) puts the list beside the request in windows at least 56rem (896px)
 wide, or shows list then request on phones and narrower windows; **Stacked** puts the list above the request on any screen; **Focus**
@@ -433,7 +515,7 @@ removed; loading them reports a migration hint.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `remote.mode` | `off` | `off`, `tailscale`, or `direct`; restart the daemon to apply |
+| `remote.mode` | `off` | `off`, `tailscale`, or `direct`; `handup remote tailscale` / `off` applies the change, or set manually and restart |
 | `remote.bind` | empty | Listener IP; tailscale discovers it when empty |
 | `remote.port` | `7466` | API and web UI |
 | `remote.preview_port` | `7467` | Separate preview origin |
@@ -444,9 +526,11 @@ removed; loading them reports a migration hint.
 | `remote.tls.cert`, `remote.tls.key` | empty | Your PEM cert and key; empty generates a self-signed pair |
 | `remote.direct.accept_risk` | `false` | Required for direct mode |
 
-Every `remote.*` key (relay included) applies only after a daemon restart; the
-clients show **Restart daemon to apply** until then. Other settings, such as
-`notifications.*`, apply when the config is saved ([live reload](cli.md#live-reload)).
+Every `remote.*` key (relay included) applies only after a daemon restart;
+`handup remote tailscale` and `handup remote off` handle this for mode changes
+on Linux and macOS. Manual changes show **Restart daemon to apply** until
+then. Other settings, such as `notifications.*`, apply when the config is
+saved ([live reload](cli.md#live-reload)).
 
 The Android app is a native client of the same remote listener; see
 [mobile.md](mobile.md). Self-hosted FCM push and the end-to-end encrypted

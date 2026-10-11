@@ -57,9 +57,9 @@ application source is not here.
 - **Any agent that speaks MCP**: Claude Code, Codex, Cursor, omp, opencode and any
   other MCP client, plus the CLI and a local HTTP API for scripts and CI.
 - **Decide anywhere**: terminal inbox, desktop app, or your phone over
-  [Tailscale](docs/public/remote.md#tailscale-recommended) (five-minute setup);
-  from the next release, also through a self-hostable end-to-end encrypted
-  [relay](docs/public/relay.md) for the Android app.
+  [Tailscale](docs/public/remote.md#tailscale-recommended) (five-minute setup),
+  or through a self-hostable end-to-end encrypted [relay](docs/public/relay.md)
+  for the Android app.
 - **Dictate answers**: a mic beside answers and feedback adds your words for
   you to edit, free on the device by default, with optional cloud speech
   providers using your own API key.

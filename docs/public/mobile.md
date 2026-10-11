@@ -1,9 +1,10 @@
 # Mobile app
 
 The handup mobile app is a companion to the daemon on your computer, not a
-daemon of its own. It connects through the [remote listener](remote.md), so
-turn on remote access first: [Tailscale](remote.md#tailscale-recommended) is
-recommended and takes about five minutes to set up.
+daemon of its own. For a direct connection, set up
+[Tailscale](remote.md#tailscale-recommended) on both devices, then run
+`handup remote tailscale` on the computer. It is the recommended route; a
+configured [relay](relay.md) also works with remote access off.
 
 Android is a beta, sideloaded APK published with each handup release
 (`handup-android_<version>_arm64.apk`); there is no Play Store listing or
@@ -45,6 +46,24 @@ release), skips prereleases, and notifies you when a new version is out.
    Tailscale, use `handup pair --relay` instead: the app then talks to the daemon through
    your [end-to-end encrypted relay](relay.md) (`…/pair#ch=…`).
 3. The code works once and expires after two minutes.
+
+If remote access is off and Tailscale is connected, `handup pair` on a
+terminal asks **Turn on remote access over Tailscale now? [Y/n]**. Enter or
+**y** enables it and continues pairing. With `--json`, no terminal, or a
+declined prompt, run `handup remote tailscale` first. Without Tailscale, set
+it up or use a configured relay with `handup pair --relay`.
+
+If `handup pair` reports that remote access is waiting for Tailscale, connect
+Tailscale on the computer (`sudo tailscale up` on Linux, or open the Tailscale
+app elsewhere), then retry pairing. With Tailscale mode enabled and no
+`remote.bind`, the daemon keeps serving locally and binds the remote listener
+automatically once Tailscale connects; no handup restart is needed. See
+[Remote troubleshooting](remote.md#troubleshooting).
+
+If the phone cannot connect, run `handup doctor` on the computer. Its `remote`
+row warns when Tailscale is missing/disconnected or nothing answers on the
+tailnet port, and tells you how to fix it. `handup remote off` stops the remote
+listener without unpairing your phone; a configured relay can still connect.
 
 The app can pair with several computers (say a laptop, a desktop and a build
 server). Their pending requests share one inbox; once two or more are paired,
@@ -96,7 +115,9 @@ multi-finger gestures do nothing. Turn **Swipe cards** off under
 approve option, also when the buttons are mirrored to the left.
 An info notice has an optional **Reply to the agent** box under its summary;
 the text goes with **OK** or **Dismiss** (button or swipe), and an empty box
-tells the agent nothing.
+tells the agent nothing. With a hardware keyboard, `Ctrl+Enter` in the reply
+box sends **OK** with your text; in **Feedback for the agent**, it sends
+**Approve** with your feedback. Plain Enter inserts a newline.
 Vertical scrolling and pinch zoom remain native. A drag locks to an axis after
 a few pixels: mostly-vertical drags scroll, mostly-horizontal drags move the
 card from anywhere on it, including file lists, diffs and code previews. A

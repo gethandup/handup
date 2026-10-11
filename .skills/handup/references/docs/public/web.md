@@ -16,6 +16,13 @@ their previews, history, and Settings. With **decide** access it can approve,
 deny, edit and approve, answer questions, cancel, and stop a command that the
 desktop app is running. **View** access is read-only.
 
+In **Feedback for the agent** or **Reply to the agent**, `Ctrl+Enter`
+(`⌘+Enter` on macOS) sends your text with the primary decision: **Approve**
+on an approval request, **OK** on a notice. Plain Enter inserts a newline.
+The label shows the focus key and send shortcut at medium and wider widths;
+the shortcut also works on narrower screens. See [desktop keys](desktop.md#keys)
+for editing and question shortcuts.
+
 Inbox and History use the same [combinable filters as desktop](desktop.md#inbox-filters):
 one sideways-scrolling row of request-type chips with counts in Inbox, or
 outcome chips with colored dots in History. Nothing picked shows everything.
@@ -86,15 +93,16 @@ that only you can join. Set it up once by following
 computer and on the device with the browser, and sign in to the same account
 on both.
 
-1. Turn on remote access and restart the daemon:
+1. Turn on remote access:
 
    ```sh
-   handup config set remote.mode tailscale
-   systemctl --user restart handup.service   # macOS: see above
+   handup remote tailscale
    ```
 
-   handup reads the computer's tailnet address with `tailscale ip -4` and
-   listens there. It never changes your Tailscale configuration.
+   handup reads the computer's tailnet address with `tailscale ip -4`, applies
+   the mode with a daemon restart if needed, and prints the URL. It never
+   changes your Tailscale configuration. For manual setup or Windows restart
+   instructions, see [Tailscale setup](remote.md#tailscale-recommended).
 2. Pair the browser:
 
    ```sh
@@ -109,6 +117,12 @@ on both.
 3. The **Pair this device** page shows the access you are granting and an
    optional device name. Press **Pair**. The browser opens the inbox and stays
    paired.
+
+If remote access is off, `handup pair` on a terminal offers to turn it on when
+Tailscale is connected: **Turn on remote access over Tailscale now? [Y/n]**.
+Enter or **y** enables it and continues pairing. With `--json`, no terminal,
+or a declined prompt, run `handup remote tailscale` first. Without Tailscale,
+set it up before browser pairing; `--relay` is only for the Android app.
 
 Bookmark `http://100.x.y.z:7466/` (the address from your pairing link) to come
 back later. On an iPhone, Safari's **Share → Add to Home Screen** gives it an
@@ -200,8 +214,8 @@ handup devices revoke ID          # unpair it now
 ```
 
 A revoked browser shows **Device not paired** and needs a new `handup pair`.
-To stop serving the web inbox, run `handup config set remote.mode off` and
-restart the daemon. See [Managing devices](remote.md#managing-devices).
+To stop serving the web inbox, run `handup remote off`; paired browsers stay
+paired. See [Managing devices](remote.md#managing-devices).
 
 ## Troubleshooting
 
@@ -210,5 +224,6 @@ restart the daemon. See [Managing devices](remote.md#managing-devices).
 | `handup web UI files are missing` (HTTP 503) | Reinstall handup v0.1.2 or later, or set `remote.web_dir` to your installed web inbox files |
 | `host not allowed` | Open the address from the pairing link, or set `remote.public_url` for your own host name |
 | **Device not paired** | Run `handup pair` again: each link works once, for 2 minutes |
-| The page does not load | Check that Tailscale is connected on both devices (`tailscale status`), or that the firewall allows ports 7466 and 7467 in direct mode |
-| `handup pair` answers that remote access is off | Set `remote.mode` and restart the daemon |
+| The page does not load | Run `handup doctor` on the computer: the `remote` row warns if Tailscale is missing/disconnected or nothing answers on the tailnet port. Check Tailscale on both devices (`tailscale status`); in direct mode, check the firewall allows ports 7466 and 7467 |
+| `handup pair` answers that remote access is off | Run `handup remote tailscale`, then `handup pair` |
+| `handup pair` says remote access is waiting for Tailscale | Connect Tailscale on the computer (`sudo tailscale up` on Linux, or open the Tailscale app elsewhere), then retry pairing. With Tailscale mode enabled and no `remote.bind`, the daemon keeps serving locally and binds the remote listener automatically; no handup restart is needed |

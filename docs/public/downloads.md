@@ -43,7 +43,10 @@ browsers use; v0.1.1 and earlier do not.
 
 ## Linux
 
-### Any distribution (install script)
+### glibc distributions (install script)
+
+For glibc-based Linux distributions, such as Debian, Ubuntu, Fedora and Arch.
+Alpine uses musl; use the [Alpine APK package](#alpine) instead of this script.
 
 ```sh
 curl -fsSL https://github.com/gethandup/handup/releases/latest/download/install.sh | sh
@@ -90,8 +93,10 @@ sudo dnf install ./handup-*.rpm
 
 ### Alpine
 
-The Alpine package contains a musl build. It is not signed with an Alpine
-key, so verify its checksum first (below), then:
+Download `handup_<version>_x86_64.apk` or `handup_<version>_aarch64.apk` from the
+release for your CPU. This Alpine APK contains a musl build; the glibc archive
+used by the install script does not run on Alpine. It is not signed with an
+Alpine key, so verify its checksum first (below), then:
 
 ```sh
 sudo apk add --allow-untrusted ./handup_*.apk
@@ -139,6 +144,11 @@ Windows x86-64 is a beta. Each release has the desktop installer
 `handup-desktop_<version>_amd64-setup.exe` and the CLI zip
 `handup_<version>_windows_amd64.zip`; check them against `checksums.txt` like
 the other downloads.
+
+Download those assets from the [Windows downloads page](https://gethandup.dev/downloads?platform=windows)
+or the [public release](https://github.com/gethandup/handup/releases/latest).
+Do not run `install.sh` in PowerShell, Git Bash, MSYS or Cygwin: that script is
+for Linux and macOS. Inside WSL, use the Linux instructions for your distribution.
 
 ### Desktop app
 

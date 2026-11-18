@@ -5,6 +5,10 @@
   "description": "Ask a human before risky actions: approvals, questions and notices from your agent to your terminal, desktop or phone.",
   "author": { "name": "handup", "email": "support@gethandup.dev", "url": "https://gethandup.dev" },
   "homepage": "https://gethandup.dev",
+  "documentationUrl": "https://github.com/gethandup/handup/tree/main/docs/public",
+  "supportUrl": "https://gethandup.dev/support",
+  "privacyPolicyUrl": "https://gethandup.dev/privacy",
+  "termsOfServiceUrl": "https://gethandup.dev/terms",
   "repository": "https://github.com/gethandup/handup",
   "license": "MIT AND CC-BY-4.0",
   "keywords": ["approvals", "human-in-the-loop", "mcp", "notifications", "agents"]

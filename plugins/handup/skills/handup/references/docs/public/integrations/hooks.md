@@ -51,7 +51,9 @@ JSON bodies, exec stdin, and template context share the
 {"v":1,"type":"request.created","id":"01J00000000000000000000000","time":"2026-09-30T12:00:00Z","data":{"request":{"id":"01J00000000000000000000001","title":"Deploy staging","risk":"low","agent":"codex","source":{"agent":"codex"},"status":"pending","url":"handup://r/01J00000000000000000000001","deep_link":"handup://r/01J00000000000000000000001"}}}
 ```
 
-The event ULID is distinct from the request id. `data.decision` is present when
+The event ULID is distinct from the request id. `time` is RFC 3339 UTC with a `Z`
+suffix and may carry fractional seconds (`2026-09-30T12:00:00.123456789Z`), so parse
+it with an RFC 3339 parser rather than a fixed-width pattern. `data.decision` is present when
 there is a decision, including timeout decisions. Request content is absent by
 default. Opting into `include_content: true` adds `data.request.content.summary`
 and `.previews` (snapshot descriptors; blob data is not fetched). Known credential

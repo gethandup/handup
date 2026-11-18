@@ -311,8 +311,8 @@ deleted.
 A desktop [Run](desktop.md#run-a-command) is stopped when it reaches its limit:
 the request's `run_timeout` (`ask --run-timeout 30m`, MCP `request_approval`
 `run_timeout`, or the request JSON field), else `run.timeout` (default `10m`),
-never more than `run.max_timeout` (default `1h`). Both are humantime durations
-between 1ms and one year (as is `run_timeout`), apply live, and `run.timeout`
+never more than `run.max_timeout` (default `1h`). Both are durations such as
+`30s`, `1h 30m` or `1.5h` (units from `ns` to `years`), between 1ms and one year (as is `run_timeout`), apply live, and `run.timeout`
 must not exceed `run.max_timeout`. `run_timeout`
 is separate from the request's decision `timeout`. The claim's `run.timeout_ms`
 holds the limit in force; its lease ends 2 minutes after it.

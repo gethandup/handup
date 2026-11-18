@@ -1,0 +1,45 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "handup",
+  "description": "Ask a human before risky actions: approvals, questions and notices from your agent to your terminal, desktop or phone.",
+  "author": {
+    "name": "handup",
+    "email": "support@gethandup.dev",
+    "url": "https://gethandup.dev"
+  },
+  "homepage": "https://gethandup.dev",
+  "repository": "https://github.com/gethandup/handup",
+  "license": "MIT AND CC-BY-4.0",
+  "keywords": [
+    "approvals",
+    "human-in-the-loop",
+    "mcp",
+    "notifications",
+    "agents"
+  ],
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true,
+      "interface": {
+        "displayName": "handup",
+        "shortDescription": "Ask a human before risky actions",
+        "longDescription": "handup is an approval inbox for AI agents. Your agent asks before migrations, releases, emails and other risky actions, asks questions when it needs a choice, and sends notices when work finishes. You approve, deny or answer from your terminal, the desktop app or your phone. Requires the handup app on this computer (https://gethandup.dev/downloads).",
+        "developerName": "handup",
+        "category": "Productivity",
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
+        "websiteURL": "https://gethandup.dev",
+        "privacyPolicyURL": "https://gethandup.dev/privacy",
+        "termsOfServiceURL": "https://gethandup.dev/terms",
+        "defaultPrompt": [
+          "Ask me with handup before you run the database migration.",
+          "Use handup to ask me which region to deploy to."
+        ],
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/icon.png"
+      }
+    }
+  }
+}

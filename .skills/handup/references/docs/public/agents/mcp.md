@@ -39,7 +39,7 @@ This writes `mcpServers.handup` in `~/.gemini/settings.json` with
 servers only in trusted folders; run it from a trusted project folder.
 
 Or install the handup extension (MCP server and skill) from the public
-repository: `gemini extensions install https://github.com/gethandup/handup`. It
+repository: `gemini extensions install https://github.com/gethandup/handup --ref main`. It
 needs the handup app installed and does not replace `handup setup`.
 
 **opencode**

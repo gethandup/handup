@@ -134,7 +134,7 @@ only, no hooks or permission prompts, so it does not replace `setup`/`integrate`
 Claude Code `/plugin marketplace add gethandup/handup` then
 `/plugin install handup@handup`; Codex `codex plugin marketplace add gethandup/handup`
 then `codex plugin add handup@handup`; Gemini CLI
-`gemini extensions install https://github.com/gethandup/handup`.
+`gemini extensions install https://github.com/gethandup/handup --ref main`.
 
 ## Exit codes
 

@@ -25,7 +25,7 @@ install works fully for a 14-day trial, then needs a
   `/plugin install handup@handup`
 - **Codex**: `codex plugin marketplace add gethandup/handup`, then
   `codex plugin add handup@handup`
-- **Gemini CLI**: `gemini extensions install https://github.com/gethandup/handup`
+- **Gemini CLI**: `gemini extensions install https://github.com/gethandup/handup --ref main`
 - **Any MCP client**: run `handup mcp` as a stdio server, or `handup setup` to
   configure every agent it finds
 

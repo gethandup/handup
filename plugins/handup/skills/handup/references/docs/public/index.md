@@ -64,7 +64,7 @@ Prefer a plugin? With the handup app installed, Claude Code
 (`/plugin marketplace add gethandup/handup`, then `/plugin install handup@handup`),
 Codex (`codex plugin marketplace add gethandup/handup`, then
 `codex plugin add handup@handup`) and Gemini CLI
-(`gemini extensions install https://github.com/gethandup/handup`) can add the
+(`gemini extensions install https://github.com/gethandup/handup --ref main`) can add the
 handup MCP server and skill that way. A plugin does not add hooks or permission
 prompts; `handup setup` or `handup integrate` still does.
 

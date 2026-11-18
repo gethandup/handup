@@ -1,8 +1,8 @@
 ---
-title: The approval inbox for AI agents
-description: The approval inbox for AI agents. Your agents ask before risky actions like migrations, releases and emails. You see exactly what they want to do and approve or deny from your terminal, desktop or phone.
+title: Install handup and connect your AI agents
+description: Install handup, connect Claude Code, Codex, Cursor or omp, and send your first approval request. Review it from your terminal, desktop or paired phone.
 hero:
-  title: handup
+  title: handup setup and approval guides
   tagline: The approval inbox for AI agents. Your agents ask before risky actions like migrations, releases and emails. You see exactly what they want to do and approve or deny from your terminal, desktop or phone.
   actions:
     - text: Download
@@ -76,6 +76,14 @@ tool-gating extension is upgraded, but a new one is opt-in with
 - [`handup integrate codex`](agents/codex.md)
 - [`handup integrate omp`](agents/omp.md)
 - [`handup integrate mcp --client cursor`](agents/cursor.md)
+
+Prefer a plugin? With the handup app installed, Claude Code
+(`/plugin marketplace add gethandup/handup`, then `/plugin install handup@handup`),
+Codex (`codex plugin marketplace add gethandup/handup`, then
+`codex plugin add handup@handup`) and Gemini CLI
+(`gemini extensions install https://github.com/gethandup/handup`) can add the
+handup MCP server and skill that way. A plugin does not add hooks or permission
+prompts; `handup setup` or `handup integrate` still does.
 
 Agents that don't load skills can use `handup prompt`, which prints
 instructions to paste into `AGENTS.md` or `CLAUDE.md`

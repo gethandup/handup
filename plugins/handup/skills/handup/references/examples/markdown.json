@@ -1,0 +1,10 @@
+{
+  "title": "Review markdown sample",
+  "kind": "review",
+  "previews": [
+    {
+      "type": "markdown",
+      "inline": "## Deployment plan\n\nDeploy staging, verify health, then stop."
+    }
+  ]
+}

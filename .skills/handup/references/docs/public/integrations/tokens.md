@@ -31,6 +31,9 @@ Other API routes return 403; other tokens' and nonexistent request IDs return 40
 `POST /v1/requests/test` is not a submit-token route: it returns 403, even
 though this token may create arbitrary requests through `POST /v1/requests`.
 Synthetic tests from remote Settings require a paired device with `decide` scope.
+`POST /v1/requests/delete` also returns 403, even for this token's own requests.
+Submit credentials can retract with `cancel`, but cannot erase requests or
+their audit trail; deletion over remote HTTP/relay needs paired `decide` access.
 
 ## curl
 

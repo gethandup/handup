@@ -1,5 +1,7 @@
 # cursor
 
+For the workflow and its MCP-only limits, see [Cursor approvals with handup](https://gethandup.dev/agents/cursor).
+
 ```sh
 handup integrate mcp --client cursor --dry-run
 handup integrate mcp --client cursor
@@ -9,6 +11,9 @@ handup prompt --agent cursor
 `handup integrate all` includes this MCP-only integration when
 `~/.cursor/` exists, creating `mcp.json` if absent. `--no-mcp` skips Cursor;
 `--uninstall` removes handup from every installed agent.
+
+The handup plugin in the public repository also targets Cursor, but there is no
+Cursor marketplace listing yet; use the commands above.
 
 The installer safely merges the handup stdio server (command handup, args ["mcp"]) into ~/.cursor/mcp.json, backing up before changes. Other servers and keys remain. Reapplying is idempotent; `handup integrate mcp --client cursor --uninstall` removes only handup. Existing conflicting handup entries are not overwritten.
 

@@ -78,6 +78,47 @@ history; submission tokens cannot. See [Inbox filters](docs/public/desktop.md#in
 [History](docs/public/desktop.md#history), [Mobile](docs/public/mobile.md#history)
 and [Web](docs/public/web.md).
 
+## Select, delete and cycle files
+
+Desktop, Android and web offer a **⋮** menu on each Inbox/History row;
+right-click or long-press opens the same menu. **Delete** asks to delete only
+that row; **Select** enters multi-select with that row checked. There is no
+header Select button. Checkboxes and row taps toggle selection.
+**Select all** picks currently shown matches; History says **Select all loaded**
+when older pages remain. **Clear** unchecks them and **Done** or `Esc` exits.
+`x` picks/unpicks the cursor row, entering select mode if needed. `Delete` or
+`Backspace` asks to delete picked rows, or the cursor row when none are picked.
+These keys work in Inbox and History, not in the quick window or while typing.
+Every deletion opens an inline warning; **Delete N** confirms and **Keep** goes
+back without deleting. Inbox decisions and decision swipes are paused while
+selecting. Results/errors stay inline. View-only pairings cannot delete.
+
+Deletion cancels pending requests first (waiting agents receive `cancelled`,
+never approval), then permanently removes requests, audit rows and unshared
+preview blobs. There is no Undo. The human CLI is `handup delete ID... [--yes]
+[--json]`: it confirms on a terminal, requires `--yes` without one and prints
+`{deleted, missing}` in JSON. Exit 0 means all IDs were removed; 4 means a
+missing/invalid ID, refused confirmation or failure. Missing IDs do not roll
+back found ones. The CLI sends batches of up to 1000; earlier batches stay
+deleted if a later one fails. Agents should use `cancel`, not erase audit.
+
+`POST /v1/requests/delete` takes `{"ids":["ID"]}` (1–1000 IDs, otherwise 400),
+returns 200 with `{deleted, missing}`, and is available locally, over remote
+HTTP and the relay tunnel. Paired devices need enabled `decide` access when
+the delete commits; view-only devices and submit tokens get 403. Pending
+deletions emit `request.cancelled` before `request.deleted`; resolved requests
+emit only `request.deleted`, carrying their last snapshot. Later reads are
+not found. See [delete API](docs/public/cli.md#delete-requests).
+
+Preview tabs, file bundles and multi-file diffs have Previous/Next buttons
+around an **n of N** counter. `[` / `]` cycle files within the current preview
+or preview tabs if it has no multiple files; `{` / `}` always cycle preview
+tabs. Both wrap; a diff showing All files displays **All N**, with Next
+opening its first file and Previous its last. The keys work in Inbox and
+History but leave typed brackets alone in fields. They are built in, not
+remappable. See [select/delete](docs/public/desktop.md#select-and-delete-requests)
+and [keys](docs/public/desktop.md#keys).
+
 ## Settings, test requests and read aloud
 
 The desktop/web header button and dialog are **Settings**. Desktop, mobile and
@@ -97,6 +138,15 @@ all). Paired phones and browsers with `decide` scope can clean up and change
 retention too (`view` scope sees usage only); phones show their own offline
 copy separately and Clear frees only the phone. See [Desktop](docs/public/desktop.md#storage) and
 [CLI](docs/public/cli.md#storage-usage-and-cleanup).
+Android **Settings → Previews**: **Auto-download media** (Always, Wi-Fi only by
+default, Never) and **Per request up to (MB)** fetch a new request's files in the
+background, also from a push while the app is closed. **Play while downloading**
+(on) streams video and audio from the first bytes and keeps the finished file
+offline; **Large files on mobile data** (Ask first or Always allow, **Ask above
+(MB)** default 10) asks once, inline, before Play, Open or Download of an
+uncached file over that size on a metered connection. Videos show a daemon-made
+poster frame (`GET /v1/blobs/{hash}/poster`, needs `ffmpeg`, `previews.video_posters`).
+See [Mobile](docs/public/mobile.md#auto-download-media).
 **Send test request** and **Send test question** target the local daemon on
 desktop, the connected daemon on web, or one selected paired computer's row on
 mobile. These are harmless samples; deciding one authorizes no real action.
@@ -106,12 +156,15 @@ and press a replacement; Esc cancels, conflicts are refused inline, and Reset
 or Reset all restores defaults. Touch/coarse-pointer and view-only clients
 show a read-only list. Overrides save to the computer's `keys:` config, not one
 device, and Settings changes update all connected clients, sheets and hints live.
-Built-in Esc, Enter, arrows/Shift+arrows, `g`, Home/End, Space, Tab, 1–9 and
+Built-in Esc, Enter, arrows/Shift+arrows, `g`, Home/End, Space, Tab, Backspace, 1–9 and
 Ctrl/Command+Enter stay fixed. In Inbox and History, `g g` (second `g` within
 1 second) or Home jumps to the first request (`first`, not remappable);
 Shift+G or End jumps to the last (`last`, default `shift+g`, remappable).
 `g`/Home stay reserved for `first`, and End for `last` even after remapping;
 Home/End conflicts name `first`/`last`. Home/End also move between question answers.
+`pick` (default `x`) and `delete` (default `delete`) are remappable list actions
+for selecting rows and asking to delete them in Inbox/History; Backspace is
+the built-in alias for `delete` and stays reserved even when it is remapped.
 Remappable `scroll_line_down` / `scroll_line_up` (`ctrl+e` / `ctrl+y`),
 `scroll_half_down` / `scroll_half_up` (`ctrl+d` / `ctrl+u`), and
 `scroll_page_down` / `scroll_page_up` (`pagedown` / `pageup`) scroll the request
@@ -205,6 +258,7 @@ bill. See [desktop dictation](docs/public/desktop.md#dictation) and
 | `wait` | `handup wait ID --json` blocks until terminal status; desktop execution returns top-level `run_result` |
 | `status` | `handup status ID --json` checks current status; desktop execution returns `decision.run_result` |
 | `cancel` | `handup cancel ID --json` cancels pending work |
+| `delete` | Human only: `handup delete ID... [--yes] [--json]` permanently removes pending/resolved requests, audit rows and unshared previews; pending ones cancel first. Requires `--yes` without a terminal. JSON `{deleted, missing}`; exit 0 if all found, 4 for missing IDs/refusal/error |
 | `stop` | Human: `handup stop ID [--json]` asks the desktop app to stop the command it is running for that request (SIGTERM, SIGKILL after 5s) |
 | `ls` | `handup ls --status pending --session ID --json` lists queue (`--agent`, `--limit`) |
 | `show` | `handup show ID --json` shows immutable previews |
@@ -221,7 +275,7 @@ bill. See [desktop dictation](docs/public/desktop.md#dictation) and
 | `report` | Human: `handup report` opens the prefilled support page (`--feature`, `--question`; `--print` prints the URL) |
 | `inbox` | Human: `handup inbox` live terminal queue, requires TTY |
 | `rules` | Human: `handup rules list`, `test request.json` (or ID), `rm RULE_ID` |
-| `log` | `handup log --json` tails the append-only audit with rule IDs |
+| `log` | `handup log --json` tails retained audit events with rule IDs; deleting requests or cleaning history removes their audit rows |
 | `storage` | Human only: `handup storage [--json]` shows disk use by category, retention and the last cleanup; `handup storage clean history` (or `files`) `--older-than 30d` (or `--keep 100`, or `--all`) deletes resolved requests, or only their files, in the background. Pending requests are never touched. Agents never clean up |
 | `remote` | Human only: `handup remote tailscale` checks Tailscale before config writes, enables the mode, applies it with a daemon restart if needed, and prints the URL and pairing hint; already enabled means no restart. `handup remote off` turns the listener off without unpairing devices. handup never changes your Tailscale configuration; agents never enable remote access |
 | `pair` | Human only: `handup pair --scope decide` prints a one-time QR pairing link for a phone or browser. With remote access off, a terminal and connected Tailscale, it offers to enable access; `--json`, no terminal or declining requires `handup remote tailscale` first. Without Tailscale, set it up or use `handup pair --relay` (configured relay, Android app only, works with mode off); agents never pair devices |
@@ -323,7 +377,7 @@ not to reverse approval. Without a result, execute only the reviewed action.
 Run is desktop-only; phone/web/relay never execute or submit results.
 Short client timeouts (omp, Codex): pass `"wait":false` and save the id; follow the pending result's message. With the omp extension's `handup push active` note, end the turn for the watched ids and the decision wakes you; do not also poll or start background CLI waiters for them. Otherwise call `wait_requests` {"ids":[…], "max_wait_seconds"?} (default 25, max 300) until `pending` is empty before ending the turn. Result: `{"decided":[decision JSON], "pending":[ids], "message"}`, plus `notices` {ids, message} for undismissed info notices, which are never pending. Blocking calls stop after 300s with `status: pending`. Pending is neither approval nor an answer; the same id recovers the decision after a reconnect, so never create a duplicate. `check_request` {"id"} reads status without waiting; `list_requests` {"status"?, "session"?, "agent"?, "limit"?} recovers ids after context loss; `cancel_request` {"id"} retracts a request you no longer need, never to dodge a decision.
 Requests wait for the human by default (`requests.default_timeout: none`); an explicit timeout opts into expiry and `on_timeout` (default deny) applies only then. A client tool timeout does not approve or expire anything.
-`ask_question`: {"question":"Which region?","choices":["eu","us"],"allow_free_text":true}; `question` and `allow_free_text` are required. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Submit returns `status: answered` and `answers.answer` = `{"selected":["eu"],"text":"…"}` (`text` only when typed). Decline returns `status: denied` with optional feedback and no answers. It accepts `wait`, `session` and `session_title` like `request_approval`. A single choice is rejected even with free text; choice labels must be distinct after trimming. Offer at least two choices, free text with no choices, or both. For status or results use `notify`; for permission use `request_approval`. These guards apply only to MCP `ask_question`, not approval question forms or omp's native question bridge.
+`ask_question`: {"question":"Which region?","choices":["eu","us"]}; only `question` is required, and `allow_free_text` defaults to true (pass false for a choices-only question). It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Submit returns `status: answered` and `answers.answer` = `{"selected":["eu"],"text":"…"}` (`text` only when typed). Decline returns `status: denied` with optional feedback and no answers. It accepts `wait`, `session` and `session_title` like `request_approval`. A single choice is rejected even with free text; choice labels must be distinct after trimming. Offer at least two choices, free text with no choices, or both. For status or results use `notify`; for permission use `request_approval`. These guards apply only to MCP `ask_question`, not approval question forms or omp's native question bridge.
 `notify`: {"title":"Staging deploy finished","summary":"All checks passed."}; `title` is required, plus optional summary, previews, session, session_title, timeout, dedupe_key. Put the message text in summary, shown under the one-line title; there is no body or message field, and a notice without summary or previews shows only its title. For status updates, finished results and heads-ups that need no reply. It creates a `kind: info` notice with OK (`ok`) and Dismiss (`dismiss`) options and `on_timeout: expire`, and returns `{id, status, message}` at once. Never wait for or poll it; either choice records `status: dismissed`. YOLO never decides notices; a human's `dismiss` rule or mute may dismiss one on arrival. The human may add an optional reply: the MCP server appends unread replies to every later handup tool result (`notice_replies` [{id,title,feedback}] plus a line `Reply from the human to your notice TITLE: FEEDBACK`), the omp extension pushes them live, and Claude Code prompt/stop hooks deliver them for the exact Claude `session_id`. Each reply is delivered once (`POST /v1/notice-replies`); treat it as new instructions from the human.
 Structured questions (`handup ask --request -`): `kind: "question"`, `input.questions` = 1–10 of {id, question, header?, multi?, recommended? (option index), allow_free_text?, options: [{label, description?, preview? (markdown)}]}, plus options with one `approve` (Submit) and one `deny` (Decline). Submit returns `decision.fields.answers` = {QID: {selected: [labels], text?}}; every question is answered, single-choice questions select at most one label, and `text` appears only where free text is allowed.
 
@@ -378,6 +432,8 @@ pending requests with feedback "Cleared as a flood". See
 
 # Claude Code
 
+For an overview of remote permission review, see [Claude Code approvals with handup](https://gethandup.dev/agents/claude-code).
+
 ```sh
 handup integrate claude --dry-run
 handup integrate claude
@@ -414,6 +470,8 @@ Opt in to have this Stop hook post Claude's final message as a notice at every t
 Sources: https://code.claude.com/docs/en/hooks#permissionrequest, https://code.claude.com/docs/en/hooks#userpromptsubmit, https://code.claude.com/docs/en/hooks#stop and https://code.claude.com/docs/en/mcp
 
 # Codex
+
+For an overview of remote permission review, see [Codex approvals with handup](https://gethandup.dev/agents/codex).
 
 ## Quickstart
 
@@ -460,6 +518,8 @@ Sources: https://developers.openai.com/codex/hooks#permissionrequest and https:/
 
 # cursor
 
+For the workflow and its MCP-only limits, see [Cursor approvals with handup](https://gethandup.dev/agents/cursor).
+
 ```sh
 handup integrate mcp --client cursor --dry-run
 handup integrate mcp --client cursor
@@ -485,6 +545,8 @@ Read [MCP](docs/public/agents/mcp.md) for tool arguments and polling. Paths reso
 Source: https://cursor.com/docs/mcp
 
 # omp
+
+For the MCP and native-bridge workflows side by side, see [omp approvals with handup](https://gethandup.dev/agents/omp).
 
 ## Quickstart (MCP)
 
@@ -567,13 +629,15 @@ Too many notices? Turn them off with `handup config set integrations.omp.turn_no
 
 ### Limitations
 
-The extension uses omp's `additionalContext` tool-result channel (declared in 18.4.9; consumption verified in the installed 18.6.1 binary). It gates the configured names regardless of omp's approval tier; it is not a replacement for the entire omp policy engine. Because it races omp's native prompts, whichever side answers first decides; a native answer cancels the pending handup request. Native question chat/image answers remain native-only; remote answers support option labels and free text. It uses handup's local Unix socket (`HANDUP_SOCKET`, then the standard runtime/state location), not a remote relay.
+The extension uses omp's `additionalContext` tool-result channel (declared in 18.4.9; consumption verified in the installed 18.6.1 binary). It gates the configured names regardless of omp's approval tier; it is not a replacement for the entire omp policy engine. Because it races omp's native prompts, whichever side answers first decides; a native answer cancels the pending handup request. Native question chat/image answers remain native-only; remote answers support option labels and free text. It uses handup's local daemon, not a remote relay: the Unix socket (`HANDUP_SOCKET`, then the standard runtime/state location) on Linux and macOS, and on Windows the loopback listener, read from `daemon.addr` and `token` in the state directory (`HANDUP_STATE_DIR`, else `%APPDATA%\handup\data`) and sent with a bearer header. If those files are missing, the extension treats handup as not running and omp's native prompt applies. `handup serve` needs no elevation on Windows.
 
 Focus is not presence: leaving this omp's kitty tab focused while you walk away still suppresses the turn-end notice.
 
 Sources: https://github.com/can1357/oh-my-pi/tree/v18.4.9/packages/coding-agent/src/extensibility/extensions and https://github.com/can1357/oh-my-pi/blob/v18.4.9/packages/coding-agent/src/extensibility/shared-events.ts
 
 # MCP stdio
+
+For a workflow overview across MCP clients, see [human-in-the-loop approvals with handup MCP](https://gethandup.dev/agents/mcp).
 
 Run `handup mcp` in the project directory. It uses rmcp and supports MCP versions 2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25 and 2026-07-28. Clients through 2025-11-25 initialize, receive their requested supported version, send notifications/initialized, then tools/list or tools/call. This includes Gemini CLI 0.62, which requests 2025-06-18. 2026-07-28 clients (Claude Code 2.1.285+) skip initialize: they may probe with server/discover and send the protocol version, clientInfo and client capabilities in each request's `_meta`. tools/list returns the cache hints `ttlMs: 0` and `cacheScope: "public"`. Tool results include text content blocks as well as structuredContent, so clients predating 2025-06-18 can still read them. No logs go to stdout.
 
@@ -623,7 +687,7 @@ opencode exposes the tools with a server prefix, for example
 MCP tools: `request_approval`, `ask_question`, `notify`, `check_request`, `wait_requests`, `cancel_request`, `list_requests`.
 
 - `request_approval`: title (required), summary, kind, risk, previews [{type, path OR content OR email, lang?}], input (editable object, returned edited in decision `fields`), options [{id,label,outcome,style?}], timeout (duration string or `"none"`), on_timeout (`deny`|`expire`|`approve`, timed requests only), run_timeout (limit for a desktop Run of the command preview, e.g. `"30m"`; default `run.timeout`, capped at `run.max_timeout`; 1ms to one year; separate from `timeout`), dedupe_key (identical pending requests share one id), callback_url ([callbacks](docs/public/integrations/callbacks.md)), session, session_title, and wait (default true). Relative paths use the server cwd; files upload as immutable blobs. With a progressToken, blocking calls emit progress notifications every long-poll cycle.
-- `ask_question`: question and allow_free_text (both required, even with choices), choices, session, session_title, wait. Example: {"question":"Which region?","choices":["eu","us"],"allow_free_text":true}. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Offer at least two distinct choices, free text with no choices, or both: a single choice is rejected even with free text, and labels must be distinct after trimming. Use `notify` for status or results and `request_approval` for permission. Use `request_approval` with `kind: "question"` and `input.questions` for several questions, multi-select or a timeout; the single-choice guard applies only to MCP `ask_question`, not these forms or omp's native question bridge.
+- `ask_question`: question (required), choices, allow_free_text (optional, defaults to true; pass false for a choices-only question), session, session_title, wait. Example: {"question":"Which region?","choices":["eu","us"]}. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Offer at least two distinct choices, free text with no choices, or both: a single choice is rejected even with free text, and labels must be distinct after trimming. Use `notify` for status or results and `request_approval` for permission. Use `request_approval` with `kind: "question"` and `input.questions` for several questions, multi-select or a timeout; the single-choice guard applies only to MCP `ask_question`, not these forms or omp's native question bridge.
 - `notify`: title (required), summary, previews, session, session_title, timeout, dedupe_key. Put the message text in summary, shown under the one-line title; there is no body or message field, and a notice without summary or previews shows only its title. Tells the human something that needs no reply (status update, finished result, heads-up). It creates a `kind: info` notice and returns at once with `{id, status, message}`; never wait for or poll it. The human reads it and picks **OK** or **Dismiss** (status `dismissed` either way, `option` `ok` or `dismiss`), optionally with a reply; a timeout expires it. YOLO never decides notices; a human's `dismiss` rule or mute may dismiss one on arrival. A reply reaches the agent by itself in later tool results ([notice replies](docs/public/agents/mcp.md#notice-replies)). Example: {"title":"Staging deploy finished","summary":"All checks passed."}.
 - `check_request` {"id"}: current decision JSON without waiting.
 - `wait_requests` {"ids":[…], "max_wait_seconds"?}: returns every decided request among ids at once, otherwise long-polls until the first decision or `max_wait_seconds` (default 25, max 300, within omp's 30s and Codex's 60s tool timeouts). Result: `{"decided":[decision JSON], "pending":[ids], "message"}`, plus `notices` {ids, message} for undismissed info ids, which it never waits on or reports as pending. Act on each decision and obey the pending result: with the omp extension's push note, end the turn and the decision wakes you; otherwise call again with the pending ids until `pending` is empty before ending the turn.
@@ -744,6 +808,8 @@ Act on a reply as new instructions from the human.
 Sources: https://modelcontextprotocol.io/specification/2025-11-25/server/tools and https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/progress
 
 # Shell and CI
+
+For an overview of deploy and migration gates, see [shell and CI approvals with handup](https://gethandup.dev/agents/shell-ci).
 
 Ask before destructive/irreversible actions, external publication or messages, costly resource use, credential changes/access, or ambiguous intent. Include the exact proposed action and its effects. Do not execute while pending. Only approved/answered permits the approved action; bind execution to content_hash and re-request if the action changes. A deny is a normal human answer, not a transport error. Read feedback, stop, and revise only when requested. Never retry the same request or treat expired, cancelled, or error as permission.
 
@@ -953,6 +1019,11 @@ result is present.
 Retract requests your harness no longer needs (plan changed, task aborted) with
 MCP `cancel_request`, `handup cancel ID`, or `POST /v1/requests/{id}/cancel`.
 Never cancel to dodge a pending decision you dislike.
+Cancellation preserves the request and audit. Human deletion (`handup delete`
+or `POST /v1/requests/delete`) instead cancels pending work first, then removes
+the request and audit permanently. An already-waiting agent receives
+`cancelled`; later status calls return not found, never permission to act.
+Agents must not delete requests to erase their audit trail.
 
 ## 7. Tell the model the policy
 

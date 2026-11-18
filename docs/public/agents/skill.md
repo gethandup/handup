@@ -1,3 +1,9 @@
+---
+title: Install the handup skill and teach agents when to ask
+description: Install the version-matched handup agent skill or print workflow instructions. Teach agents when to ask, how to wait, and how to respect human decisions.
+sidebar:
+  label: Give your agent the handup workflow
+---
 # Give your agent the handup workflow
 
 Agents need the approval contract and usage instructions, not the handup

@@ -1,0 +1,12 @@
+{
+  "name": "handup",
+  "interface": { "displayName": "handup" },
+  "plugins": [
+    {
+      "name": "handup",
+      "source": { "source": "local", "path": "./plugins/handup" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}

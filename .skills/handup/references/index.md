@@ -30,7 +30,7 @@ human-readable guide text in one file, read [llms-full.txt](llms-full.txt).
 - [Publish gate](docs/public/cookbook/publish-gate.md)
 - [Desktop app](docs/public/desktop.md)
 - [Downloads and installation](docs/public/downloads.md)
-- [The approval inbox for AI agents](docs/public/index.md)
+- [Install handup and connect your AI agents](docs/public/index.md)
 - [Per-request callbacks](docs/public/integrations/callbacks.md)
 - [Event hooks](docs/public/integrations/hooks.md)
 - [Integrations](docs/public/integrations/index.md)

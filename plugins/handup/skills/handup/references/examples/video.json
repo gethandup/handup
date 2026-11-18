@@ -1,0 +1,12 @@
+{
+  "title": "Review video sample",
+  "previews": [
+    {
+      "type": "video",
+      "blob": "sha256:d8e7fc6031bc535943526f8e826b3c1f03277fcb3dfee740a6ff51bd4a8e22e9",
+      "mime": "video/mp4",
+      "name": "video.mp4",
+      "size": 1701
+    }
+  ]
+}

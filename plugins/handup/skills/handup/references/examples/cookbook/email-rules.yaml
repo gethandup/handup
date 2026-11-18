@@ -1,0 +1,14 @@
+# Routing rules for email-route.sh. Paste these entries under `rules:` in your
+# handup config (`handup config edit`; ~/.config/handup/config.yaml on Linux).
+# First match wins; `tool` is an exact match on the request's `tool` field.
+- id: mail-receipts-archive
+  match: {agent: mail-assistant, tool: email.archive.receipt}
+  action: approve
+- id: mail-no-reply
+  match: {agent: mail-assistant, tool: email.reply.noreply}
+  action: deny
+  feedback: Never reply to no-reply senders; archive instead.
+- id: mail-vip
+  match: {agent: mail-assistant, tool: email.reply.vip}
+  action: ask
+  risk: high

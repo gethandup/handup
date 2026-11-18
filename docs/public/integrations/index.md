@@ -1,4 +1,6 @@
 ---
+title: Connect handup decisions to your automation tools
+description: Connect handup to external tools using submission tokens, request callbacks and event hooks. Let automation submit requests and react to human decisions.
 sidebar:
   label: Overview
   order: 0

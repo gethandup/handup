@@ -13,8 +13,8 @@ computer.
 
 A paired browser shows the same inbox as the desktop app: pending requests with
 their previews, history, and Settings. With **decide** access it can approve,
-deny, edit and approve, answer questions, cancel, and stop a command that the
-desktop app is running. **View** access is read-only.
+deny, edit and approve, answer questions, cancel, permanently delete requests,
+and stop a command that the desktop app is running. **View** access is read-only.
 
 In **Feedback for the agent** or **Reply to the agent**, `Ctrl+Enter`
 (`⌘+Enter` on macOS) sends your text with the primary decision: **Approve**
@@ -40,6 +40,29 @@ chip/sheet filters. No matching pending requests shows **No matches**.
 `Esc` in the field or **×** clears and closes it; reset clears both search and
 filters. `/` also focuses History search; History reset keeps its search.
 The Auto-handled view has no search.
+
+With **decide** access, a row's **⋮** button in Inbox or History opens its menu;
+right-click or long-press opens the same menu. **Delete** asks to delete just
+that row; **Select** enters multi-select with that row checked, replacing the
+old header Select button. Checkboxes and row taps toggle picks. **Select all**
+picks currently shown matches (**Select all loaded** in History while more
+pages remain), **Clear** unchecks them, and **Done** or `Esc` leaves select mode.
+`x` picks or unpicks the cursor row, entering select mode if needed; `Delete`
+or `Backspace` asks to delete picked rows, or the cursor row if none are picked.
+Deletion always opens an inline confirmation: **Delete N** permanently removes
+the requests, or **Keep** goes back without deleting. Pending requests are
+cancelled first so waiting agents hear **cancelled**, never approval; their
+request/audit rows and unshared preview files are then removed. There is no Undo.
+Results/errors stay inline, and approval/denial/Run actions and decision swipes
+are paused while selecting. View-only pairings cannot delete. See
+[select and delete](desktop.md#select-and-delete-requests).
+
+Preview tabs, file bundles and multi-file diffs have Previous/Next buttons and
+an **n of N** counter, wrapping at either end. `[` / `]` cycle files within the
+current preview, or preview tabs when there are no multiple files; `{` / `}`
+always cycle preview tabs. The built-in keys work in Inbox and read-only
+History, without taking brackets typed in fields; the buttons work on touch
+screens too. See [desktop keys](desktop.md#keys).
 
 Unread automatic decisions open through **N auto-handled · View** above the
 list, with **← Inbox** and **Mark read**, not an Auto-handled tab. Marking read

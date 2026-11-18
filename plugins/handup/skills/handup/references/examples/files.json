@@ -1,0 +1,16 @@
+{
+  "title": "Review file bundle",
+  "previews": [
+    {
+      "type": "files",
+      "files": [
+        {
+          "path": "notes.txt",
+          "blob": "sha256:4976cf65e3d97257820058718369d98b2eb39fc8921f8494d9eec2c5d234c9c6",
+          "mime": "text/plain",
+          "size": 26
+        }
+      ]
+    }
+  ]
+}

@@ -136,6 +136,36 @@
         }
       }
     },
+    "/v1/blobs/{hash}/poster": {
+      "get": {
+        "tags": [
+          "crate::poster"
+        ],
+        "description": "A still frame of a video blob for use as its `poster`. Generated with ffmpeg on first request and cached; local, and view scope on paired devices.",
+        "operationId": "blob_poster",
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JPEG poster frame (`image/jpeg`), at most 640 px wide, cached per blob"
+          },
+          "404": {
+            "description": "No poster: not a video, `previews.video_posters` is off, ffmpeg is missing or cannot decode the file"
+          },
+          "410": {
+            "description": "File no longer stored (history.files_keep_days)"
+          }
+        }
+      }
+    },
     "/v1/config/status": {
       "get": {
         "tags": [],
@@ -307,7 +337,7 @@
         "operationId": "events",
         "responses": {
           "101": {
-            "description": "WebSocket events: {type, request} for request.created (carrying the final status, so auto-handled requests arrive already decided), request.decided, request.expired and request.cancelled; request.updated when a pending request's desktop run starts, a stop is requested, or its claim is released or interrupted (`request.run`); {type: yolo.changed, yolo} when YOLO mode changes or its timer ends; {type: auto_read.changed, at} when the shared auto-handled read watermark increases; {type: floods.changed, floods: [FloodSource]} when a source starts or stops flooding or its muted state changes; {type: mutes.changed, mutes: [Mute]} when a mute is added, removed or its timer ends; {type: keys.changed, keys} when the shortcut overrides change; {type: config.changed, config: ConfigChange} after every config save (file edit, `handup config set`, or a Settings save): `applied` keys are in force, `restart_required` keys wait for a daemon restart, and `error` (`path:line: message`) means the file is invalid and the previous config stays in force. Refetch `/v1/ui-settings` on it. Ignore unknown event types. Closed immediately when the calling device is revoked (4401) or disabled (4403). The daemon sends a WebSocket ping every 25 s, so a client that hears nothing for longer can treat the connection as dead"
+            "description": "WebSocket events: {type, request} for request.created (carrying the final status, so auto-handled requests arrive already decided), request.decided, request.expired and request.cancelled; request.deleted (carrying the request as it was removed) after a request is deleted; request.updated when a pending request's desktop run starts, a stop is requested, or its claim is released or interrupted (`request.run`); {type: yolo.changed, yolo} when YOLO mode changes or its timer ends; {type: auto_read.changed, at} when the shared auto-handled read watermark increases; {type: floods.changed, floods: [FloodSource]} when a source starts or stops flooding or its muted state changes; {type: mutes.changed, mutes: [Mute]} when a mute is added, removed or its timer ends; {type: keys.changed, keys} when the shortcut overrides change; {type: config.changed, config: ConfigChange} after every config save (file edit, `handup config set`, or a Settings save): `applied` keys are in force, `restart_required` keys wait for a daemon restart, and `error` (`path:line: message`) means the file is invalid and the previous config stays in force. Refetch `/v1/ui-settings` on it. Ignore unknown event types. Closed immediately when the calling device is revoked (4401) or disabled (4403). The daemon sends a WebSocket ping every 25 s, so a client that hears nothing for longer can treat the connection as dead"
           }
         }
       }
@@ -928,6 +958,41 @@
           },
           "429": {
             "description": "Source creation cap exceeded (`requests.max_per_minute`; `code: rate_limited`)"
+          }
+        }
+      }
+    },
+    "/v1/requests/delete": {
+      "post": {
+        "tags": [],
+        "description": "Permanently delete requests, pending or resolved, with their audit rows and previews no other request uses. A pending request is cancelled first, so an agent waiting on it sees `cancelled`, never an approval, and `request.cancelled` then `request.deleted` are emitted; a resolved request only emits `request.deleted`. Unknown ids are listed in `missing`. Needs decide scope for paired devices.",
+        "operationId": "delete_requests",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteRequests"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty batch, or more than 1000 ids"
+          },
+          "403": {
+            "description": "Remote device without decide scope, or disabled, downgraded or revoked by the time the delete commits"
           }
         }
       }
@@ -2147,6 +2212,47 @@
             "propertyNames": {
               "type": "string"
             }
+          }
+        }
+      },
+      "DeleteRequests": {
+        "type": "object",
+        "description": "Body of `POST /v1/requests/delete`.",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Request ids to delete (at most 1000)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeleteResult": {
+        "type": "object",
+        "description": "Result of `POST /v1/requests/delete`.",
+        "required": [
+          "deleted",
+          "missing"
+        ],
+        "properties": {
+          "deleted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids removed, in request order."
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids that matched no request."
           }
         }
       },

@@ -1,5 +1,7 @@
 # Claude Code
 
+For an overview of remote permission review, see [Claude Code approvals with handup](https://gethandup.dev/agents/claude-code).
+
 ```sh
 handup integrate claude --dry-run
 handup integrate claude
@@ -9,6 +11,11 @@ handup prompt --agent claude
 To include every detected agent instead, use `handup integrate all`; it uses
 this same full Claude integration when `~/.claude/` or `~/.claude.json` exists.
 Preview with `--dry-run`, or remove installed integrations with `--uninstall`.
+
+**Plugin.** With the handup app installed, `/plugin marketplace add gethandup/handup`
+then `/plugin install handup@handup` adds the handup MCP server and skill. It
+installs no hooks, so Claude's permission prompts stay native; run
+`handup integrate claude` for those.
 
 The installer merges command hooks into ~/.claude/settings.json: PermissionRequest (`handup hook claude`, timeout 660 seconds) plus UserPromptSubmit (same command, timeout 10 seconds) and Stop (same command, `"asyncRewake": true`, timeout 86400 seconds), both for [notice replies](#notice-replies), and the handup MCP server into ~/.claude.json (below); `--no-mcp` installs only the hooks. An older handup Stop hook without `asyncRewake` is upgraded in place on reinstall. Existing keys and other hooks survive; a unique handup.bak backup is created before every changed write, and every file is checked before any is written. Reapply is idempotent. Remove all three with `handup integrate claude --uninstall`. Permission hooks apply only when Claude requests permission, not every tool call or actions already allowed by rules. PreToolUse has a different decision contract and is deliberately not registered.
 

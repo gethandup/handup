@@ -1,3 +1,9 @@
+---
+title: Create and manage approval requests with the CLI
+description: Use the handup CLI to submit, inspect and decide requests. Look up daemon configuration, exit codes, timeouts, storage paths and notification settings.
+sidebar:
+  label: CLI and daemon reference
+---
 # CLI and daemon reference
 
 Request limits, exit codes, timeouts, storage paths, the daemon API, and
@@ -12,7 +18,7 @@ handup ask --title "Review README" --preview text:README.md --wait --json
 handup ask --title "Run a command" --command "echo hello" --timeout 10m
 handup ask --title "Run tests" --command "make test" --run-timeout 30m  # desktop Run limit
 handup ask --title "Review changes" --git-diff HEAD --wait
-handup ask --title "Deploy finished" --summary "All checks passed" --kind info  # notice: no reply
+handup notify --title "Deploy finished" --summary "All checks passed"  # notice: no reply, returns at once
 handup ask --request - --wait --json  # full request JSON on stdin
 handup ls --status pending --json
 handup show <id> --json
@@ -22,6 +28,7 @@ handup approve <id> --option approve -m "Looks good"
 handup approve <id> --scope session  # also project or always
 handup deny <id> -m "Please revise the migration"
 handup cancel <id>
+handup delete <id>... --yes --json  # permanently remove requests; pending ones cancel first
 handup stop <id>             # stop a command the desktop app is running for it
 handup schema request        # or decision, event, openapi
 handup service install --dry-run  # inspect unit/plist without writing/enabling
@@ -34,7 +41,7 @@ handup inbox                 # live terminal inbox (requires a TTY)
 handup rules list
 handup rules test request.json       # or a request ID
 handup rules rm <rule-id>
-handup log --json            # append-only audit, newest first
+handup log --json            # retained audit events, newest first
 handup storage --json        # disk use by category, retention, last cleanup
 handup storage clean history --older-than 30d  # background cleanup; or files, --all
 handup license status        # trial days left or license; activate KEY | import FILE | deactivate
@@ -76,6 +83,28 @@ handup uninstall             # --yes skips confirmation
 
 `ask` starts the daemon automatically when its socket is absent unless
 `daemon.autostart` is false.
+
+### Delete specific requests
+
+`handup delete <id>... [--yes] [--json]` permanently removes the named pending
+or resolved requests, their audit rows, and preview blobs no remaining request
+uses. Pending requests are cancelled first: an agent already waiting on one
+receives `cancelled`, never approval. Deleted requests no longer appear in
+Inbox or History, and later status/show calls cannot recover them.
+
+The CLI validates all IDs as ULIDs before deleting. On a terminal it asks
+`Permanently delete N request(s)? Pending ones are cancelled first. [y/N]`;
+only an explicit yes continues. Without a terminal, `--yes` is required.
+Deletion cannot be undone. This is a human cleanup control, not an agent's
+replacement for `cancel` (which preserves the request and audit).
+
+`--json` prints `{"deleted":["ID"],"missing":[]}`; text output prints
+`deleted<TAB>ID` and reports missing IDs on stderr. Exit 0 means every named
+request was found and removed; exit 4 means confirmation was declined, an ID
+was invalid/missing, or the operation failed. Found requests can be removed
+even when other IDs are missing. The CLI sends batches of at most 1000 IDs;
+an error in a later batch does not restore earlier deletions. For age/count
+cleanup of resolved requests only, use [storage clean](#storage-usage-and-cleanup).
 
 ## First-run setup
 
@@ -188,16 +217,31 @@ agent failed. `--client` and `--list` are rejected with `all` (exit 4). Bare
 | 5 | ran in the desktop app |
 | 6 | license required |
 
-These apply to `ask`, `wait`, `status`, `show`, `approve`, `deny`, and `cancel`;
-`ls` returns 0 on success. Non-TTY queue commands never prompt or print banners.
+The status codes apply to `ask`, `wait`, `status`, `show`, `approve`, `deny`,
+and `cancel`; `ls` returns 0 on success. `delete` returns 0 on complete success
+or 4 on missing IDs, refusal or failure; its JSON is a deletion report, not a
+Request. Non-TTY queue commands never prompt or print banners; `delete`
+requires `--yes` instead.
 Exit 6 means the trial ended or the license was revoked; see [License](license.md).
 When one agent session already created `requests.max_per_minute` requests
 (default 120) in the last minute, `ask` exits 4 with `daemon HTTP 429 Too Many
 Requests` and `"code": "rate_limited"`; see [floods and mutes](rules.md#floods-and-mutes).
 `ask --wait --json` and `wait --json` print the decision (including feedback and
 `content_hash`) with `id` and `status`; a cancellation prints those three fields.
-Other queue commands print Request JSON. `--option id:label[:approve|deny]` adds
-custom choices (default outcome approve, except id `deny`).
+Other queue commands print Request JSON, except `ls` (a list) and `delete`
+(the report above). `--option id:label[:approve|deny]` adds custom choices
+(default outcome approve, except id `deny`). The id ends at the first colon and
+a trailing `:approve` or `:deny` is the outcome; everything between is the
+label, so it may contain colons (`--option "a:Option A: fast"`). A label that
+itself ends in `:approve` or `:deny` needs an explicit outcome
+(`--option "run:Run:deny:approve"` is the label `Run:deny`).
+
+`handup notify --title T [--summary S] [--preview TYPE:PATH]... [--session ID]
+[--session-title NAME] [--timeout D] [--dedupe-key K] [--agent A] [--cwd DIR]
+[--json]` is the CLI form of the MCP `notify` tool: it submits a `kind: info`
+notice (the same request as `ask --kind info`), prints it and exits 0 at once.
+Put the message text in `--summary` under the one-line `--title`; there is no
+body or message option. Previews use the same `TYPE:PATH` syntax as `ask`.
 
 `--kind info` submits a notice that needs no reply: it gets **OK** (`ok`,
 approve outcome) and **Dismiss** (`dismiss`, deny outcome) options,
@@ -205,7 +249,7 @@ approve outcome) and **Dismiss** (`dismiss`, deny outcome) options,
 person, a [`dismiss` rule](rules.md) or a [mute](rules.md#floods-and-mutes)
 with `--dismiss-notices` dismisses it.
 Either choice records `status: dismissed` (exit 0); `decision.option` says which.
-Do not `--wait` on a notice; agents with MCP use `notify`. A human's optional
+Do not `--wait` on a notice; `handup notify` never waits, and agents with MCP can call the `notify` tool. A human's optional
 reply is delivered once through `POST /v1/notice-replies` (MCP, the omp
 extension and Claude Code hooks claim it; see
 [notice replies](agents/mcp.md#notice-replies)).
@@ -246,6 +290,14 @@ fixed 256 MiB even if that key is raised. The remote listener still has its own
 descriptions, 32 options, 16 KiB option previews and answer text. Email drafts:
 500 recipients, 64 attachments, 998-byte subject.
 
+`GET /v1/blobs/{hash}/poster` returns a JPEG still (at most 640 px wide, taken
+at 0.5 s) of a video blob, so clients can show a poster before playback starts.
+The daemon makes it with `ffmpeg` on first request and caches it under its data
+directory until retention removes the blob. It answers `404` for non-video
+blobs, when `ffmpeg` is not on `PATH` or cannot decode the file, and when
+`previews.video_posters` is `false` (default `true`; applies live), and `410`
+like the blob route once retention removed the file.
+
 Sources auto-detect cwd, Git root/branch and host. `--agent`, `--session`, and
 `--cwd` override self-declared, **unverified** provenance, including with
 `--request -`; explicit JSON source fields are otherwise preserved.
@@ -282,7 +334,8 @@ It fails with 409 `not running in the desktop app` when nothing runs. See
 
 Config path: `--config` > `HANDUP_CONFIG` > `$XDG_CONFIG_HOME/handup/config.yaml`
 (default `~/.config/handup/config.yaml`; on Windows
-`%USERPROFILE%\.config\handup\config.yaml` when `HOME` is unset). A missing file uses defaults;
+`%USERPROFILE%\.config\handup\config.yaml` when `HOME` is unset; `~` in agent
+config paths and rule globs follows the same fallback). A missing file uses defaults;
 `handup config init` seeds commented examples. `handup config keys` lists the
 keys `config get`/`set`/`unset` accept, including every remappable `keys.<id>`
 action, its label and default shortcut. `remote.relay.allow_plaintext_lan`
@@ -401,6 +454,12 @@ move the request detail on screen, not the list. `first` is built in: press
 `keys.first` cannot be overridden. `Ctrl+F` / `Ctrl+B` are not taken.
 This does not change the terminal inbox's keys.
 
+`pick` (default `x`) picks or unpicks the cursor row for deletion, entering
+select mode if needed. `delete` (default `delete`, with built-in `Backspace`)
+asks to delete picked rows, or the cursor row when none are picked; it never
+skips confirmation. Both are remappable list actions in Inbox and History,
+unavailable in the quick window, Auto-handled, or on view-only devices.
+
 ```yaml
 keys:
   approve: shift+y
@@ -433,11 +492,12 @@ Two actions cannot use the same effective key in an overlapping view (Inbox
 or History), including unchanged defaults and built-in keys. `mod` conflicts
 with both the equivalent `ctrl` and `meta` binding, so the config works across
 platforms. Disjoint-view actions may share a key. Built-in `Esc`, `Enter`,
-arrows/Shift+arrows, `g`, `Home`/`End`, `Space`, `Tab`, `1`–`9`,
-and `mod+enter` remain reserved where they apply and cannot be remapped
+arrows/Shift+arrows, `g`, `Home`/`End`, `Space`, `Tab`, `Backspace`, `1`–`9`,
+`[`/`]`, `{`/`}`, and `mod+enter` remain reserved where they apply and cannot be remapped
 (`mod+shift+enter` is free). `g` and `Home` are reserved for `first`, and
 `End` for `last` even if `last` is remapped; Home/End also move through question
 answers. A conflict with Home/End names `first`/`last`, respectively.
+`Backspace` stays reserved for `delete` even when `keys.delete` is remapped.
 Unknown action ids, malformed keys and
 conflicts are refused without saving. To reuse a taken key, move the other
 action first. Remove an override from YAML to restore that action's default.
@@ -563,7 +623,7 @@ forgets it.
 ## Daemon API
 
 API v1 covers health/OpenAPI, requests, long-poll wait, hash-bound decisions,
-cancellation, blob upload/Range download, and WebSocket `/v1/events` (pinged
+cancellation, permanent deletion, blob upload/Range download, and WebSocket `/v1/events` (pinged
 every 25 s; return Pong or the server closes after two unanswered intervals).
 The same API runs on the Unix socket and `daemon.listen` (default `127.0.0.1:7465`). Unix
 access relies on filesystem permissions. TCP requires a bearer token, a loopback
@@ -574,6 +634,30 @@ directory next to `token`.
 `daemon.listen` must be loopback; remote access is a separate listener
 (`remote.mode`) that accepts paired device tokens and named submit tokens. See
 [remote access](remote.md) and the generated [OpenAPI](openapi.json).
+
+### Delete requests
+
+`POST /v1/requests/delete` takes `{"ids":["ID","OTHER_ID"]}` and returns
+**200** with `{"deleted":["ID"],"missing":["OTHER_ID"]}`. A batch must contain
+1–1000 IDs; empty or oversized batches return **400**. Unknown body fields
+are rejected. Missing IDs are reported, not a 404 for the whole batch;
+duplicate IDs are processed once per call.
+
+The daemon cancels each still-pending request, then removes the requests and
+their audit rows in one transaction. Blobs shared with any remaining request
+stay stored; orphaned preview blobs are removed. An agent already waiting on
+a deleted pending request receives `cancelled`; subsequent reads return not
+found. There is no undo.
+
+The local Unix socket/authenticated loopback API, remote HTTP listener and
+relay tunnel expose this route. Paired devices need `decide` scope and must
+still be enabled with that scope when deletion commits; view-only devices
+and submit tokens receive **403**.
+
+After commit, `/v1/events` sends `request.cancelled` for pending deletions
+before `request.deleted` for the removed requests. A resolved deletion emits
+only `request.deleted`; its `request` payload is the last stored snapshot,
+not a request that remains readable.
 
 ### Auto-handled read state
 
@@ -606,6 +690,7 @@ need `view`, included in `decide`). Each JSON message has `type` and its payload
 | --- | --- |
 | `request.created`, `request.decided`, `request.expired`, `request.cancelled` | `request`: the request with its current status; an auto-handled request arrives already decided |
 | `request.updated` | `request`: desktop run started, stop requested, claim released or interrupted (`request.run`) |
+| `request.deleted` | `request`: the removed request's last snapshot; remove it from lists/caches. Pending deletions emit `request.cancelled` first |
 | `yolo.changed` | `yolo`: the mode and timer after a change or timer expiry |
 | `auto_read.changed` | `at`: the shared Auto-handled read watermark, only when it rises |
 | `floods.changed` | `floods`: flooding sources after flooding or muted state changes |

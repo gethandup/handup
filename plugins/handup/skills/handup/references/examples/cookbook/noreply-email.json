@@ -1,0 +1,8 @@
+{
+  "message_id": "<n-7731@notify.example.com>",
+  "from": "Example App <no-reply@notify.example.com>",
+  "to": "ari@example.com",
+  "subject": "Your weekly summary",
+  "date": "Mon, 29 Sep 2026 07:00:00 +0000",
+  "body": "You had 12 new followers this week."
+}

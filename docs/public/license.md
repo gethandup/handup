@@ -1,8 +1,14 @@
+---
+title: Activate your handup license after the trial
+description: Try handup for 14 days, then find and activate your Personal license key. Check license status, keep using handup offline, and troubleshoot errors.
+sidebar:
+  label: License and trial
+---
 # License and trial
 
 Downloads are public. A new install works fully for **14 days**; after that the
 daemon needs a handup Personal license (one person, their own machines,
-perpetual). [Buy a license](https://gethandup.dev/#pricing).
+perpetual). [Buy a license](https://gethandup.dev/pricing).
 
 ## Find your key
 

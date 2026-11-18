@@ -1,0 +1,12 @@
+{
+  "title": "Review image sample",
+  "previews": [
+    {
+      "type": "image",
+      "blob": "sha256:0fc9e161ca03efe1014069feaa2b94d04018656ec58e1eccfd9c48955b8e3684",
+      "mime": "image/png",
+      "name": "image.png",
+      "size": 68
+    }
+  ]
+}

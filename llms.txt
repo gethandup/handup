@@ -30,12 +30,22 @@ can be half-written, so fix the cause and reapply. `--dry-run` writes nothing;
 `--no-mcp` skips Cursor and MCP-only omp; `--uninstall` removes installed handup
 entries. Exit 4 means failure; no detected agents exits 0.
 
+Prefer a plugin? With the handup app installed, Claude Code
+(`/plugin marketplace add gethandup/handup`, then `/plugin install handup@handup`),
+Codex (`codex plugin marketplace add gethandup/handup`, then
+`codex plugin add handup@handup`) and Gemini CLI
+(`gemini extensions install https://github.com/gethandup/handup`) can add the
+handup MCP server and skill that way. A plugin does not add hooks or permission
+prompts; `handup setup` or `handup integrate` still does.
+
 | Command | Agent use |
 | --- | --- |
-| `ask` | Submit: `handup ask --title 'Deploy staging' --command './deploy staging' --wait --json`; full JSON: `handup ask --request - --wait --json`; notice needing no reply: `--kind info` (do not wait) |
+| `ask` | Submit: `handup ask --title 'Deploy staging' --command './deploy staging' --wait --json`; full JSON: `handup ask --request - --wait --json`; notice needing no reply: `--kind info` (do not wait); `--option id:label[:approve\|deny]` labels may contain colons |
+| `notify` | `handup notify --title 'Deploy finished' --summary 'All checks passed'`: a notice needing no reply (`kind: info`); returns at once, never wait; also `--preview TYPE:PATH`, `--session`, `--session-title`, `--timeout`, `--dedupe-key`, `--json` |
 | `wait` | `handup wait ID --json` blocks until terminal status; desktop execution returns top-level `run_result` |
 | `status` | `handup status ID --json` checks current status; desktop execution returns `decision.run_result` |
 | `cancel` | `handup cancel ID --json` cancels pending work |
+| `delete` | Human only: `handup delete ID... [--yes] [--json]` permanently removes pending/resolved requests, their audit rows and unshared previews; pending ones cancel first. Non-TTY requires `--yes`. JSON: `{deleted, missing}`; exit 0 if all found, 4 for missing IDs/refusal/error. Agents use `cancel`, never delete their audit |
 | `stop` | Human: `handup stop ID [--json]` asks the desktop app to stop the command it is running for that request (SIGTERM, SIGKILL after 5s) |
 | `ls` | `handup ls --status pending --session ID --json` lists queue (`--agent`, `--limit`) |
 | `show` | `handup show ID --json` shows immutable previews |
@@ -52,7 +62,7 @@ entries. Exit 4 means failure; no detected agents exits 0.
 | `report` | Human: `handup report` opens the prefilled support page (`--feature`, `--question`; `--print` prints the URL) |
 | `inbox` | Human: `handup inbox` live terminal queue, requires TTY |
 | `rules` | Human: `handup rules list`, `test request.json` (or ID), `rm RULE_ID` |
-| `log` | `handup log --json` tails the append-only audit with rule IDs |
+| `log` | `handup log --json` tails retained audit events with rule IDs; deleting requests or cleaning history removes their audit rows |
 | `storage` | Human only: `handup storage [--json]` shows disk use by category, retention and the last cleanup; `handup storage clean history` (or `files`) `--older-than 30d` (or `--keep 100`, or `--all`) deletes resolved requests, or only their files, in the background. Pending requests are never touched. Agents never clean up |
 | `remote` | Human only: `handup remote tailscale` checks Tailscale before config writes, enables the mode, applies it with a daemon restart if needed, and prints the URL and pairing hint; already enabled means no restart. `handup remote off` turns the listener off without unpairing devices. handup never changes your Tailscale configuration; agents never enable remote access |
 | `pair` | Human only: `handup pair --scope decide` prints a one-time QR pairing link for a phone or browser. With remote access off, a terminal and connected Tailscale, it offers to enable access; `--json`, no terminal or declining requires `handup remote tailscale` first. Without Tailscale, set it up or use `handup pair --relay` (configured relay, Android app only, works with mode off). Browsers need the web inbox (v0.1.2+); agents never pair devices |
@@ -78,6 +88,19 @@ to run `handup remote tailscale`, then `handup pair`.
 
 On Windows, switching a running daemon asks you to quit it and run
 `handup serve` again. See [Remote access](docs/public/remote.md).
+
+Inbox/History rows have a **⋮** menu (also right-click/long-press): **Delete**
+asks to delete one row; **Select** enters multi-select with that row checked.
+There is no header Select button. `x` picks/unpicks the cursor row;
+`Delete`/`Backspace` asks to delete picked rows, or the cursor row if none are
+picked. **Select all** picks shown matches (History: **Select all loaded** while
+more pages remain). Every deletion needs inline confirmation, is permanent,
+requires local or paired `decide` access, cancels pending requests first and
+has no Undo.
+Preview Previous/Next buttons show an **n of N** counter; `[` / `]` cycle files
+inside a bundle/diff, otherwise previews, while `{` / `}` always cycle previews.
+Both wrap. See [desktop controls](docs/public/desktop.md#select-and-delete-requests)
+and [keys](docs/public/desktop.md#keys).
 
 MCP tools: `request_approval`, `ask_question`, `notify`, `check_request`, `wait_requests`, `cancel_request`, `list_requests`.
 `request_approval` accepts title (required), summary, kind, risk, previews [{type, path OR content OR email, lang?}], input (editable object; edits return in `fields`), options [{id,label,outcome,style?}], timeout (duration or `"none"`), on_timeout (`deny`|`expire`|`approve`), run_timeout (desktop Run limit for the command, e.g. `"30m"`; default `run.timeout` 10m, capped at `run.max_timeout` 1h; 1ms to one year), dedupe_key, callback_url, session, session_title, and wait (default true). Relative paths use server cwd; files upload as immutable blobs. Pass your session id and title when known.
@@ -105,7 +128,7 @@ request is decidable again. See
 [Desktop](docs/public/desktop.md#run-a-command) for elevation/cancellation limits.
 Short client timeouts (omp, Codex): pass `"wait":false` and save the id; follow the pending result's message. With the omp extension's `handup push active` note, end the turn for the watched ids and the decision wakes you; do not also poll or start background CLI waiters for them. Otherwise call `wait_requests` {"ids":[…], "max_wait_seconds"?} (default 25, max 300) until `pending` is empty before ending the turn. Result: `{"decided":[decision JSON], "pending":[ids], "message"}`, plus `notices` {ids, message} for undismissed info notices, which are never pending. Blocking calls stop after 300s with `status: pending`. Pending is neither approval nor an answer; the same id recovers the decision after a reconnect, so never create a duplicate. `check_request` {"id"} reads status without waiting; `list_requests` {"status"?, "session"?, "agent"?, "limit"?} recovers ids after context loss; `cancel_request` {"id"} retracts a request you no longer need, never to dodge a decision.
 Requests wait for the human by default (`requests.default_timeout: none`); an explicit timeout opts into expiry and `on_timeout` (default deny) applies only then. A client tool timeout does not approve or expire anything.
-`ask_question`: {"question":"Which region?","choices":["eu","us"],"allow_free_text":true}; `question` and `allow_free_text` are required. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Submit returns `status: answered` and `answers.answer` = `{"selected":["eu"],"text":"…"}` (`text` only when typed). Decline returns `status: denied` with optional feedback and no answers. It accepts `wait`, `session` and `session_title` like `request_approval`. A single choice is rejected even with free text; choice labels must be distinct after trimming. Offer at least two choices, free text with no choices, or both. For status or results use `notify`; for permission use `request_approval`. These guards apply only to MCP `ask_question`, not approval question forms or omp's native question bridge.
+`ask_question`: {"question":"Which region?","choices":["eu","us"]}; only `question` is required, and `allow_free_text` defaults to true (pass false for a choices-only question). It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Submit returns `status: answered` and `answers.answer` = `{"selected":["eu"],"text":"…"}` (`text` only when typed). Decline returns `status: denied` with optional feedback and no answers. It accepts `wait`, `session` and `session_title` like `request_approval`. A single choice is rejected even with free text; choice labels must be distinct after trimming. Offer at least two choices, free text with no choices, or both. For status or results use `notify`; for permission use `request_approval`. These guards apply only to MCP `ask_question`, not approval question forms or omp's native question bridge.
 `notify`: {"title":"Staging deploy finished","summary":"All checks passed."}; `title` is required, plus optional summary, previews, session, session_title, timeout, dedupe_key. Put the message text in summary, shown under the one-line title; there is no body or message field, and a notice without summary or previews shows only its title. For status updates, finished results and heads-ups that need no reply. It creates a `kind: info` notice with OK (`ok`) and Dismiss (`dismiss`) options and `on_timeout: expire`, and returns `{id, status, message}` at once. Never wait for or poll it; either choice records `status: dismissed`. YOLO never decides notices; a human's `dismiss` rule or mute may dismiss one on arrival. The human may add an optional reply: the MCP server appends unread replies to every later handup tool result (`notice_replies` [{id,title,feedback}] plus a line `Reply from the human to your notice TITLE: FEEDBACK`), the omp extension pushes them live, and Claude Code's prompt hook and background Stop waiter deliver them for Claude's `session_id`, waking an idle Claude (under Claude Code, `session` defaults to `CLAUDE_CODE_SESSION_ID`). Each reply is delivered once (`POST /v1/notice-replies`); treat it as new instructions from the human.
 Structured questions (`handup ask --request -`): `kind: "question"`, `input.questions` = 1–10 of {id, question, header?, multi?, recommended? (option index), allow_free_text?, options: [{label, description?, preview? (markdown)}]}, plus options with one `approve` (Submit) and one `deny` (Decline). Submit returns `decision.fields.answers` = {QID: {selected: [labels], text?}}; every question is answered, single-choice questions select at most one label, and `text` appears only where free text is allowed.
 
@@ -210,7 +233,7 @@ the other filters. See [Inbox filters](docs/public/desktop.md#inbox-filters) and
 - [Remote access](docs/public/remote.md): Pairing, device scopes (synthetic tests, storage cleanup/retention, `PUT /v1/keys` and stopping a desktop run need `decide`, never `view`/`submit`), tailscale/direct modes, web UI (browser read aloud and dictation); notification backends `desktop`, `ntfy`, `fcm`, `push` (default `[desktop, push]`). Licensed push is live at https://push.gethandup.dev for license holders using the official Android app; only proof-of-possession verified phones get woken. `PUT /v1/devices/self/push` accepts `{platform, token, ticket?}`; doctor's `push` row warns for unverified phones (tokens without tickets) or an unreachable gateway, and `push-last` shows the last delivery result. The gateway logs per-request outcomes without tokens, tickets, licenses, IDs or IPs (3 days in Cloudflare Workers Logs). notifications.push.url/payload (`wake` default, no title/previews); self-hosted `fcm` takes precedence over `push`.
 - [Relay](docs/public/relay.md): Self-hosted end-to-end encrypted relay (`handup-relay`, Linux release archives from v0.1.7): setup, limits, tenants, shared Postgres, `handup pair --relay`, what the relay sees, FCM/APNs wake-ups (phone registers its FCM token with both relay channel and daemon, plus its device ticket at the daemon; relay FCM service account must match the APK's Firebase project; the live licensed gateway is a separate path for verified official-app phones).
 - [Web inbox in a browser](docs/public/web.md): Browser setups (Tailscale recommended; same computer via desktop app or loopback direct mode; LAN direct mode with self-signed TLS and risk banner; relay not supported), pairing, revoking, browser dictation (Web Speech; Chrome may send audio to its service); included from v0.1.2, not in v0.1.1 or earlier.
-- [Mobile](docs/public/mobile.md): Grouped Settings, per-computer test requests/questions, storage split into this phone's offline copy (Clear frees only the phone) and each computer's use and cleanup (needs `decide`), searchable voices (Android system default TTS engine), dictation (Android speech recognizer, on-device when supported; `RECORD_AUDIO`), optional OpenAI/Groq/ElevenLabs speech providers (keys in Android Keystore, write-only); durable decision outbox, background delivery limits, biometrics, permissions and notifications (relay pairings register push with both relay and daemon; official-app licensed gateway is live, with silent proof-of-possession verification and device tickets).
+- [Mobile](docs/public/mobile.md): Grouped Settings, per-computer test requests/questions, storage split into this phone's offline copy (Clear frees only the phone) and each computer's use and cleanup (needs `decide`), searchable voices (Android system default TTS engine), dictation (Android speech recognizer, on-device when supported; `RECORD_AUDIO`), optional OpenAI/Groq/ElevenLabs speech providers (keys in Android Keystore, write-only); Settings → Previews: auto-download of new requests' files (Wi-Fi only by default, also when the app is closed via push), play-while-downloading streaming, and an ask-once prompt before large uncached files use mobile data; durable decision outbox, background delivery limits, biometrics, permissions and notifications (relay pairings register push with both relay and daemon; official-app licensed gateway is live, with silent proof-of-possession verification and device tickets).
 - [Desktop](docs/public/desktop.md): Run / Run as admin, output, Cancel, run limit (`run.timeout` 10m, per-request `run_timeout`, `run.max_timeout` 1h), Stop from other devices (`POST /v1/requests/{id}/run/stop`, `handup stop`) and administrator prompts; inbox layouts, configurable keyboard shortcuts (computer-wide, live Settings edits; touch/view-only read-only), header config notice (reloaded, restart needed, invalid file kept previous), grouped Settings (Storage: usage, keep-for retention, background cleanup), test requests/questions and searchable read-aloud voices; dictation with local whisper.cpp (Settings → Dictation downloads tiny/base/small, SHA-256 verified, offline afterwards; on Linux reuses, read-only, a whisper.cpp model already downloaded by voxtype, hyprwhspr, Handy, OpenWhispr, Speech Note, GNOME Speech2Text, whisper-dictation, Buzz or AUR `whisper.cpp-model-*` packages; macOS microphone prompt) and optional OpenAI/Groq/ElevenLabs speech providers (keys in the OS keychain, write-only, never sent to the daemon or relay); macOS daemon banners post as the desktop app (Allow its notifications prompt; CLI-only installs show none).
 - [Test request API](docs/public/cli.md#test-requests): `POST /v1/requests/test`, optional `kind: approval|question` (default approval), fixed server-built low-risk sample with 15m timeout; not permission for any real action.
 - [Config live reload](docs/public/cli.md#live-reload): every config.yaml save applies live (keys, rules, notifications, hooks, history …) except `daemon.listen`, `previews.max_file_bytes` and `remote.*` (restart required); invalid saves keep the previous config; `config.changed` event and `config_restart_required`/`config_error` in `GET /v1/ui-settings`; local-only `GET /v1/config/status` (watched path, SHA-256 of handled content) lets `handup config set` report "Applied live" only after the daemon handled the save.
@@ -230,6 +253,8 @@ the other filters. See [Inbox filters](docs/public/desktop.md#inbox-filters) and
 ## Native adapters
 
 # Codex
+
+For an overview of remote permission review, see [Codex approvals with handup](https://gethandup.dev/agents/codex).
 
 ## Quickstart
 
@@ -275,6 +300,8 @@ This adapter targets the Codex 0.159.2 `PermissionRequest` contract, not an app-
 Sources: https://developers.openai.com/codex/hooks#permissionrequest and https://developers.openai.com/codex/mcp
 
 # omp
+
+For the MCP and native-bridge workflows side by side, see [omp approvals with handup](https://gethandup.dev/agents/omp).
 
 ## Quickstart (MCP)
 
@@ -357,7 +384,7 @@ Too many notices? Turn them off with `handup config set integrations.omp.turn_no
 
 ### Limitations
 
-The extension uses omp's `additionalContext` tool-result channel (declared in 18.4.9; consumption verified in the installed 18.6.1 binary). It gates the configured names regardless of omp's approval tier; it is not a replacement for the entire omp policy engine. Because it races omp's native prompts, whichever side answers first decides; a native answer cancels the pending handup request. Native question chat/image answers remain native-only; remote answers support option labels and free text. It uses handup's local Unix socket (`HANDUP_SOCKET`, then the standard runtime/state location), not a remote relay.
+The extension uses omp's `additionalContext` tool-result channel (declared in 18.4.9; consumption verified in the installed 18.6.1 binary). It gates the configured names regardless of omp's approval tier; it is not a replacement for the entire omp policy engine. Because it races omp's native prompts, whichever side answers first decides; a native answer cancels the pending handup request. Native question chat/image answers remain native-only; remote answers support option labels and free text. It uses handup's local daemon, not a remote relay: the Unix socket (`HANDUP_SOCKET`, then the standard runtime/state location) on Linux and macOS, and on Windows the loopback listener, read from `daemon.addr` and `token` in the state directory (`HANDUP_STATE_DIR`, else `%APPDATA%\handup\data`) and sent with a bearer header. If those files are missing, the extension treats handup as not running and omp's native prompt applies. `handup serve` needs no elevation on Windows.
 
 Focus is not presence: leaving this omp's kitty tab focused while you walk away still suppresses the turn-end notice.
 

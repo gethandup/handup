@@ -2,7 +2,7 @@
 
 Downloads are public. A new install works fully for **14 days**; after that the
 daemon needs a handup Personal license (one person, their own machines,
-perpetual). [Buy a license](https://gethandup.dev/#pricing).
+perpetual). [Buy a license](https://gethandup.dev/pricing).
 
 ## Find your key
 

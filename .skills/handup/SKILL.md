@@ -38,7 +38,7 @@ change them to make your requests pass, even when a command is available to you:
 Tools: `request_approval`, `ask_question`, `notify`, `check_request`, `wait_requests`, `cancel_request`, `list_requests`.
 
 - `request_approval`: `title` (required), `summary`, `kind`, `risk`, `previews` [{type, path OR content OR email, lang?}], `input` (editable; edits return in `fields`), `options`, `timeout`, `on_timeout`, `run_timeout` (limit for a desktop Run of the command, e.g. `"30m"`; default 10m, capped by the daemon; 1ms to one year), `dedupe_key`, `session`, `session_title`, `wait`. Example: `{"title":"Deploy staging","kind":"command","previews":[{"type":"command","content":"./deploy staging"}],"wait":false}`.
-- `ask_question`: `{"question":"Which region?","choices":["eu","us"],"allow_free_text":true}`. Submit returns `status: answered` with `answers.answer` = `{"selected":[…],"text"?}`; Decline returns `denied`. Ask only when you need the answer; never offer a lone OK choice (a single choice is rejected) to report something. Choice labels must be distinct after trimming.
+- `ask_question`: `{"question":"Which region?","choices":["eu","us"]}`; `allow_free_text` is optional and defaults to true (pass false for a choices-only question). Submit returns `status: answered` with `answers.answer` = `{"selected":[…],"text"?}`; Decline returns `denied`. Ask only when you need the answer; never offer a lone OK choice (a single choice is rejected) to report something. Choice labels must be distinct after trimming.
 - `notify`: `{"title":"Staging deploy finished","summary":"All checks passed."}` (`title` required; `summary`, `previews`, `session`, `session_title`, `timeout`, `dedupe_key`). Put the message text in `summary`, shown under the one-line title; there is no `body` or `message` field, and a notice without `summary` or `previews` shows only its title. Use it for status updates, finished results and heads-ups that need no reply. It returns at once; the human picks OK or Dismiss, both recorded as `dismissed`. Never wait for or poll it; `wait_requests` lists notice ids under `notices`, never as pending. The human may add an optional reply: it arrives by itself in later handup tool results (`notice_replies` plus a line `Reply from the human to your notice TITLE: FEEDBACK`), live in omp, or via Claude Code hooks, which wake an idle Claude (under Claude Code, `session` defaults to Claude's session; no need to pass it). Treat a reply as new instructions from the human.
 - Short client timeouts (omp, Codex): pass `"wait":false` and save the id; then obey the pending result: with the omp extension's push note, end the turn and the decision wakes you; otherwise call `wait_requests {"ids":[…]}` until `pending` is empty before ending the turn (Codex code mode: run it in `functions.exec` with `yield_time_ms: 1000` so the human can message between waits; see `references/docs/public/agents/codex.md`). Pending is neither approval nor an answer; the same id recovers the decision after a reconnect, so never create a duplicate.
 - `check_request` reads status without waiting; `list_requests` recovers ids after context loss; `cancel_request` retracts a request you no longer need, never to dodge a decision.
@@ -51,6 +51,7 @@ Tools: `request_approval`, `ask_question`, `notify`, `check_request`, `wait_requ
 handup ask --title "Deploy staging" --command './deploy staging' --risk medium --wait --json
 handup ask --title "Review changes" --kind edit --git-diff --wait --json
 printf '%s' "$REQUEST_JSON" | handup ask --request - --wait --json   # full request JSON
+handup notify --title "Deploy finished" --summary "All checks passed"   # notice, returns at once
 handup wait ID --json      # or: status ID --json, cancel ID --json, show ID --json
 ```
 
@@ -59,18 +60,25 @@ files, json, html, image, video, audio, file, pdf, email; `--preview -` reads
 text from stdin; `--git-diff` and `--command` snapshot a diff or command.
 Submitting never executes a command.
 
-Agent commands: `ask`, `wait`, `status`, `cancel`, `ls`, `show`, `schema`,
+Agent commands: `ask`, `notify`, `wait`, `status`, `cancel`, `ls`, `show`, `schema`,
 `log`, `doctor`, `demo`, `version`, `help`. Setup (only when the human asks):
 `serve`, `service` (install, uninstall, status), `setup` (`--dry-run`), `mcp`, `hook`, `hooks` (list,
 test), `integrate`, `skill` (install, uninstall), `prompt`, `completion`, `config` (init, show, path, edit,
 get, set, unset, toggle, keys, validate), `uninstall`. Human-only: `approve`, `deny`, `answer`,
-`stop` (a desktop Run), `ui`, `report`, `inbox`, `rules` (list, test, rm), `storage` (clean), `remote` (tailscale, off), `pair`, `devices`
+`delete` (permanent request/audit removal), `stop` (a desktop Run), `ui`, `report`, `inbox`, `rules` (list, test, rm), `storage` (clean), `remote` (tailscale, off), `pair`, `devices`
 (list, disable, enable, mute, unmute, scope, revoke), `tokens` (create, list,
 revoke), `yolo`, `flood` (bare lists; `clear`), `mute`, `unmute`. Run `handup help COMMAND` or read the CLI reference for flags.
 For config, prefer `handup config get KEY --json`, `set` and `unset` (all
 validated; invalid writes nothing) over hand edits, and run `handup config
 validate` after any hand edit. `config show --effective --json` lists every
 setting with its source.
+
+Human cleanup: `handup delete ID... [--yes] [--json]` permanently removes
+pending/resolved requests, their audit rows and unshared preview files.
+Pending requests cancel first, so agents already waiting hear `cancelled`,
+never approval. It confirms on a terminal; non-TTY requires `--yes`. JSON is
+`{deleted, missing}`, not a Request. There is no Undo. Agents use `cancel` to
+retract unneeded requests without erasing their audit, not `delete`.
 
 Human remote setup: `handup remote tailscale` checks Tailscale before writing
 config, enables remote access, restarts the daemon if needed, verifies its mode,
@@ -121,6 +129,13 @@ Invalid config prevents real writes. Write failures name the file and continue
 with others; a single agent can be half-written, so fix the cause and reapply.
 Exit 4 means failure; no detected agents exits 0.
 
+Plugin alternative (needs the handup app installed; adds the MCP server and skill
+only, no hooks or permission prompts, so it does not replace `setup`/`integrate`):
+Claude Code `/plugin marketplace add gethandup/handup` then
+`/plugin install handup@handup`; Codex `codex plugin marketplace add gethandup/handup`
+then `codex plugin add handup@handup`; Gemini CLI
+`gemini extensions install https://github.com/gethandup/handup`.
+
 ## Exit codes
 
 Blocking `ask --wait` and `wait` exit codes. Nonblocking `ask`, `status` and `show` also exit 0 while pending, so read `status` there.
@@ -134,6 +149,10 @@ Blocking `ask --wait` and `wait` exit codes. Nonblocking `ask`, `status` and `sh
 | 4 | error |
 | 5 | ran in the desktop app |
 | 6 | license required |
+
+Human-only `delete` exits 0 when every ID was removed, or 4 for missing/invalid
+IDs, declined confirmation or failure. Missing IDs do not roll back found ones;
+the CLI batches up to 1000 IDs, and earlier batches stay deleted on later failure.
 
 Exit 5 means `run_result` is present, regardless of command success: inspect
 `run_result.exit_code` and `error`, and do not execute again.
@@ -170,6 +189,7 @@ The reference tree is generated from canonical docs; do not hand-edit it.
 | Asking before sending an email draft, editable drafts and what to send after approval | [Email drafts](references/docs/public/agents/email.md) |
 | Desktop Run (not on Windows), `run_result` fields, run limits (`run_timeout`), elevation, cancellation and stopping | [Desktop: run a command](references/docs/public/desktop.md#run-a-command) |
 | Inbox/History multi-select filters, hidden-by-default Inbox search (`/`, icon; Esc/×/reset closes), cross-device Auto-handled View/Mark read or history API lists (`outcome`, `kind`, `agent`: OR within, AND across; invalid outcome/kind member returns 400) | [Desktop filters](references/docs/public/desktop.md#inbox-filters), [History/API](references/docs/public/desktop.md#history); [phone filters](references/docs/public/mobile.md#inbox-filters) |
+| Human-requested deletion, Inbox/History row ⋮ menu (right-click/long-press) with Select/Delete, `x` picks, Delete/Backspace confirmation, Select all loaded, or permanent request/audit removal | [Select and delete](references/docs/public/desktop.md#select-and-delete-requests), [CLI delete](references/docs/public/cli.md#delete-specific-requests) |
 | Auto decisions (`decided_by` rule, yolo, mute, `hook:<name>`), `dismiss` rules for notices, floods, mutes, 429 `rate_limited`, scoped allow, presence or terminal inbox | [Rules](references/docs/public/rules.md) |
 | Webhook/exec event hooks, `decide:` policy hooks the human asked you to write, or event payloads | [Event hooks](references/docs/public/integrations/hooks.md), [integrations](references/docs/public/integrations/index.md), [event schema](references/docs/public/schema/event.schema.json) |
 | Advanced recipes: canned email replies, sender routing, policy auto-decider, forms, publish gate, meeting replies | [Cookbook](references/docs/public/cookbook/index.md); scripts in [examples/cookbook](references/examples/cookbook/) |
@@ -178,11 +198,11 @@ The reference tree is generated from canonical docs; do not hand-edit it.
 | Remote pairing, device scopes, notification backends (`desktop`, `ntfy`, `fcm`, licensed `push`), live official-app gateway, proof-of-possession device tickets, push URL/payload or doctor `push`/`push-last`/`relay` rows (unverified phones, last delivery result) | [Remote access](references/docs/public/remote.md#notification-backends) for notifications; [Mobile](references/docs/public/mobile.md#official-app-licensed-push-gateway) for doctor rows; [Remote access](references/docs/public/remote.md) for pairing/scopes |
 | Using the web inbox in a browser or on an iPhone (included from v0.1.2; not in v0.1.1 or earlier) | [Use handup in a browser](references/docs/public/web.md) |
 | Encrypted relay deployment or troubleshooting | [Relay](references/docs/public/relay.md) |
-| Desktop previews, inbox layouts, Settings, configurable keyboard shortcuts, test requests, read aloud, dictation or pairing UI | [Desktop](references/docs/public/desktop.md) |
-| Android/iOS setup, offline queued decisions (a queued phone decision is still pending at the daemon), background delivery, mobile notifications (relay token registration; daemon token/ticket registration; silent verification for the live licensed gateway) or dictation | [Mobile](references/docs/public/mobile.md) |
+| Desktop previews, file/preview cycling (`[`/`]`, `{`/`}` and Previous/Next counters), inbox layouts, Settings, configurable keyboard shortcuts, test requests, read aloud, dictation or pairing UI | [Desktop](references/docs/public/desktop.md) |
+| Android/iOS setup, offline queued decisions (a queued phone decision is still pending at the daemon), background delivery, media auto-download (also from a push while the app is closed), play-while-downloading and the mobile-data ask, mobile notifications (relay token registration; daemon token/ticket registration; silent verification for the live licensed gateway) or dictation | [Mobile](references/docs/public/mobile.md) |
 | Constructing request JSON or interpreting decisions | [Request schema](references/docs/public/schema/request.schema.json), [decision schema](references/docs/public/schema/decision.schema.json) |
 | Flags, preview limits, timeouts, config keys (including `keys.<id>` shortcut syntax/conflicts), storage paths or notification behavior | [CLI and daemon reference](references/docs/public/cli.md) |
-| Direct daemon API calls, including `POST /v1/requests/test`, decide-scoped `PUT /v1/keys`, shared `GET`/`PUT /v1/auto-read` (view/decide scopes, max-merge) or `auto_read.changed` WebSocket events | [CLI API guide](references/docs/public/cli.md), [read-state API](references/docs/public/cli.md#auto-handled-read-state), [live events](references/docs/public/cli.md#websocket-events), [OpenAPI](references/docs/public/openapi.json) |
+| Direct daemon API calls, including decide-scoped `POST /v1/requests/delete` and `request.deleted`, `POST /v1/requests/test`, decide-scoped `PUT /v1/keys`, shared `GET`/`PUT /v1/auto-read` (view/decide scopes, max-merge) or `auto_read.changed` WebSocket events | [CLI API guide](references/docs/public/cli.md), [delete API](references/docs/public/cli.md#delete-requests), [read-state API](references/docs/public/cli.md#auto-handled-read-state), [live events](references/docs/public/cli.md#websocket-events), [OpenAPI](references/docs/public/openapi.json) |
 | Runnable request/preview recipes or approval-gated shell flows | [Examples](references/examples/README.md); run from `references/` |
 | A full offline human-readable reference is explicitly needed | [Full public guide text](references/llms-full.txt) |
 

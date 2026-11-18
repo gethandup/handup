@@ -1,4 +1,12 @@
+---
+title: Gate shell scripts and CI jobs on approval decisions
+description: Use handup ask in shell scripts and CI to wait for human approval. Read decision JSON and exit codes, and avoid rerunning commands executed on desktop.
+sidebar:
+  label: Shell and CI
+---
 # Shell and CI
+
+For an overview of deploy and migration gates, see [shell and CI approvals with handup](https://gethandup.dev/agents/shell-ci).
 
 Ask before destructive/irreversible actions, external publication or messages, costly resource use, credential changes/access, or ambiguous intent. Include the exact proposed action and its effects. Do not execute while pending. Only approved/answered permits the approved action; bind execution to content_hash and re-request if the action changes. A deny is a normal human answer, not a transport error. Read feedback, stop, and revise only when requested. Never retry the same request or treat expired, cancelled, or error as permission.
 

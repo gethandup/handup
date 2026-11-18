@@ -1,5 +1,7 @@
 # MCP stdio
 
+For a workflow overview across MCP clients, see [human-in-the-loop approvals with handup MCP](https://gethandup.dev/agents/mcp).
+
 Run `handup mcp` in the project directory. It uses rmcp and supports MCP versions 2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25 and 2026-07-28. Clients through 2025-11-25 initialize, receive their requested supported version, send notifications/initialized, then tools/list or tools/call. This includes Gemini CLI 0.62, which requests 2025-06-18. 2026-07-28 clients (Claude Code 2.1.285+) skip initialize: they may probe with server/discover and send the protocol version, clientInfo and client capabilities in each request's `_meta`. tools/list returns the cache hints `ttlMs: 0` and `cacheScope: "public"`. Tool results include text content blocks as well as structuredContent, so clients predating 2025-06-18 can still read them. No logs go to stdout.
 
 MCP is the simplest way to use handup from any client, including [omp](omp.md): the model asks explicitly and no extension is needed. It does not intercept a client's built-in approval prompts; omp's native bridge extension that forwards those is optional.
@@ -17,6 +19,11 @@ and skips Cursor and MCP-only omp. See [CLI integration](../cli.md#agent-integra
 summaries and failure behavior. For MCP alone, use
 `handup integrate mcp --client claude-code|codex|cursor|omp`.
 
+Full releases from the next one on also attach a cross-platform
+`handup_<version>.mcpb` MCP bundle to the [GitHub release](https://github.com/gethandup/handup/releases)
+for clients that install MCP bundles; it carries the handup program and runs
+`handup mcp`.
+
 See the dedicated guides for [Claude Code](claude-code.md), [Codex](codex.md),
 [Cursor](cursor.md) and [omp](omp.md). Gemini CLI and opencode have also been
 tested with `handup mcp`; configure them directly:
@@ -30,6 +37,10 @@ gemini mcp add -s user --trust handup handup mcp
 This writes `mcpServers.handup` in `~/.gemini/settings.json` with
 `{"command":"handup","args":["mcp"],"trust":true}`. Gemini starts stdio MCP
 servers only in trusted folders; run it from a trusted project folder.
+
+Or install the handup extension (MCP server and skill) from the public
+repository: `gemini extensions install https://github.com/gethandup/handup`. It
+needs the handup app installed and does not replace `handup setup`.
 
 **opencode**
 
@@ -48,7 +59,7 @@ opencode exposes the tools with a server prefix, for example
 MCP tools: `request_approval`, `ask_question`, `notify`, `check_request`, `wait_requests`, `cancel_request`, `list_requests`.
 
 - `request_approval`: title (required), summary, kind, risk, previews [{type, path OR content OR email, lang?}], input (editable object, returned edited in decision `fields`), options [{id,label,outcome,style?}], timeout (duration string or `"none"`), on_timeout (`deny`|`expire`|`approve`, timed requests only), run_timeout (limit for a desktop Run of the command preview, e.g. `"30m"`; default `run.timeout`, capped at `run.max_timeout`; 1ms to one year; separate from `timeout`), dedupe_key (identical pending requests share one id), callback_url ([callbacks](../integrations/callbacks.md)), session, session_title, and wait (default true). Relative paths use the server cwd; files upload as immutable blobs. With a progressToken, blocking calls emit progress notifications every long-poll cycle.
-- `ask_question`: question and allow_free_text (both required, even with choices), choices, session, session_title, wait. Example: {"question":"Which region?","choices":["eu","us"],"allow_free_text":true}. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Offer at least two distinct choices, free text with no choices, or both: a single choice is rejected even with free text, and labels must be distinct after trimming. Use `notify` for status or results and `request_approval` for permission. Use `request_approval` with `kind: "question"` and `input.questions` for several questions, multi-select or a timeout; the single-choice guard applies only to MCP `ask_question`, not these forms or omp's native question bridge.
+- `ask_question`: question (required), choices, allow_free_text (optional, defaults to true; pass false for a choices-only question), session, session_title, wait. Example: {"question":"Which region?","choices":["eu","us"]}. It creates a `kind: question` request with one question (id `answer`) and Submit/Decline options. Offer at least two distinct choices, free text with no choices, or both: a single choice is rejected even with free text, and labels must be distinct after trimming. Use `notify` for status or results and `request_approval` for permission. Use `request_approval` with `kind: "question"` and `input.questions` for several questions, multi-select or a timeout; the single-choice guard applies only to MCP `ask_question`, not these forms or omp's native question bridge.
 - `notify`: title (required), summary, previews, session, session_title, timeout, dedupe_key. Put the message text in summary, shown under the one-line title; there is no body or message field, and a notice without summary or previews shows only its title. Tells the human something that needs no reply (status update, finished result, heads-up). It creates a `kind: info` notice and returns at once with `{id, status, message}`; never wait for or poll it. The human reads it and picks **OK** or **Dismiss** (status `dismissed` either way, `option` `ok` or `dismiss`), optionally with a reply; a timeout expires it. YOLO never decides notices; a human's `dismiss` rule or mute may dismiss one on arrival. A reply reaches the agent by itself in later tool results ([notice replies](#notice-replies)). Example: {"title":"Staging deploy finished","summary":"All checks passed."}.
 - `check_request` {"id"}: current decision JSON without waiting.
 - `wait_requests` {"ids":[…], "max_wait_seconds"?}: returns every decided request among ids at once, otherwise long-polls until the first decision or `max_wait_seconds` (default 25, max 300, within omp's 30s and Codex's 60s tool timeouts). Result: `{"decided":[decision JSON], "pending":[ids], "message"}`, plus `notices` {ids, message} for undismissed info ids, which it never waits on or reports as pending. Act on each decision and obey the pending result: with the omp extension's push note, end the turn and the decision wakes you; otherwise call again with the pending ids until `pending` is empty before ending the turn.

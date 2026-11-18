@@ -1,0 +1,10 @@
+{
+  "title": "Review text sample",
+  "kind": "review",
+  "previews": [
+    {
+      "type": "text",
+      "inline": "Delete only the staging build cache."
+    }
+  ]
+}

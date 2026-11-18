@@ -1,3 +1,9 @@
+---
+title: Require review before publishing agent-written posts
+description: Gate agent-written posts on human review in handup. Let the reviewer edit text, choose publish or schedule, and reject unanswered requests on timeout.
+sidebar:
+  label: Publish gate
+---
 # Publish gate
 
 ![Nothing posts without you: edit the post, then Publish now or Schedule](img/publish-gate.webp)

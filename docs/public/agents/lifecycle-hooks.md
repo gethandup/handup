@@ -1,3 +1,9 @@
+---
+title: Receive agent turn-end notices with lifecycle hooks
+description: Wire agent lifecycle hooks to handup to read finished turns on another device. Configure opt-in notices and learn which harnesses can receive replies.
+sidebar:
+  label: Agent lifecycle hooks (advanced)
+---
 # Agent lifecycle hooks (advanced)
 
 Agent harnesses run hooks at lifecycle events such as "the turn finished". Wire

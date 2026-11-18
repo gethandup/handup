@@ -1,3 +1,9 @@
+---
+title: Deliver request decisions with HTTP callbacks
+description: Configure allowlisted callbacks so an external workflow receives a handup request decision without holding a connection. Verify signatures and delivery limits.
+sidebar:
+  label: Per-request callbacks
+---
 # Per-request callbacks
 
 Use a callback when the submitting system cannot keep a connection open. Unlike

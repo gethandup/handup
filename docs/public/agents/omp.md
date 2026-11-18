@@ -1,4 +1,12 @@
+---
+title: Set up omp approval requests and optional tool gating
+description: Connect omp to handup over MCP for approvals and questions. Add the optional native bridge to gate tool calls and resume when a human decides.
+sidebar:
+  label: omp
+---
 # omp
+
+For the MCP and native-bridge workflows side by side, see [omp approvals with handup](https://gethandup.dev/agents/omp).
 
 ## Quickstart (MCP)
 
@@ -81,7 +89,7 @@ Too many notices? Turn them off with `handup config set integrations.omp.turn_no
 
 ### Limitations
 
-The extension uses omp's `additionalContext` tool-result channel (declared in 18.4.9; consumption verified in the installed 18.6.1 binary). It gates the configured names regardless of omp's approval tier; it is not a replacement for the entire omp policy engine. Because it races omp's native prompts, whichever side answers first decides; a native answer cancels the pending handup request. Native question chat/image answers remain native-only; remote answers support option labels and free text. It uses handup's local Unix socket (`HANDUP_SOCKET`, then the standard runtime/state location), not a remote relay.
+The extension uses omp's `additionalContext` tool-result channel (declared in 18.4.9; consumption verified in the installed 18.6.1 binary). It gates the configured names regardless of omp's approval tier; it is not a replacement for the entire omp policy engine. Because it races omp's native prompts, whichever side answers first decides; a native answer cancels the pending handup request. Native question chat/image answers remain native-only; remote answers support option labels and free text. It uses handup's local daemon, not a remote relay: the Unix socket (`HANDUP_SOCKET`, then the standard runtime/state location) on Linux and macOS, and on Windows the loopback listener, read from `daemon.addr` and `token` in the state directory (`HANDUP_STATE_DIR`, else `%APPDATA%\handup\data`) and sent with a bearer header. If those files are missing, the extension treats handup as not running and omp's native prompt applies. `handup serve` needs no elevation on Windows.
 
 Focus is not presence: leaving this omp's kitty tab focused while you walk away still suppresses the turn-end notice.
 

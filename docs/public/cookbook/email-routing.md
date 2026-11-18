@@ -1,3 +1,9 @@
+---
+title: Route email approval requests with sender rules
+description: Classify email in your script and use handup rules to route each action. Archive receipts, refuse no-reply senders, and flag VIP replies for review.
+sidebar:
+  label: Route email by sender
+---
 # Route email by sender
 
 ![Each sender, its own path: rules archive receipts, refuse no-reply senders and flag VIPs](img/email-routing.webp)

@@ -1,3 +1,9 @@
+---
+title: Automate request decisions with a local policy handler
+description: Write a local handup policy handler that reads request JSON and decides by amount or vendor. Leave unmatched requests pending for human review.
+sidebar:
+  label: Policy auto-decider
+---
 # Policy auto-decider
 
 ![Your policy, your code: a decide hook auto-approves a $12 purchase under the limit](img/auto-decider.webp)

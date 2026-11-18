@@ -1,3 +1,9 @@
+---
+title: Choose and approve canned email replies
+description: Turn stock email replies into previewable choices in handup. Pick a template, edit the filled draft, and send only the approved content with your mail tool.
+sidebar:
+  label: Canned email replies
+---
 # Canned email replies
 
 ![Canned replies, one tap: pick a template, edit the draft, approve](img/email-canned-replies.webp)

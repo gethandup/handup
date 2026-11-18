@@ -1,0 +1,8 @@
+{
+  "name": "handup",
+  "version": "0.1.13",
+  "description": "Ask a human before risky actions: approvals, questions and notices from your agent to your terminal, desktop or phone.",
+  "mcpServers": {
+    "handup": { "command": "handup", "args": ["mcp"] }
+  }
+}

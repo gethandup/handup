@@ -1,3 +1,9 @@
+---
+title: Set up an encrypted relay for phone approvals
+description: Host a handup relay to connect your Android phone without a tailnet. Pair devices and forward end-to-end encrypted requests and decisions to your daemon.
+sidebar:
+  label: End-to-end encrypted relay
+---
 # End-to-end encrypted relay
 
 Use `handup-relay` when your phone is not on your tailnet. It is a small

@@ -1,0 +1,13 @@
+{
+  "name": "handup",
+  "owner": { "name": "handup", "email": "support@gethandup.dev" },
+  "plugins": [
+    {
+      "name": "handup",
+      "source": "./plugins/handup",
+      "description": "Ask a human before risky actions: approvals, questions and notices from your agent to your terminal, desktop or phone.",
+      "homepage": "https://gethandup.dev",
+      "category": "productivity"
+    }
+  ]
+}

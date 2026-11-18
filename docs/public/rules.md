@@ -1,3 +1,9 @@
+---
+title: Route approval requests with rules and presence settings
+description: Configure handup rules to approve, deny or route matching requests. Test scoped permissions, presence routing and decisions in the terminal inbox.
+sidebar:
+  label: Rules, scoped allow, presence, and terminal inbox
+---
 # Rules, scoped allow, presence, and terminal inbox
 
 Rules live under `rules:` in the selected config file (`~/.config/handup/config.yaml` on Linux by default; `--config` or `HANDUP_CONFIG` isolates them with the rest of the config). They apply when the config is saved ([live reload](cli.md#live-reload)). Invalid YAML, unknown fields, invalid regex/globs, duplicate IDs, and empty matchers are errors: the daemon refuses to start on an invalid file, and an invalid save keeps the previous rules in force and logs `path:line: message`.
@@ -31,7 +37,7 @@ rules:
 
 To route one kind of action several ways, tag each request with a specific `tool` name and match it here; see [Route email by sender](cookbook/email-routing.md).
 
-Auto decisions use the normal hash-bound decision path and append-only audit. Their decision metadata includes `decided_by: rule` and `rule_id`. **N auto-handled · View** above the Inbox list opens a read-only view of them, [YOLO mode](#yolo-mode) approvals, and [decide hook](integrations/hooks.md#decide-hooks) decisions (`decided_by: hook:<name>`). **← Inbox** returns to pending requests; **Mark read** leaves the decisions in History. A request decided on arrival is announced on the event stream with its final status (`request.created`, then `request.decided`), never as pending. API callers can use `GET /v1/requests?decided_by=rule` (or `decided_by=hook:` for every hook) and `GET /v1/log?limit=100`; `handup log --json` prints the newest audit entries first, including rule IDs.
+Auto decisions use the normal hash-bound decision path and append audit events; those rows remain until the request is deleted or history is cleaned up. Their decision metadata includes `decided_by: rule` and `rule_id`. **N auto-handled · View** above the Inbox list opens a read-only view of them, [YOLO mode](#yolo-mode) approvals, and [decide hook](integrations/hooks.md#decide-hooks) decisions (`decided_by: hook:<name>`). **← Inbox** returns to pending requests; **Mark read** leaves the decisions in History. A request decided on arrival is announced on the event stream with its final status (`request.created`, then `request.decided`), never as pending. API callers can use `GET /v1/requests?decided_by=rule` (or `decided_by=hook:` for every hook) and `GET /v1/log?limit=100`; `handup log --json` prints the newest audit entries first, including rule IDs.
 
 **Mark read** shares the read state across every device connected to the same
 daemon, separately for each computer, and survives daemon restarts. It hides

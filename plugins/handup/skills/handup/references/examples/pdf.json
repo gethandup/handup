@@ -1,0 +1,12 @@
+{
+  "title": "Review pdf sample",
+  "previews": [
+    {
+      "type": "pdf",
+      "blob": "sha256:976f71aec3be98205be90ab6b424cf6892b2528b411257a29d7dba20d7e97861",
+      "mime": "application/pdf",
+      "name": "pdf.pdf",
+      "size": 594
+    }
+  ]
+}

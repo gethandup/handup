@@ -183,12 +183,37 @@ per-user state directory (`%APPDATA%\handup\data` unless `HANDUP_STATE_DIR` is
 set). handup gives its data and state directories and the token an owner-only
 ACL (you, SYSTEM and Administrators), repairs one it owns that other accounts
 can read, and refuses to start on such a directory owned by someone else;
-`handup doctor` reports whether they are private. Only one Windows user per
+`handup doctor` reports whether they are private. Locking the ACL needs no
+administrator rights: run `handup serve` from a normal, unelevated terminal.
+Only one Windows user per
 machine can run the daemon on the default port; give others a different
 loopback `daemon.listen`, such as `127.0.0.1:7466`. The configuration file is
-`%USERPROFILE%\.config\handup\config.yaml`. Agent integration commands
-(`handup setup`, `handup integrate`, `handup skill install`) currently need
-`HOME` set.
+`%USERPROFILE%\.config\handup\config.yaml`. handup uses `HOME` when set and
+falls back to `%USERPROFILE%`, so `handup setup`, `handup integrate` and
+`handup skill install` work in a plain Windows session. The omp extension also
+works on Windows: see [omp](agents/omp.md#optional-native-bridge-extension).
+
+### Known issues in v0.1.10 and earlier
+
+These Windows bugs are fixed for the next release. Until you can upgrade:
+
+- `handup serve` in a normal terminal fails with icacls exit 1300 while
+  locking down its data folder. Run it from an administrator terminal.
+- Requests with file previews, or text previews too large to send inline,
+  fail with "Access is denied", as do `handup config set`, `handup remote`
+  and changes saved in Settings. Edit `config.yaml` (above) directly instead:
+  the daemon applies a saved file without a restart.
+- `handup setup`, `handup integrate` and `handup skill install` need `HOME`
+  set: run `$env:HOME = $env:USERPROFILE` first in PowerShell.
+- The omp extension cannot reach the daemon (it looks for a Unix socket).
+  Connect omp through MCP instead: `handup integrate mcp --client omp`
+  (with `HOME` set as above).
+- `handup ask`, `handup mcp`, `handup wait` and other commands that start the
+  daemon on demand hang when their output is captured by a pipe, as in an
+  agent's shell or a script, and `handup ui` does the same when it launches
+  the desktop app. The background daemon keeps the pipe open, so the command
+  never finishes. Start the daemon first so nothing has to start it: run
+  `handup serve` in its own terminal, or open the desktop app.
 
 ## Android
 

@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Decision",
+  "type": "object",
+  "properties": {
+    "option": {
+      "type": "string"
+    },
+    "feedback": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "fields": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DecisionFields"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "content_hash": {
+      "type": "string"
+    },
+    "decided_by": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "decided_at": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0,
+      "default": null
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Outcome"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "rule_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "scope": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_result": {
+      "description": "The desktop app ran the request's command for the human: this is how\nit ended. Present only on approved command requests decided by Run.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunResult"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "option",
+    "content_hash"
+  ],
+  "$defs": {
+    "DecisionFields": {
+      "description": "Decision `fields`. Question requests carry only `answers`, keyed by question\nid; other requests carry answers to `input.fields` or edited tool input.",
+      "type": "object",
+      "properties": {
+        "answers": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Answer"
+          }
+        }
+      }
+    },
+    "Answer": {
+      "description": "The human's answer to one question.",
+      "type": "object",
+      "properties": {
+        "selected": {
+          "description": "Chosen option labels; at most one unless the question is `multi`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "text": {
+          "description": "Typed answer; only when the question allows free text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Outcome": {
+      "type": "string",
+      "enum": [
+        "approve",
+        "deny"
+      ]
+    },
+    "RunResult": {
+      "description": "Outcome of running a command request in the handup desktop app. The\ncommand already ran: an agent must not run it again. Output is the\nredacted tail of each stream.",
+      "type": "object",
+      "properties": {
+        "exit_code": {
+          "description": "Process exit status; absent when it never started or a signal ended it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "stdout_tail": {
+          "description": "Last bytes of standard output (at most 64 KiB), credentials redacted.",
+          "type": "string",
+          "default": ""
+        },
+        "stderr_tail": {
+          "description": "Last bytes of standard error (at most 64 KiB), credentials redacted.",
+          "type": "string",
+          "default": ""
+        },
+        "duration_ms": {
+          "description": "Wall time from start to exit, in milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "truncated": {
+          "description": "Earlier output was dropped from either tail.",
+          "type": "boolean",
+          "default": false
+        },
+        "elevated": {
+          "description": "Ran with administrator rights (pkexec on Linux, osascript on macOS).",
+          "type": "boolean",
+          "default": false
+        },
+        "error": {
+          "description": "Why it did not finish normally: timeout, cancellation, signal, or a\nstart failure (for example pkexec missing or authentication refused).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

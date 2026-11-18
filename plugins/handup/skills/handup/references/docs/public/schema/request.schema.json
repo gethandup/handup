@@ -1,0 +1,985 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Request",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "default": ""
+    },
+    "title": {
+      "type": "string"
+    },
+    "tool": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "callback_url": {
+      "description": "Terminal-event destination; requires the daemon callbacks.allowlist.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "summary": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "source": {
+      "$ref": "#/$defs/Source",
+      "default": {
+        "integration": null,
+        "agent": null,
+        "session": null,
+        "cwd": null,
+        "repo": null,
+        "branch": null,
+        "host": null
+      }
+    },
+    "kind": {
+      "$ref": "#/$defs/Kind",
+      "default": "custom"
+    },
+    "risk": {
+      "$ref": "#/$defs/Risk",
+      "default": "low"
+    },
+    "previews": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Preview"
+      },
+      "default": []
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Option"
+      },
+      "default": [
+        {
+          "id": "approve",
+          "label": "Approve",
+          "outcome": "approve",
+          "style": "primary"
+        },
+        {
+          "id": "deny",
+          "label": "Deny",
+          "outcome": "deny",
+          "style": "danger"
+        }
+      ]
+    },
+    "input": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RequestInput"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "timeout": {
+      "description": "Optional positive duration, at most one year. Absent uses config; null/`none` disables expiry.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_timeout": {
+      "description": "Optional limit for the desktop app's Run of this command (e.g. `30m`).\nAbsent uses the daemon's `run.timeout`; the daemon caps it at\n`run.max_timeout`. Not part of the request's decision timeout.\nMust be between 1ms and one year.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "on_timeout": {
+      "$ref": "#/$defs/OnTimeout",
+      "default": "deny"
+    },
+    "dedupe_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "status": {
+      "$ref": "#/$defs/Status",
+      "default": "pending"
+    },
+    "content_hash": {
+      "type": "string",
+      "default": ""
+    },
+    "created_at": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0,
+      "default": 0
+    },
+    "expires_at": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0,
+      "default": null
+    },
+    "decision": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Decision"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "run": {
+      "description": "Present while the desktop app runs the command (daemon-managed).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunClaim"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "run_interrupted": {
+      "description": "Unix milliseconds when a desktop run's lease lapsed without a result\n(the app crashed or stopped responding); the request is decidable\nagain. Cleared when it is run again (daemon-managed).",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "title"
+  ],
+  "$defs": {
+    "Source": {
+      "type": "object",
+      "properties": {
+        "integration": {
+          "description": "Server-verified integration token name; caller values are overwritten.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "agent": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "session": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "session_title": {
+          "description": "Display-only session name; scoped rules always use the session ID.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "repo": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "host": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "Kind": {
+      "type": "string",
+      "enum": [
+        "command",
+        "edit",
+        "review",
+        "question",
+        "info",
+        "custom"
+      ]
+    },
+    "Risk": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "Preview": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/PreviewType"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lang": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blob": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "files": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/PreviewFile"
+          }
+        },
+        "entry": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Command"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "email": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Email"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "before_blob": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "after_blob": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    "PreviewType": {
+      "type": "string",
+      "enum": [
+        "text",
+        "markdown",
+        "code",
+        "diff",
+        "files",
+        "command",
+        "json",
+        "html",
+        "image",
+        "video",
+        "audio",
+        "file",
+        "pdf",
+        "email"
+      ]
+    },
+    "PreviewFile": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "blob": {
+          "type": "string"
+        },
+        "mime": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "lang": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "blob",
+        "mime",
+        "size"
+      ]
+    },
+    "Command": {
+      "type": "object",
+      "properties": {
+        "shell": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "argv": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "default": null
+        },
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "env_keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "Email": {
+      "description": "An email draft for review. handup never sends it: on approval the agent\nsends the draft (or the edited `decision.fields`) with its own mail tool.",
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cc": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "bcc": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reply_to": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject": {
+          "type": "string",
+          "default": ""
+        },
+        "date": {
+          "description": "Date shown in the header, as the agent formats it (e.g. RFC 2822).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "body": {
+          "description": "Message body as Markdown (plain text renders as-is).",
+          "type": "string",
+          "default": ""
+        },
+        "body_html": {
+          "description": "Optional HTML alternative; rendered only in the sandboxed HTML preview frame.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EmailAttachment"
+          }
+        },
+        "in_reply_to": {
+          "description": "The message this draft replies to, shown collapsed under the body.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EmailQuote"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "EmailAttachment": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "mime": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "blob": {
+          "description": "Uploaded blob hash (`POST /v1/blobs`) so the reviewer can open the file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "EmailQuote": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "body": {
+          "description": "Plain text of the earlier message (or a snippet of it).",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "additionalProperties": false
+    },
+    "Option": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/Outcome"
+        },
+        "style": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "outcome"
+      ]
+    },
+    "Outcome": {
+      "type": "string",
+      "enum": [
+        "approve",
+        "deny"
+      ]
+    },
+    "RequestInput": {
+      "description": "Request `input`. Only `kind: question` requests interpret `questions`;\nother keys (for example raw agent tool input) pass through unchanged.",
+      "type": "object",
+      "properties": {
+        "feedback": {
+          "description": "`optional` (default) or `required_on_deny`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fields": {
+          "description": "Generic form fields (`text`, `textarea`, `select`, `boolean`) for non-question requests.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": true
+        },
+        "questions": {
+          "description": "Structured questions (1..=10) for `kind: question`; answers arrive in `decision.fields.answers`.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Question"
+          }
+        }
+      }
+    },
+    "Question": {
+      "description": "A question for the human; answered in `decision.fields.answers[id]`.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Stable id, unique within the request.",
+          "type": "string"
+        },
+        "header": {
+          "description": "Short topic chip, e.g. \"Database\".",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "question": {
+          "description": "The question itself (markdown).",
+          "type": "string"
+        },
+        "multi": {
+          "description": "Allow selecting several options.",
+          "type": "boolean",
+          "default": false
+        },
+        "recommended": {
+          "description": "Index of the suggested option.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "allow_free_text": {
+          "description": "Allow a typed answer besides (or instead of) the options.",
+          "type": "boolean",
+          "default": false
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QuestionOption"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "question"
+      ]
+    },
+    "QuestionOption": {
+      "description": "One selectable answer to a [`Question`].",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "Answer text; unique within its question and returned in `selected`.",
+          "type": "string"
+        },
+        "description": {
+          "description": "One-line explanation shown under the label.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "preview": {
+          "description": "Markdown shown while the option is focused (code blocks allowed).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label"
+      ]
+    },
+    "OnTimeout": {
+      "type": "string",
+      "enum": [
+        "deny",
+        "approve",
+        "expire"
+      ]
+    },
+    "Status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "denied",
+        "answered",
+        "dismissed",
+        "expired",
+        "cancelled"
+      ]
+    },
+    "Decision": {
+      "type": "object",
+      "properties": {
+        "option": {
+          "type": "string"
+        },
+        "feedback": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fields": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecisionFields"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "content_hash": {
+          "type": "string"
+        },
+        "decided_by": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "decided_at": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "default": null
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Outcome"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rule_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_result": {
+          "description": "The desktop app ran the request's command for the human: this is how\nit ended. Present only on approved command requests decided by Run.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "option",
+        "content_hash"
+      ]
+    },
+    "DecisionFields": {
+      "description": "Decision `fields`. Question requests carry only `answers`, keyed by question\nid; other requests carry answers to `input.fields` or edited tool input.",
+      "type": "object",
+      "properties": {
+        "answers": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Answer"
+          }
+        }
+      }
+    },
+    "Answer": {
+      "description": "The human's answer to one question.",
+      "type": "object",
+      "properties": {
+        "selected": {
+          "description": "Chosen option labels; at most one unless the question is `multi`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "text": {
+          "description": "Typed answer; only when the question allows free text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "RunResult": {
+      "description": "Outcome of running a command request in the handup desktop app. The\ncommand already ran: an agent must not run it again. Output is the\nredacted tail of each stream.",
+      "type": "object",
+      "properties": {
+        "exit_code": {
+          "description": "Process exit status; absent when it never started or a signal ended it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "stdout_tail": {
+          "description": "Last bytes of standard output (at most 64 KiB), credentials redacted.",
+          "type": "string",
+          "default": ""
+        },
+        "stderr_tail": {
+          "description": "Last bytes of standard error (at most 64 KiB), credentials redacted.",
+          "type": "string",
+          "default": ""
+        },
+        "duration_ms": {
+          "description": "Wall time from start to exit, in milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "truncated": {
+          "description": "Earlier output was dropped from either tail.",
+          "type": "boolean",
+          "default": false
+        },
+        "elevated": {
+          "description": "Ran with administrator rights (pkexec on Linux, osascript on macOS).",
+          "type": "boolean",
+          "default": false
+        },
+        "error": {
+          "description": "Why it did not finish normally: timeout, cancellation, signal, or a\nstart failure (for example pkexec missing or authentication refused).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "RunClaim": {
+      "description": "The handup desktop app on this computer is running the request's command\nright now. While the claim holds, the request stays pending but no other\ndecision, expiry, or timeout applies; cancelling it stops the run. Set and\ncleared only by the daemon.",
+      "type": "object",
+      "properties": {
+        "started_at": {
+          "description": "Unix milliseconds when the run was claimed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "lease_until": {
+          "description": "Unix milliseconds after which an unreported run no longer holds the\nrequest (the app crashed or lost the daemon): the run limit plus\n[`RunClaim::GRACE_MS`].",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "elevated": {
+          "description": "Running with administrator rights.",
+          "type": "boolean",
+          "default": false
+        },
+        "timeout_ms": {
+          "description": "The run limit in milliseconds: the request's `run_timeout`, else the\ndaemon's `run.timeout`, capped at `run.max_timeout`. The desktop app\nstops the command when it is reached.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "stop": {
+          "description": "Someone asked to stop the run from another client (phone, browser,\nCLI, another desktop); the desktop app running it stops it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunStop"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "started_at",
+        "lease_until"
+      ]
+    },
+    "RunStop": {
+      "description": "A stop request for a running command (`POST /v1/requests/{id}/run/stop`).",
+      "type": "object",
+      "properties": {
+        "by": {
+          "description": "Who asked: the paired device's name, or `this computer`.",
+          "type": "string"
+        },
+        "at": {
+          "description": "Unix milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "by",
+        "at"
+      ]
+    }
+  }
+}

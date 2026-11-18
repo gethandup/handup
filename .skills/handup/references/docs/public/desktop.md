@@ -72,6 +72,36 @@ for each computer, and survives daemon restarts. A paired device needs
 `decide` access to update that shared state; `view` access can follow it.
 See the [auto-read API](cli.md#auto-handled-read-state).
 
+## Select and delete requests
+
+In Inbox or History, open a row's **⋮** menu, right-click it, or long-press it
+on a touch screen. Choose **Delete** to delete just that row after confirmation,
+or **Select** to enter multi-select with that row checked. There is no Select
+button in the header. In select mode, checkboxes and row taps toggle rows
+instead of opening them. **Select all** picks the requests currently shown by
+your filters/search; **Clear** unchecks them, and **Done** or `Esc` leaves select
+mode. History says **Select all loaded** while older pages are still available:
+it selects loaded matches only, not every matching request on the daemon.
+
+Choose **Delete**, review the inline confirmation, then **Delete N** to remove
+the requests, or **Keep** to return without deleting. The confirmation warns
+when pending requests will be cancelled first and that deletion cannot be
+undone. Results and errors stay in the selection bar. Approval, denial, Run
+and decision swipes are paused while Inbox select mode is on.
+
+With a keyboard, `x` picks the row at the cursor and enters select mode; press
+it again to unpick that row. `Delete` or `Backspace` asks to delete the picked
+rows, or the cursor row if none are picked. Both shortcuts work in Inbox and
+History, not in the quick window, and never delete without confirmation.
+
+Deletion removes the requests from Inbox and History, their audit rows and
+preview files no remaining request uses. Agents already waiting on a pending
+request receive **cancelled**, never approval. Unlike the decision Undo
+window, deletion is immediate and permanent. These controls need local access
+or a paired device with **Can decide** access; view-only devices cannot delete.
+See [CLI delete](cli.md#delete-specific-requests) and the
+[HTTP endpoint](cli.md#delete-requests).
+
 ## Run a command
 
 Run is offered only for a request with exactly one command preview and one
@@ -210,7 +240,7 @@ capture; `Tab` leaves it. A taken key is refused inline, naming the other action
 change that action first or choose another key. **Reset** restores one changed
 row (unless its default is now taken); **Reset all** restores every default.
 `Esc`, `Enter`, arrows (including Shift+arrows), `g g`, `Home`/`End`,
-`Space`, `Tab`, `1`–`9` and `Ctrl+Enter`/`⌘+Enter` are built in and cannot be
+`Space`, `Tab`, `1`–`9`, `Backspace`, `[`/`]`, `{`/`}`, and `Ctrl+Enter`/`⌘+Enter` are built in and cannot be
 remapped. `g` and `Home` stay reserved for the first request; `End` stays
 reserved for the last even if you change `Shift+G`. Home/End also move to the
 first/last answer while choosing a question's answers.
@@ -229,6 +259,8 @@ and view-only devices show a read-only list. You can also use
 | `Shift+G` (or `End`) | Last request (also in History; `Shift+G` is remappable) |
 | `Shift+J` / `Shift+K` | Extend the selection |
 | `Shift+A` | Select the whole session |
+| `x` | Pick / unpick the cursor row for deletion (enters select mode; also in History) |
+| `Delete` (or `Backspace`) | Ask to delete picked rows, or the cursor row if none are picked (also in History) |
 | `/` | Open/focus Inbox search or focus History search (not Auto-handled or the quick window) |
 | `h` | Switch between Inbox and History |
 | `i` | Back to the Inbox |
@@ -245,6 +277,8 @@ and view-only devices show a read-only list. You can also use
 | `u` | Undo the newest decision still waiting to be sent; press again for the one before |
 | `Enter` | On a question, submit once every question is answered (a question's only choice, such as OK, counts as answered, so an OK-or-reply question submits without typing); otherwise step into the first open question's answers (`↑`/`↓` or `j`/`k` move, `Space` or `Enter` chooses, `Tab` goes to the next field, `Esc` returns to the list). Enter never moves into a reply box: press `f`. On a notice, OK; otherwise like `o` |
 | `o` | Open the file on screen in its default app (in a file bundle, the file picked in the list) |
+| `[` / `]` | Previous / next file within a file bundle or multi-file diff; otherwise previous / next preview (also in History; wraps) |
+| `{` / `}` | Previous / next preview, even when the current preview has several files (also in History; wraps) |
 | `Ctrl+E` / `Ctrl+Y` | Scroll the request on screen down / up a line (also in History) |
 | `Ctrl+D` / `Ctrl+U` | Scroll the request on screen down / up half a screen (also in History) |
 | `PageDown` / `PageUp` | Scroll the request on screen down / up a screen (also in History) |
@@ -345,6 +379,14 @@ request titles wrap to two lines, preview tabs scroll sideways (arrows and edge
 fades show when tabs overflow; wheel or drag to scroll), the files and
 diff file lists sit above the content, and diffs start unified (switch to split
 with the toggle) when the preview is under 768px.
+
+Previews and multi-file bundles/diffs also have **Previous** / **Next** buttons
+around an **n of N** counter. They wrap at either end. Use `[` / `]` for files
+inside the current preview, or `{` / `}` to switch preview tabs. If the current
+preview has no multi-file selection, `[` / `]` switch tabs too. A diff showing
+**All files** displays **All N**; Next opens its first file and Previous its
+last. The keys do not take bracket characters while you type in a field.
+These controls work in Inbox and read-only History, including on touch screens.
 
 **Settings → Decisions → Focus on new requests** (off by default) brings the handup window to
 the front when a request needs a decision: the quick window if it is open,
@@ -525,6 +567,9 @@ mode, and a clock for the timeout. Hover the icon for the name ("Pixel 8 (phone 
 screens also show the name beside it. **Audit trail** expands every event and
 always names who acted, so the name stays readable on touch screens.
 Attachments retain their **Open** and **Download** actions in read-only history.
+Use **Select** to permanently delete specific loaded history entries; see
+[Select and delete requests](#select-and-delete-requests). Read-only detail
+means decisions cannot be edited, not that resolved requests cannot be deleted.
 
 The API is `GET /v1/history` with optional `outcome`, `agent`, `type` (one
 preview type), `has=attachments`, `kind`, and `q` (title, summary, folder).
@@ -633,6 +678,14 @@ windowrule = float, title:^(handup: next request)$
 
 ## Previews
 
+Image previews keep preview navigation (when there is more than one preview),
+the file title, **Open** / **Download**, and image size controls in one row when
+the preview pane is wide enough. In narrow panes, the size controls stay visible
+over the bottom-right of the image, without hovering. **Fit** fits the image to
+the pane; **−** / **+** zoom out or in, and the percentage button returns to the
+selected scale (100% initially). Images inside file bundles use the same
+controls with one set of file actions, not a second file toolbar.
+
 HTML previews load from a separate `handup-preview:` origin inside a sandboxed
 iframe with no `allow-same-origin`. The origin's CSP blocks network access, and
 Tauri IPC is not exposed to it.
@@ -640,12 +693,25 @@ Tauri IPC is not exposed to it.
 Web and `mailto:` links always open in your system browser or mail app, never
 inside the handup window.
 
+File **Open** hands the file to its default app. On Linux handup asks
+`gio open` first (it reads your `mimeapps.list` and detects types by file
+name) and falls back to `xdg-open`, which on desktops such as Hyprland or sway
+opens Markdown and other text formats in the plain-text app. **Download** opens
+a native save dialog for files or `.zip` bundles, starting in your Downloads
+folder. The dialog confirms overwrites rather than handup adding numbered ` (1)`
+names. Cancelling saves nothing and shows **Download cancelled**; a completed
+save shows **Saved to** followed by the full path.
+
 On Linux, audio and video play through GStreamer. If a clip says it could not
 be decoded, install `gst-plugins-good`, `gst-plugins-bad`, and `gst-libav`
-(package names vary by distro). The Linux and Android apps load the whole clip
-before it plays, so they download it only when you tap **Play**; the request
-itself opens at once. The clip starts once its metadata loads, and the preview
-shows Loading… or Buffering… until it can play.
+(package names vary by distro). The app streams the clip from the daemon, so it
+starts playing after the first bytes arrive and seeking works without waiting
+for the rest. A video shows a still frame as its poster before you press play;
+that frame needs `ffmpeg` on the computer running the daemon, and the preview
+falls back to a plain player without it (see `previews.video_posters` in the
+[daemon API](cli.md#daemon-api)). If streaming is not available, the app loads the whole clip
+in pieces of up to 4 MiB when you press **Play**, and shows Loading… or
+Buffering… until it can start.
 
 ## macOS
 

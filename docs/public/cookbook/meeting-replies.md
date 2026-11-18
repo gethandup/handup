@@ -1,3 +1,9 @@
+---
+title: Collect meeting RSVPs and alternate times in one request
+description: Ask for a meeting RSVP and alternate time slots in one handup card. Read structured answers and let your calendar tool apply the human-selected response.
+sidebar:
+  label: Meeting replies
+---
 # Meeting replies
 
 ![Invites, answered: RSVP with a recommended answer and slots to propose](img/meeting-replies.webp)

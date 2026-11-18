@@ -4,6 +4,8 @@ Approve requests from a phone or another computer. Remote access is off by
 default: the daemon listens only on its unix socket (none on Windows) and
 `127.0.0.1`.
 
+For agent-specific remote approval workflows, see the product guides for [Claude Code](https://gethandup.dev/agents/claude-code) and [Codex](https://gethandup.dev/agents/codex).
+
 | `remote.mode` | Use it for | How it works |
 | --- | --- | --- |
 | `off` | default | Unix socket plus the authenticated loopback API only |
@@ -180,12 +182,18 @@ use.
 | Scope | Can |
 | --- | --- |
 | `view` | List and show requests, browse decision history and each request's audit trail, see storage usage, cleanup estimates and progress (`GET /v1/storage*`), see the [license](license.md) state (`GET /v1/license`), fetch blobs and previews, see YOLO mode and the shared [Auto-handled read watermark](cli.md#auto-handled-read-state) (`GET /v1/auto-read`), see [flooding sources and mutes](rules.md#floods-and-mutes) (`GET /v1/floods`, `GET /v1/mutes`), and receive live events (including `auto_read.changed`). The web UI is read-only. The global audit log (`/v1/log`) stays local |
-| `decide` | Everything `view` can, plus approve, deny, answer, cancel, mark Auto-handled decisions read across devices (`PUT /v1/auto-read`), stop a command running in the desktop app (`POST /v1/requests/{id}/run/stop`), send server-built test requests/questions (`POST /v1/requests/test`), change [YOLO mode](rules.md#yolo-mode), clear a flooding source and add or remove mutes (`POST /v1/floods/dismiss`, `POST`/`DELETE /v1/mutes`, `DELETE /v1/mutes/{id}`), replace [keyboard shortcut overrides](cli.md#shortcut-api) (`PUT /v1/keys`), activate, import or remove the computer's license (`PUT`/`DELETE /v1/license`), and clean up storage or change history retention (`POST /v1/storage/cleanup`, its cancel, `PUT /v1/storage/retention`; the daemon log names the device) |
-| `submit` | Create requests and upload blobs; show, wait for, and cancel only requests created by that token. Never decide, list, send synthetic tests, change shortcuts, read/change YOLO mode, read/change Auto-handled read state, or read/change floods and mutes. See [integration tokens](integrations/tokens.md) |
+| `decide` | Everything `view` can, plus approve, deny, answer, cancel, [permanently delete requests](cli.md#delete-requests) (`POST /v1/requests/delete`), mark Auto-handled decisions read across devices (`PUT /v1/auto-read`), stop a command running in the desktop app (`POST /v1/requests/{id}/run/stop`), send server-built test requests/questions (`POST /v1/requests/test`), change [YOLO mode](rules.md#yolo-mode), clear a flooding source and add or remove mutes (`POST /v1/floods/dismiss`, `POST`/`DELETE /v1/mutes`, `DELETE /v1/mutes/{id}`), replace [keyboard shortcut overrides](cli.md#shortcut-api) (`PUT /v1/keys`), activate, import or remove the computer's license (`PUT`/`DELETE /v1/license`), and clean up storage or change history retention (`POST /v1/storage/cleanup`, its cancel, `PUT /v1/storage/retention`; the daemon log names the device) |
+| `submit` | Create requests and upload blobs; show, wait for, and cancel only requests created by that token. Never decide, delete requests, list, send synthetic tests, change shortcuts, read/change YOLO mode, read/change Auto-handled read state, or read/change floods and mutes. See [integration tokens](integrations/tokens.md) |
 
 Scoped allow (session, project, or always rules) writes local policy, so it is
 available only on the machine itself. Remote decisions are recorded in the audit log as
 `device:<id>`.
+
+Deletion is available over remote HTTP and the relay tunnel to enabled
+`decide` pairings, including via Inbox/History **Select** mode. It cancels
+pending requests first, then permanently removes their request/audit rows
+and unshared preview files. Waiting agents hear `cancelled`, not approval;
+there is no Undo. View-only devices and submit tokens get 403.
 
 `PUT /v1/keys` needs paired `decide` scope on remote HTTP and relay connections;
 `view` and submit tokens get 403. It saves the computer's `keys:` config and
@@ -229,10 +237,10 @@ Scope changes apply to the next call, including calls on already-open relay
 connections; a device downgraded to `view` cannot decide.
 
 Revocation takes effect on the next request (HTTP 401), and open event
-WebSockets for that device close at once with close code 4401. A decision or
-cancel commits only if the device still exists with `decide` scope inside the
-same database transaction, so a request that is already in flight cannot
-approve after its device is revoked. Request bodies are read only after the
+WebSockets for that device close at once with close code 4401. A decision,
+cancel or delete commits only if the device still exists, is enabled and has
+`decide` scope inside the same database transaction, so a request already in
+flight cannot approve or delete after its device loses authority. Request bodies are read only after the
 token, CSRF, and scope checks pass, and must arrive within 10 seconds (1 MiB
 max). Each remote listener serves at most 64 connections at once, and open
 event WebSockets count toward that limit. Each paired device may hold at most
@@ -350,6 +358,9 @@ Browser protections on the remote listener:
   CSP as the desktop app: `sandbox="allow-scripts"` without
   `allow-same-origin`, and network blocked unless `previews.html.allow_network`.
   A revoked or disabled device's preview links stop working.
+  Non-HTML files inside `files` bundles stream from disk with byte-range support
+  (`206` for a satisfiable range, `416` otherwise; `Accept-Ranges: bytes` on
+  successful responses). HTML is still read whole to inject the CSP meta tag.
 - Blobs (`/v1/blobs/{hash}`) are agent-supplied, so they never run as the app
   origin. Every response carries `Content-Security-Policy: sandbox;
   default-src 'none'` and `X-Content-Type-Options: nosniff`. Anything other
@@ -357,6 +368,8 @@ Browser protections on the remote listener:
   SVG, or XML) is sent with `Content-Disposition: attachment`. HTML previews
   have **Download** only, never **Open**; for other non-passive types, the web
   UI's Open action downloads the file instead of opening a tab.
+  `GET /v1/blobs/{hash}/poster` (a JPEG frame of a video blob) is view scoped
+  like the blob itself and carries the same headers.
 
 ### Read aloud
 

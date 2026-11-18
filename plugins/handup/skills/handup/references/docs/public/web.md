@@ -1,0 +1,252 @@
+# Use handup in a browser
+
+The web inbox lets you review and decide agent requests from a web browser on
+another computer, a phone or an iPhone, served by the handup daemon on your
+computer.
+
+> **Included from v0.1.2.** Release packages include the web inbox files.
+> v0.1.1 and earlier do not include them; upgrade to use a browser.
+> The [desktop app](desktop.md) and [Android app](mobile.md) also work without
+> a browser.
+
+## What the web inbox does
+
+A paired browser shows the same inbox as the desktop app: pending requests with
+their previews, history, and Settings. With **decide** access it can approve,
+deny, edit and approve, answer questions, cancel, permanently delete requests,
+and stop a command that the desktop app is running. **View** access is read-only.
+
+In **Feedback for the agent** or **Reply to the agent**, `Ctrl+Enter`
+(`⌘+Enter` on macOS) sends your text with the primary decision: **Approve**
+on an approval request, **OK** on a notice. Plain Enter inserts a newline.
+The label shows the focus key and send shortcut at medium and wider widths;
+the shortcut also works on narrower screens. See [desktop keys](desktop.md#keys)
+for editing and question shortcuts.
+
+Inbox and History use the same [combinable filters as desktop](desktop.md#inbox-filters):
+one sideways-scrolling row of request-type chips with counts in Inbox, or
+outcome chips with colored dots in History. Nothing picked shows everything.
+**Filters** opens a bottom sheet on phones or a small dialog on desktop
+(Inbox: **Type**, **Agent**; History: **Outcome**, **Type**, **Agent**,
+**Has files**). Picks within a section match any of them; across sections they
+must all match. Sheet-only picks show as removable chips after a divider and
+are counted on the Filters button; the reset icon appears while filters or an
+Inbox query are active. Swipe or use the mouse wheel to scroll the row.
+
+The Inbox filter row's search icon or `/` opens a focused search field, hidden
+by default with no setting. It matches a case-insensitive substring in title,
+summary, folder (`cwd`), repo, branch, agent, or session title, ANDed with
+chip/sheet filters. No matching pending requests shows **No matches**.
+`Esc` in the field or **×** clears and closes it; reset clears both search and
+filters. `/` also focuses History search; History reset keeps its search.
+The Auto-handled view has no search.
+
+With **decide** access, a row's **⋮** button in Inbox or History opens its menu;
+right-click or long-press opens the same menu. **Delete** asks to delete just
+that row; **Select** enters multi-select with that row checked, replacing the
+old header Select button. Checkboxes and row taps toggle picks. **Select all**
+picks currently shown matches (**Select all loaded** in History while more
+pages remain), **Clear** unchecks them, and **Done** or `Esc` leaves select mode.
+`x` picks or unpicks the cursor row, entering select mode if needed; `Delete`
+or `Backspace` asks to delete picked rows, or the cursor row if none are picked.
+Deletion always opens an inline confirmation: **Delete N** permanently removes
+the requests, or **Keep** goes back without deleting. Pending requests are
+cancelled first so waiting agents hear **cancelled**, never approval; their
+request/audit rows and unshared preview files are then removed. There is no Undo.
+Results/errors stay inline, and approval/denial/Run actions and decision swipes
+are paused while selecting. View-only pairings cannot delete. See
+[select and delete](desktop.md#select-and-delete-requests).
+
+Preview tabs, file bundles and multi-file diffs have Previous/Next buttons and
+an **n of N** counter, wrapping at either end. `[` / `]` cycle files within the
+current preview, or preview tabs when there are no multiple files; `{` / `}`
+always cycle preview tabs. The built-in keys work in Inbox and read-only
+History, without taking brackets typed in fields; the buttons work on touch
+screens too. See [desktop keys](desktop.md#keys).
+
+Unread automatic decisions open through **N auto-handled · View** above the
+list, with **← Inbox** and **Mark read**, not an Auto-handled tab. Marking read
+syncs across every device connected to the same daemon and survives daemon
+restarts; each computer's read state is separate. `decide` access is required
+to update shared read state, while `view` access can follow it.
+
+On a phone in **Split** layout, if the request you last opened is resolved on
+another device while you are on the list screen, the list moves on immediately.
+After the last pending request, it shows **All clear** rather than an empty list.
+
+A browser never runs commands. **Run** and **Run as admin** exist only in the
+desktop app. Scoped allow rules, pairing, device management and the audit log
+also stay on the computer itself. See [Web UI](remote.md#web-ui) for every
+setting and the browser protections.
+
+Where the browser supports it, you can also [read requests aloud](remote.md#read-aloud)
+and [dictate](remote.md#dictation) answers and feedback with a mic button beside
+text fields. Dictation uses the browser's own speech recognition, so some
+browsers, such as Chrome, send the audio to their speech service; the words
+stay editable and nothing is sent until you submit. Cloud speech providers are
+only in the desktop and Android apps.
+
+There is no native iPhone app. On an iPhone, use the web inbox in Safari.
+
+## Choose a setup
+
+| Where the browser is | Setup | Notes |
+| --- | --- | --- |
+| Phone, iPhone or another computer, anywhere | [Tailscale](#tailscale-recommended) | **Recommended.** Only your own devices can connect |
+| The computer that runs handup | [Desktop app](#on-the-same-computer) | A browser here needs Tailscale or a self-signed certificate |
+| Another device on the same network, without Tailscale | [Direct mode](#on-your-network-without-tailscale) | **Not recommended.** Self-signed TLS and a permanent risk banner |
+| Anywhere, through the [relay](relay.md) | Not supported | Relay pairing links pair only in the Android app |
+
+Every setup uses two ports on the computer: `remote.port` (default 7466) for
+the inbox and API, and `remote.preview_port` (default 7467) for HTML and file
+previews. `remote.*` changes apply when the daemon restarts:
+
+```sh
+systemctl --user restart handup.service                  # Linux
+launchctl kickstart -k gui/$(id -u)/com.handup.daemon   # macOS
+```
+
+If you run `handup serve --foreground` yourself, stop it and start it again.
+
+## Tailscale (recommended)
+
+Tailscale connects your computer and your other devices on a private network
+that only you can join. Set it up once by following
+[Tailscale setup](remote.md#tailscale-recommended): install Tailscale on the
+computer and on the device with the browser, and sign in to the same account
+on both.
+
+1. Turn on remote access:
+
+   ```sh
+   handup remote tailscale
+   ```
+
+   handup reads the computer's tailnet address with `tailscale ip -4`, applies
+   the mode with a daemon restart if needed, and prints the URL. It never
+   changes your Tailscale configuration. For manual setup or Windows restart
+   instructions, see [Tailscale setup](remote.md#tailscale-recommended).
+2. Pair the browser:
+
+   ```sh
+   handup pair                 # approve and deny
+   handup pair --scope view    # read-only
+   ```
+
+   It prints a QR code and a link like
+   `http://100.x.y.z:7466/pair#code=…&scope=decide`. Scan the code with the
+   phone's camera, or open the link on the other device. The link works once
+   and expires after 2 minutes.
+3. The **Pair this device** page shows the access you are granting and an
+   optional device name. Press **Pair**. The browser opens the inbox and stays
+   paired.
+
+If remote access is off, `handup pair` on a terminal offers to turn it on when
+Tailscale is connected: **Turn on remote access over Tailscale now? [Y/n]**.
+Enter or **y** enables it and continues pairing. With `--json`, no terminal,
+or a declined prompt, run `handup remote tailscale` first. Without Tailscale,
+set it up before browser pairing; `--relay` is only for the Android app.
+
+Bookmark `http://100.x.y.z:7466/` (the address from your pairing link) to come
+back later. On an iPhone, Safari's **Share → Add to Home Screen** gives it an
+icon.
+
+Traffic between tailnet devices is encrypted by WireGuard, so the address uses
+plain `http://`. Use the IP address from the pairing link: handup refuses other
+host names, such as your MagicDNS name, with `host not allowed`. For an HTTPS
+name, run `tailscale serve` yourself and set `remote.public_url`; see
+[Tailscale](remote.md#tailscale-recommended). Never use `tailscale funnel`.
+
+## On the same computer
+
+Use the [desktop app](desktop.md) (`handup ui`) on the computer that runs
+handup. It is the only client that can run commands and create allow rules.
+
+The daemon's local API (`127.0.0.1:7465`) does not serve the web inbox. To use a
+browser on the same computer anyway:
+
+- **With Tailscale**, follow [Tailscale](#tailscale-recommended) and open the
+  pairing link in a browser on this computer.
+- **Without Tailscale**, run direct mode on `127.0.0.1`. handup requires TLS
+  and the risk acknowledgement even on loopback, so the browser warns about a
+  self-signed certificate and the inbox always shows a red risk banner:
+
+  ```sh
+  handup config set remote.direct.accept_risk true
+  handup config set remote.tls.enabled true
+  handup config set remote.bind 127.0.0.1
+  handup config set remote.mode direct
+  systemctl --user restart handup.service   # macOS: see above
+  handup pair
+  ```
+
+  Open the `https://127.0.0.1:7466/pair#code=…` link, check the certificate
+  fingerprint as described in [direct mode](#on-your-network-without-tailscale),
+  accept the browser's warning, and press **Pair**.
+
+## On your network without Tailscale
+
+Direct mode listens on a network address over TLS. Anyone who can reach the
+port and gets a device token can approve what your agents do, including
+running commands on your computer. Prefer [Tailscale](#tailscale-recommended).
+Never forward this port from your router to the internet.
+
+1. Find the computer's network address (for example `192.168.1.20`) and set
+   these keys in this order. handup rejects `remote.mode direct` before
+   `accept_risk` and TLS are on, and a network `remote.bind` before TLS is on:
+
+   ```sh
+   handup config set remote.direct.accept_risk true
+   handup config set remote.tls.enabled true
+   handup config set remote.bind 192.168.1.20
+   handup config set remote.mode direct
+   systemctl --user restart handup.service   # macOS: see above
+   ```
+
+   With no `remote.tls.cert` and `remote.tls.key`, handup creates a self-signed
+   certificate for `localhost`, `127.0.0.1` and the bind address, and reuses it
+   after restarts. At start the daemon prints the listening address, the
+   certificate's SHA-256 fingerprint and a risk warning; `handup doctor`
+   reports the same warning.
+2. Pair with `handup pair` (or `--scope view` for read-only). The link looks
+   like `https://192.168.1.20:7466/pair#code=…&fp=…`.
+3. Open the link on the other device. The browser warns that the certificate
+   is not trusted. Compare its SHA-256 fingerprint (in the browser's certificate
+   details) with **Expected certificate fingerprint** on the handup page and
+   with the fingerprint the daemon printed. Continue only if they match, then
+   press **Pair**.
+
+The other device must reach ports 7466 and 7467 on the computer; allow them in
+the computer's firewall for your local network only. Every handup screen shows
+the risk warning as a red banner while direct mode is on. To use your own
+certificate, set `remote.tls.cert` and `remote.tls.key`; see
+[Direct mode](remote.md#direct-mode-not-recommended).
+
+## Relay
+
+The [relay](relay.md) does not serve the web inbox. `handup pair --relay`
+links pair only in the Android app; a browser that opens one does not pair.
+
+## Manage paired browsers
+
+```sh
+handup devices list               # every paired browser and phone
+handup devices scope ID view      # make one read-only
+handup devices disable ID         # pause it without unpairing
+handup devices revoke ID          # unpair it now
+```
+
+A revoked browser shows **Device not paired** and needs a new `handup pair`.
+To stop serving the web inbox, run `handup remote off`; paired browsers stay
+paired. See [Managing devices](remote.md#managing-devices).
+
+## Troubleshooting
+
+| You see | Fix |
+| --- | --- |
+| `handup web UI files are missing` (HTTP 503) | Reinstall handup v0.1.2 or later, or set `remote.web_dir` to your installed web inbox files |
+| `host not allowed` | Open the address from the pairing link, or set `remote.public_url` for your own host name |
+| **Device not paired** | Run `handup pair` again: each link works once, for 2 minutes |
+| The page does not load | Run `handup doctor` on the computer: the `remote` row warns if Tailscale is missing/disconnected or nothing answers on the tailnet port. Check Tailscale on both devices (`tailscale status`); in direct mode, check the firewall allows ports 7466 and 7467 |
+| `handup pair` answers that remote access is off | Run `handup remote tailscale`, then `handup pair` |
+| `handup pair` says remote access is waiting for Tailscale | Connect Tailscale on the computer (`sudo tailscale up` on Linux, or open the Tailscale app elsewhere), then retry pairing. With Tailscale mode enabled and no `remote.bind`, the daemon keeps serving locally and binds the remote listener automatically; no handup restart is needed |

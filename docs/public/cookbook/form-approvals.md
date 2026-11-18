@@ -1,3 +1,9 @@
+---
+title: Collect edited values with approval forms
+description: Build a handup approval form with typed fields for amounts, reasons and flags. Read the human-edited values before your script performs the reviewed action.
+sidebar:
+  label: Form approvals
+---
 # Form approvals
 
 ![Approve with your numbers: a refund form with amount, reason and a notify checkbox](img/form-approvals.webp)

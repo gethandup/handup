@@ -1,3 +1,9 @@
+---
+title: Review and edit agent email drafts before sending
+description: Show email drafts in handup for human review, edits and approval. Read the final approved fields and send exactly that draft with your own mail tool.
+sidebar:
+  label: Email drafts
+---
 # Email drafts
 
 Sending email is external publication: ask before every send. handup shows the

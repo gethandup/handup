@@ -1,4 +1,12 @@
+---
+title: Set up Codex CLI approvals with hooks and MCP
+description: Install the handup permission hook and MCP server for Codex CLI. Review escalated commands, return deny feedback, and keep native fallback safe.
+sidebar:
+  label: Codex
+---
 # Codex
+
+For an overview of remote permission review, see [Codex approvals with handup](https://gethandup.dev/agents/codex).
 
 ## Quickstart
 
@@ -13,6 +21,11 @@ codex --sandbox workspace-write --ask-for-approval on-request
 `handup integrate all` uses this same full integration when `$CODEX_HOME/`
 (default `~/.codex/`) exists, creating missing configs. It also configures other
 detected agents; preview with `--dry-run` or remove all with `--uninstall`.
+
+**Plugin.** With the handup app installed, `codex plugin marketplace add gethandup/handup`
+then `codex plugin add handup@handup` adds the handup MCP server and skill. It
+installs no hook, so Codex's permission prompts stay native; run
+`handup integrate codex` for those.
 
 The reversible installer merges `handup hook codex` into `$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`) and the handup MCP server into `$CODEX_HOME/config.toml` (below); `--no-mcp` installs only the hook. It preserves other handlers, shows the config diffs, checks every file before writing any, and backs up changed configuration. Reapply is idempotent. Remove both with `handup integrate codex --uninstall`. Codex requires hook trust review; approve the reviewed hook in Codex before use. Requests have no deadline by default. The installed host hook timeout is still 660 seconds: increase it for longer human waits. If Codex kills the hook, the request remains pending and no approval is returned.
 

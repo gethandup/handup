@@ -82,6 +82,12 @@ When every paired computer has revoked the device, the app shows "This device
 was revoked" and offers pairing again; a single revoked computer shows as
 offline in the header while the others keep working.
 
+If Android's secure storage can't be read when the app starts (it can fail on
+a cold start, for example when you open the app from a notification), the app
+retries a few times, then shows **Couldn't load your computers** instead of the
+pair screen. Your pairing is still stored: tap **Try again**, or **Pair again
+instead** to replace it.
+
 If a computer is asleep or off the tailnet, its name shows as offline in the
 header (with one computer: "Can't reach handup") and the app keeps retrying;
 the other computers' requests stay usable. **History** shows one computer at a
@@ -178,6 +184,34 @@ syncs to every device connected to that computer's daemon and survives daemon
 restarts; each paired computer has its own read state. Updating shared read
 state needs `decide` access; view-only devices follow it.
 
+## Select and delete
+
+With **Can decide** access, tap a row's **⋮** button in Inbox or History, or
+long-press the row, to open its menu. **Delete** asks to delete just that row;
+**Select** enters multi-select with that row checked. There is no Select button
+beside Inbox/History. In select mode, tap rows to toggle them; **Select all**
+picks the currently shown matches, **Clear** unchecks them, and **Done** exits.
+Choose **Delete**, review the inline warning, then **Delete N** to confirm or
+**Keep** to go back without deleting. The bar stays above the safe area and
+shows results/errors inline. In Inbox, approval buttons and decision swipes
+are paused while selecting.
+
+With a mouse, right-click also opens the row menu. On a hardware keyboard, `x`
+picks or unpicks the cursor row, entering select mode if needed; `Delete` or
+`Backspace` asks to delete the picked rows, or the cursor row when none are picked.
+
+Deletion acts on each request's own computer: it cancels pending requests
+first, then permanently removes the requests, audit rows and preview files
+no remaining request uses. Waiting agents receive **cancelled**, never
+approval. There is no Undo, and view-only pairings cannot delete. See
+[select and delete](desktop.md#select-and-delete-requests).
+
+File bundles, multi-file diffs and requests with several previews have
+Previous/Next buttons and an **n of N** counter, wrapping at either end.
+On a hardware keyboard, `[` / `]` cycle files in the current preview (or
+previews if it has no multiple files), and `{` / `}` always cycle previews.
+They work in Inbox and History and leave typed brackets alone in input fields.
+
 ## History
 
 The **Inbox | History** switch above the request list shows resolved requests
@@ -195,6 +229,10 @@ Tap a request for the read-only detail with the decision summary and audit
 trail; **History** (or the back gesture) returns to the list. It uses the same
 [history API](desktop.md#history) as the desktop app, so a view-only device sees
 it too.
+Use a row's **⋮** menu to **Delete** it after confirmation, or **Select** it
+for multi-select. When older pages remain, **Select all loaded** means only
+loaded matches, not all history on the computer. The decision detail stays
+read-only; deletion still needs **Can decide**.
 
 ## Security model
 
@@ -314,16 +352,20 @@ Unpairing a computer forgets its cached queue and any unsent decisions for it.
 
 The app keeps a copy of the History pages, request details, audit trails and
 files you read or that [auto-download](#auto-download-media) fetched, per paired
-computer, in an app-private SQLite database. When that computer is
+computer, in an app-private SQLite database. Each time the app reconnects to a
+computer it also refreshes the newest History page (the 50 latest), so History
+opens offline even if you never looked at it. When that computer is
 unreachable, History serves the copy and shows **Offline copy from …** with its
-age; online, every read goes to the computer and refreshes the copy. Only these
+age; online, every read goes to the computer and refreshes the copy. Each page
+is one snapshot replaced on every refresh, never merged, so the copy cannot
+drift from or duplicate the computer's history. Only these
 reads are kept: never the pending queue (it has its own store above), decisions
 or other writes, settings, pairing, devices, or any token. Files are checked
 against their SHA-256 before they are kept.
 
 Each computer's card in **Settings** has its own controls:
 
-- **History kept on this phone**: **Last 30 days** (default) of what you read,
+- **History kept on this phone**: **Last 30 days** (default) of the offline copy,
   **Everything read**, or **Off** (nothing is kept, files included).
 - **Space limit**: 256 MB by default (16–4096). Past it, the least recently
   used entries go first; lowering it trims at once.
@@ -385,6 +427,45 @@ kept on this phone** set to **Off**, nothing downloads. Opening a preview while
 its file is still downloading waits for that download instead of starting
 another.
 
+Files also download when the app is closed. A [push notification](#notifications)
+(or a [relay](relay.md#push-notifications) wake-up) for a new request starts a
+short background download, so a large video is already on the phone when you
+tap the notification. It follows the same settings: **Wi-Fi only** by default,
+nothing under **Never** or with **History kept on this phone** set to **Off**,
+and no more than **Per request up to (MB)** per request. Swiping handup away is
+fine; Android's **Force stop** blocks push until you open the app again. On
+Android 11 and older a silent **Downloading attachments** notification shows
+while it runs.
+
+### Play while downloading
+
+Videos and audio start playing from the first bytes instead of after the whole
+file has arrived, and you can seek ahead. A video shows a still poster frame
+(made by the computer's daemon, which needs `ffmpeg`; see
+[the daemon API](cli.md#daemon-api)) before you press play. While you watch, the
+rest of the file keeps downloading, and once it is complete and checked it is
+kept in the offline copy like any other file. Over mobile data the app does not
+download beyond what you are watching unless you chose **Always** auto-download
+and **Always allow** below. Turn **Play while downloading** off in
+**Settings → Previews** to wait for the whole file instead; the phone then loads
+the clip only when you tap **Play**.
+
+### Large files on mobile data
+
+Before **Play**, **Open** or **Download** fetches a file of **Ask above (MB)**
+(10 MB by default, 1–1024) or more that is not on the phone yet, over a metered
+connection such as mobile data, the app asks once, inline under the file:
+*This video (48 MB) will use mobile data.* Choose **Play** / **Open** /
+**Download** to go ahead this time or **Always allow** to stop asking; **Open**
+and **Download** also have **Cancel**, and for **Play** you simply do not tap it.
+A **Download** of several files adds their sizes together. Files already in the
+offline copy never ask, and neither does Wi-Fi or another unmetered network.
+
+In **Settings → Previews**, **Large files on mobile data** is **Ask first**
+(default) or **Always allow**, and **Ask above (MB)** sets the size for **Ask
+first**. **Always allow** does not turn on background downloads: those still
+follow **Auto-download media**.
+
 Once a request is decided, expires or is cancelled, its downloaded files are
 deleted unless you opened them (opened files stay like any file you read) or
 another pending request still uses them. The computer's **Space limit** caps
@@ -412,7 +493,9 @@ for a bug report; the daemon's version is shown in Settings › About on the com
 **Decisions** contains the undo window, approve button side, and **Swipe
 cards**; **Sync** holds **Resync while open** (Off, 10s, 15s, 30s, 1m, 5m;
 default 15s), how often the open app re-checks each reachable computer, saved
-per device; **Previews** holds [auto-download media](#auto-download-media).
+per device; **Previews** holds [auto-download media](#auto-download-media),
+[play while downloading](#play-while-downloading) and
+[large files on mobile data](#large-files-on-mobile-data).
 **Keyboard shortcuts** lists the gestures (swipe right or left to decide,
 **Undo**, tap a row, back, drag the divider) and the keys a hardware keyboard
 can use; when every paired computer is view-only it hides the deciding ones.
@@ -560,9 +643,16 @@ Files previews list every file with its size and type. Tap a row to view it
 open icon to hand it to another app. Each viewed file has **Open** and
 **Download**. Check rows (or the select-all box) to **Download** several at
 once; more than one file downloads as a single `.zip` that keeps the folder
-layout. On Android the `.zip` goes through the same save picker; on desktop,
-downloads land in your Downloads folder without overwriting existing files.
+layout. On Android the `.zip` goes through the same save picker; the desktop
+app asks where to save, starting in your Downloads folder.
 HTML files only open in the sandboxed preview; download them instead.
+
+Image previews keep **Fit**, **−**, the percentage and **+** visible over the
+bottom-right of the image in narrow panes; no hover is needed. **Fit** fits the
+image to the pane, **−** / **+** zoom out or in, and tapping the percentage
+returns to the selected scale (100% initially). **Open** and **Download** stay
+in the file row above the image, with no duplicate action row for an image
+inside a file bundle. Wider panes put the size controls in that same file row.
 
 JSON previews are pretty-printed and syntax-highlighted with the active
 palette; switch to **Tree** to fold objects and arrays.

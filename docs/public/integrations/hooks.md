@@ -1,3 +1,9 @@
+---
+title: Connect request events to webhooks and local programs
+description: Send handup request events to HTTP receivers or local programs. Configure webhook and exec delivery, or use a decide hook for local policy decisions.
+sidebar:
+  label: Event hooks
+---
 # Event hooks
 
 Use top-level `hooks:` in `config.yaml` to send request lifecycle events to any

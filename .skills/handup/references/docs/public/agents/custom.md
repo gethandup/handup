@@ -88,7 +88,7 @@ Questions instead of approvals: MCP `ask_question`, or `kind: "question"` with
 `input.questions` (see the [MCP guide](mcp.md)).
 
 Information that needs no reply (status, finished results, heads-ups): MCP
-`notify`, `handup ask --kind info`, or `kind: "info"`. A notice gets **OK** and
+`notify`, `handup notify`, `handup ask --kind info`, or `kind: "info"`. A notice gets **OK** and
 **Dismiss** options (both record `status: dismissed`), never takes `input`, and
 is never approved by YOLO; a human's `dismiss` rule or mute may dismiss it on
 arrival. Put the message text in `summary` under a
@@ -171,6 +171,11 @@ result is present.
 Retract requests your harness no longer needs (plan changed, task aborted) with
 MCP `cancel_request`, `handup cancel ID`, or `POST /v1/requests/{id}/cancel`.
 Never cancel to dodge a pending decision you dislike.
+Cancellation preserves the request and audit. Human deletion (`handup delete`
+or `POST /v1/requests/delete`) instead cancels pending work first, then removes
+the request and audit permanently. An already-waiting agent receives
+`cancelled`; later status calls return not found, never permission to act.
+Agents must not delete requests to erase their audit trail.
 
 ## 7. Tell the model the policy
 
